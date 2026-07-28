@@ -155,3 +155,108 @@ export function bindPointerInput(target: EventTarget, recognizer: PointerRecogni
     target.removeEventListener('pointercancel', cancel);
   };
 }
+
+export interface PinchStart {
+  centerX: number;
+  centerY: number;
+  /** Distance between the two pointers at pinch start. */
+  distance: number;
+}
+
+export interface PinchMove {
+  centerX: number;
+  centerY: number;
+  /** Current distance / start distance. */
+  scale: number;
+}
+
+export interface PinchHandlers {
+  onPinchStart?: (g: PinchStart) => void;
+  onPinchMove?: (g: PinchMove) => void;
+  onPinchEnd?: () => void;
+}
+
+interface Pt {
+  x: number;
+  y: number;
+}
+
+function distance(a: Pt, b: Pt): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/**
+ * Recognizes a two-pointer pinch and reports zoom scale (relative to the start
+ * distance) and the live center point. No timestamps: pinch drives zoom, not a
+ * flick. A third pointer is ignored; lifting either tracked pointer ends the pinch.
+ * Coordinating this with the drag recognizer (a second finger should suspend a
+ * single-finger drag) is the engine's job.
+ */
+export class PinchRecognizer {
+  #handlers: PinchHandlers;
+  #points = new Map<number, Pt>();
+  #startDistance = 0;
+  #pinching = false;
+
+  constructor(handlers: PinchHandlers = {}) {
+    this.#handlers = handlers;
+  }
+
+  get pinching(): boolean {
+    return this.#pinching;
+  }
+
+  down(id: number, x: number, y: number): void {
+    if (this.#points.has(id) || this.#points.size >= 2) return; // track only two
+    this.#points.set(id, { x, y });
+    if (this.#points.size === 2) {
+      const { a, b } = this.#pair();
+      this.#startDistance = distance(a, b);
+      this.#pinching = true;
+      this.#handlers.onPinchStart?.({
+        centerX: (a.x + b.x) / 2,
+        centerY: (a.y + b.y) / 2,
+        distance: this.#startDistance,
+      });
+    }
+  }
+
+  move(id: number, x: number, y: number): void {
+    const p = this.#points.get(id);
+    if (!p) return;
+    p.x = x;
+    p.y = y;
+    if (!this.#pinching) return;
+    const { a, b } = this.#pair();
+    this.#handlers.onPinchMove?.({
+      centerX: (a.x + b.x) / 2,
+      centerY: (a.y + b.y) / 2,
+      scale: this.#startDistance > 0 ? distance(a, b) / this.#startDistance : 1,
+    });
+  }
+
+  up(id: number): void {
+    this.#remove(id);
+  }
+
+  cancel(id: number): void {
+    this.#remove(id);
+  }
+
+  #remove(id: number): void {
+    if (!this.#points.delete(id)) return;
+    if (this.#pinching && this.#points.size < 2) {
+      this.#pinching = false;
+      this.#startDistance = 0;
+      this.#handlers.onPinchEnd?.();
+    }
+  }
+
+  #pair(): { a: Pt; b: Pt } {
+    const values = [...this.#points.values()];
+    const a = values[0];
+    const b = values[1];
+    if (!a || !b) throw new Error('pinch requires two active pointers');
+    return { a, b };
+  }
+}
