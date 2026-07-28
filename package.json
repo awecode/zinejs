@@ -8,6 +8,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.33.4",
   "devDependencies": {
+    "happy-dom": "^20.11.1",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
