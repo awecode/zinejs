@@ -83,6 +83,7 @@ export class Zine {
   };
 
   constructor(container: HTMLElement, options: ZineOptions) {
+    validateOptions(container, options);
     this.#container = container;
     this.#source = options.source;
     const direction = options.direction ?? 'ltr';
@@ -475,4 +476,102 @@ function clamp(value: number, min: number, max: number): number {
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function typeName(v: unknown): string {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;
+}
+
+/** Validate constructor inputs up front, throwing agent-actionable errors. */
+function validateOptions(container: unknown, options: unknown): void {
+  if (
+    typeof container !== 'object' ||
+    container === null ||
+    typeof (container as { appendChild?: unknown }).appendChild !== 'function' ||
+    typeof (container as { addEventListener?: unknown }).addEventListener !== 'function'
+  ) {
+    throw new Error(`Zine: container must be a DOM element; received ${typeName(container)}.`);
+  }
+  if (typeof options !== 'object' || options === null) {
+    throw new Error('Zine: an options object with a `source` is required.');
+  }
+  const o = options as Record<string, unknown>;
+
+  const source = o.source as { get?: unknown; pageCount?: unknown } | undefined;
+  if (
+    typeof source !== 'object' ||
+    source === null ||
+    typeof source.get !== 'function' ||
+    typeof source.pageCount !== 'number'
+  ) {
+    throw new Error('Zine: `source` is required and must be a Source, e.g. new ImageSource(urls).');
+  }
+  const pageCount = source.pageCount;
+  if (!Number.isInteger(pageCount) || pageCount < 1) {
+    throw new Error(`Zine: source has ${pageCount} pages; a Source must have at least 1 page.`);
+  }
+
+  const startPage = o.startPage;
+  if (
+    startPage !== undefined &&
+    (typeof startPage !== 'number' ||
+      !Number.isInteger(startPage) ||
+      startPage < 0 ||
+      startPage >= pageCount)
+  ) {
+    throw new Error(
+      `Zine: startPage ${JSON.stringify(startPage)} is out of range for a ${pageCount}-page book (valid 0..${pageCount - 1}).`,
+    );
+  }
+
+  const direction = o.direction;
+  if (direction !== undefined && direction !== 'ltr' && direction !== 'rtl') {
+    throw new Error(`Zine: direction must be 'ltr' or 'rtl'; got ${JSON.stringify(direction)}.`);
+  }
+
+  assertMin(o.flipDuration, 'flipDuration', 0);
+  assertMin(o.maxZoom, 'maxZoom', 1);
+  assertMin(o.singlePageThreshold, 'singlePageThreshold', 0);
+  validateRendererOption(o.renderer);
+}
+
+function assertMin(value: unknown, name: string, min: number): void {
+  if (value === undefined) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
+    throw new Error(`Zine: ${name} must be a number >= ${min}; got ${JSON.stringify(value)}.`);
+  }
+}
+
+function validateRendererOption(renderer: unknown): void {
+  if (renderer === undefined) return;
+  if (typeof renderer === 'string') {
+    if (renderer !== 'auto' && renderer !== 'css' && renderer !== 'pixi') {
+      throw new Error(
+        `Zine: renderer '${renderer}' is not recognized; use 'auto', 'css', 'pixi', an array of those, or a custom Renderer.`,
+      );
+    }
+    return;
+  }
+  if (Array.isArray(renderer)) {
+    for (const kind of renderer) {
+      if (kind !== 'css' && kind !== 'pixi') {
+        throw new Error(
+          `Zine: renderer order array may only contain 'css' or 'pixi'; got ${JSON.stringify(kind)}.`,
+        );
+      }
+    }
+    return;
+  }
+  if (
+    typeof renderer === 'object' &&
+    renderer !== null &&
+    typeof (renderer as { mount?: unknown }).mount === 'function'
+  ) {
+    return;
+  }
+  throw new Error(
+    "Zine: renderer must be 'auto', 'css', 'pixi', an array of those, or a custom Renderer instance.",
+  );
 }
