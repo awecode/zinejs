@@ -1,14 +1,15 @@
 export type FlipState = 'idle' | 'dragging' | 'animating' | 'zoomed-panning';
 
-export type FlipEvent = 'grab' | 'release' | 'settle' | 'panStart' | 'panEnd';
+export type FlipEvent = 'grab' | 'release' | 'settle' | 'panStart' | 'panEnd' | 'flip';
 
 /**
- * Legal transitions. A flip drag runs idle → dragging → animating → idle; zoom
- * panning (only reachable when zoomed in) is a separate branch idle →
- * zoomed-panning → idle. Any (state, event) pair absent here is illegal.
+ * Legal transitions. A flip drag runs idle → dragging → animating → idle; a
+ * programmatic flip jumps idle → animating directly via `flip`; zoom panning
+ * (only reachable when zoomed in) is a separate branch idle → zoomed-panning →
+ * idle. Any (state, event) pair absent here is illegal.
  */
 const TRANSITIONS: Record<FlipState, Partial<Record<FlipEvent, FlipState>>> = {
-  idle: { grab: 'dragging', panStart: 'zoomed-panning' },
+  idle: { grab: 'dragging', panStart: 'zoomed-panning', flip: 'animating' },
   dragging: { release: 'animating' },
   animating: { settle: 'idle' },
   'zoomed-panning': { panEnd: 'idle' },

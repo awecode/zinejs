@@ -8,6 +8,11 @@ describe('nextState', () => {
     expect(nextState('animating', 'settle')).toBe('idle');
   });
 
+  it('jumps straight to animating for a programmatic flip', () => {
+    expect(nextState('idle', 'flip')).toBe('animating');
+    expect(nextState('animating', 'settle')).toBe('idle');
+  });
+
   it('walks a zoom pan: idle → zoomed-panning → idle', () => {
     expect(nextState('idle', 'panStart')).toBe('zoomed-panning');
     expect(nextState('zoomed-panning', 'panEnd')).toBe('idle');
