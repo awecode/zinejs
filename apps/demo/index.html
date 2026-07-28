@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>zinejs demo</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #16161d;
+        color: #eaeaf0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 28px;
+      }
+      #book {
+        width: 900px;
+        height: 560px;
+        max-width: 96vw;
+        background: #0c0c11;
+        border-radius: 4px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+        touch-action: none;
+        user-select: none;
+      }
+      .bar {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+      button {
+        padding: 8px 18px;
+        font-size: 14px;
+        border: 0;
+        border-radius: 6px;
+        background: #34344a;
+        color: #eaeaf0;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #43435c;
+      }
+      .hint {
+        opacity: 0.6;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>zinejs</h1>
+    <div id="book"></div>
+    <div class="bar">
+      <button id="prev">← Prev</button>
+      <span id="page" class="hint"></span>
+      <button id="next">Next →</button>
+    </div>
+    <p class="hint">Tip: drag a page corner to flip.</p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

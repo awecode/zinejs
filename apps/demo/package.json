@@ -1,0 +1,12 @@
+{
+  "name": "@zinejs/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^8.1.5"
+  }
+}
