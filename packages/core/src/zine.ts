@@ -2,7 +2,7 @@ import { buildSpreads, type Direction, type Spread } from './engine/spread';
 import { Virtualizer } from './engine/virtualizer';
 import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
-import { PointerRecognizer, bindPointerInput, type GestureEnd } from './engine/input';
+import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
 import { hitTest } from './geometry/hitTest';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, Renderer, SpreadContent } from './renderer/types';
@@ -63,6 +63,8 @@ export class Zine {
   #raf: number | null = null;
   #drag: DragState | null = null;
   #pan: { baseTx: number; baseTy: number } | null = null;
+  #pinching = false;
+  #pinchBaseScale = 1;
   #unbindInput: (() => void) | null = null;
   #ready: Promise<void>;
 
@@ -232,7 +234,7 @@ export class Zine {
   }
 
   #onDragStart(clientX: number, clientY: number): void {
-    if (!this.#renderer || this.#machine.state !== 'idle') return;
+    if (this.#pinching || !this.#renderer || this.#machine.state !== 'idle') return;
     // Zoomed in → a drag pans; at scale 1 → a corner drag flips (§9 mode switch).
     if (this.#scale > 1) {
       if (this.#machine.send('panStart') === null) return;
@@ -280,6 +282,7 @@ export class Zine {
   }
 
   #onDragMove(dx: number, dy: number): void {
+    if (this.#pinching) return;
     if (this.#pan) {
       if (!this.#renderer) return;
       const m = this.#renderer.measure();
@@ -303,6 +306,7 @@ export class Zine {
   }
 
   #onDragEnd(gesture: GestureEnd): void {
+    if (this.#pinching) return;
     if (this.#pan) {
       this.#pan = null;
       this.#machine.send('panEnd');
@@ -332,6 +336,32 @@ export class Zine {
     this.#emitter.emit('flipEnd', { page: this.#currentPage });
   }
 
+  #onPinchStart(): void {
+    // A second finger abandons any single-pointer gesture in flight.
+    if (this.#drag) {
+      this.#drag = null;
+      this.#machine.send('release');
+      this.#machine.send('settle');
+      const spread = this.#spreads[this.#current];
+      if (spread) this.#renderer?.renderSpread(spread, this.#currentContent);
+    } else if (this.#pan) {
+      this.#pan = null;
+      this.#machine.send('panEnd');
+    }
+    this.#pinching = true;
+    this.#pinchBaseScale = this.#scale;
+  }
+
+  #onPinchMove(centerX: number, centerY: number, scale: number): void {
+    if (!this.#pinching) return;
+    const rect = this.#container.getBoundingClientRect();
+    this.setZoom(this.#pinchBaseScale * scale, { x: centerX - rect.left, y: centerY - rect.top });
+  }
+
+  #onPinchEnd(): void {
+    this.#pinching = false;
+  }
+
   async #init(rendererOption: RendererOption): Promise<void> {
     // Load the renderer chunk and decode the first spread concurrently.
     const rendererPromise = selectRenderer(rendererOption);
@@ -344,12 +374,17 @@ export class Zine {
     await renderer.mount(this.#container);
     this.#renderer = renderer;
 
-    const recognizer = new PointerRecognizer({
+    const pointer = new PointerRecognizer({
       onStart: (g) => this.#onDragStart(g.x, g.y),
       onMove: (g) => this.#onDragMove(g.dx, g.dy),
       onEnd: (g) => this.#onDragEnd(g),
     });
-    this.#unbindInput = bindPointerInput(this.#container, recognizer);
+    const pinch = new PinchRecognizer({
+      onPinchStart: () => this.#onPinchStart(),
+      onPinchMove: (g) => this.#onPinchMove(g.centerX, g.centerY, g.scale),
+      onPinchEnd: () => this.#onPinchEnd(),
+    });
+    this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
 
     if (spread) {
       this.#currentContent = await contentPromise;

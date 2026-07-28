@@ -156,6 +156,47 @@ export function bindPointerInput(target: EventTarget, recognizer: PointerRecogni
   };
 }
 
+/**
+ * Wire PointerEvents from `target` into a drag recognizer and/or a pinch
+ * recognizer at once, so a single pointer stream feeds both. Returns an unbind.
+ */
+export function bindGestures(
+  target: EventTarget,
+  recognizers: { pointer?: PointerRecognizer; pinch?: PinchRecognizer },
+): () => void {
+  const { pointer, pinch } = recognizers;
+  const down = (e: Event): void => {
+    const p = e as PointerEvent;
+    pointer?.down(p.pointerId, p.clientX, p.clientY, p.timeStamp);
+    pinch?.down(p.pointerId, p.clientX, p.clientY);
+  };
+  const move = (e: Event): void => {
+    const p = e as PointerEvent;
+    pointer?.move(p.pointerId, p.clientX, p.clientY, p.timeStamp);
+    pinch?.move(p.pointerId, p.clientX, p.clientY);
+  };
+  const up = (e: Event): void => {
+    const p = e as PointerEvent;
+    pointer?.up(p.pointerId, p.clientX, p.clientY, p.timeStamp);
+    pinch?.up(p.pointerId);
+  };
+  const cancel = (e: Event): void => {
+    const p = e as PointerEvent;
+    pointer?.cancel(p.pointerId, p.clientX, p.clientY, p.timeStamp);
+    pinch?.cancel(p.pointerId);
+  };
+  target.addEventListener('pointerdown', down);
+  target.addEventListener('pointermove', move);
+  target.addEventListener('pointerup', up);
+  target.addEventListener('pointercancel', cancel);
+  return () => {
+    target.removeEventListener('pointerdown', down);
+    target.removeEventListener('pointermove', move);
+    target.removeEventListener('pointerup', up);
+    target.removeEventListener('pointercancel', cancel);
+  };
+}
+
 export interface PinchStart {
   centerX: number;
   centerY: number;
