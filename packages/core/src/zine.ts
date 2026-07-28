@@ -2,9 +2,23 @@ import { buildSpreads, type Direction, type Spread } from './engine/spread';
 import { Virtualizer } from './engine/virtualizer';
 import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
+import { PointerRecognizer, bindPointerInput, type GestureEnd } from './engine/input';
+import { hitTest } from './geometry/hitTest';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, Renderer, SpreadContent } from './renderer/types';
 import type { Source } from './source/types';
+
+/** Grab-zone size as a fraction of the smaller container dimension. */
+const CORNER_FRACTION = 0.25;
+
+interface DragState {
+  direction: FlipDirection;
+  targetIndex: number;
+  toPage: number;
+  toContent: SpreadContent;
+  width: number;
+  t: number;
+}
 
 export interface ZineOptions {
   /** Content source (e.g. an ImageSource). Required. */
@@ -33,6 +47,7 @@ export class Zine {
   #emitter = new Emitter<ZineEventMap>();
   #virtualizer = new Virtualizer(2);
   #machine = new FlipMachine();
+  #direction: Direction;
   #spreads: Spread[];
   #current = 0;
   #currentPage: number;
@@ -40,6 +55,8 @@ export class Zine {
   #flipDuration: number;
   #renderer: Renderer | null = null;
   #raf: number | null = null;
+  #drag: DragState | null = null;
+  #unbindInput: (() => void) | null = null;
   #ready: Promise<void>;
 
   /** Stable seek API: drive the fold to a fixed progress without animating (visual regression). */
@@ -54,6 +71,7 @@ export class Zine {
     this.#source = options.source;
     const direction = options.direction ?? 'ltr';
     const cover = options.cover ?? false;
+    this.#direction = direction;
     this.#spreads = buildSpreads(this.#source.pageCount, { direction, cover });
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
     this.#current = this.#spreadIndexForPage(this.#currentPage);
@@ -96,6 +114,7 @@ export class Zine {
 
   destroy(): void {
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
+    this.#unbindInput?.();
     this.#renderer?.destroy();
     this.#source.destroy();
     this.#emitter.clear();
@@ -122,26 +141,32 @@ export class Zine {
       ? await this.#resolveContent(toSpread)
       : { left: null, right: null };
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction);
-    this.#animate(targetIndex, direction, toPage, toContent);
+    this.#animateProgress(0, 1, direction, () => this.#commit(targetIndex, toPage, toContent));
   }
 
-  #animate(
-    targetIndex: number,
+  /** Animate the fold from `fromT` to `toT`, easing per-frame, then run `onDone`. */
+  #animateProgress(
+    fromT: number,
+    toT: number,
     direction: FlipDirection,
-    toPage: number,
-    toContent: SpreadContent,
+    onDone: () => void,
   ): void {
-    const duration = this.#flipDuration;
+    const duration = this.#flipDuration * Math.abs(toT - fromT);
+    if (duration <= 0) {
+      this.#renderer?.setFlipProgress(toT, direction);
+      onDone();
+      return;
+    }
     const start = performance.now();
     const step = (now: number): void => {
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
-      const t = duration > 0 ? Math.min(1, (now - start) / duration) : 1;
-      this.#renderer?.setFlipProgress(easeInOutCubic(t), direction);
-      if (t < 1) {
+      const raw = Math.min(1, (now - start) / duration);
+      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * easeInOutCubic(raw), direction);
+      if (raw < 1) {
         this.#raf = requestAnimationFrame(step);
       } else {
         this.#raf = null;
-        this.#commit(targetIndex, toPage, toContent);
+        onDone();
       }
     };
     this.#raf = requestAnimationFrame(step);
@@ -167,6 +192,81 @@ export class Zine {
     return pages.length > 0 ? Math.min(...pages) : this.#currentPage;
   }
 
+  #onDragStart(clientX: number, clientY: number): void {
+    if (!this.#renderer || this.#machine.state !== 'idle') return;
+    const rect = this.#container.getBoundingClientRect();
+    const point = { x: clientX - rect.left, y: clientY - rect.top };
+    const { containerWidth, containerHeight } = this.#renderer.measure();
+    const cornerSize = Math.min(containerWidth, containerHeight) * CORNER_FRACTION;
+    if (hitTest(point, { width: containerWidth, height: containerHeight }, cornerSize) !== 'corner') {
+      return;
+    }
+    // Right-side corner turns the page left (forward) in LTR; RTL mirrors it.
+    const rightSide = point.x > containerWidth / 2;
+    const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
+    const targetIndex = this.#current + (forward ? 1 : -1);
+    if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
+    if (this.#machine.send('grab') === null) return;
+
+    const direction: FlipDirection = forward ? 'forward' : 'backward';
+    const toPage = this.#leadPage(targetIndex);
+    this.#drag = {
+      direction,
+      targetIndex,
+      toPage,
+      toContent: { left: null, right: null },
+      width: containerWidth,
+      t: 0,
+    };
+    this.#emitter.emit('flipStart', { from: this.#currentPage, to: toPage });
+    void this.#stageDrag(targetIndex, direction);
+  }
+
+  async #stageDrag(targetIndex: number, direction: FlipDirection): Promise<void> {
+    const toSpread = this.#spreads[targetIndex];
+    const toContent: SpreadContent = toSpread
+      ? await this.#resolveContent(toSpread)
+      : { left: null, right: null };
+    // The drag may have ended (or retargeted) while content was resolving.
+    if (this.#drag?.targetIndex !== targetIndex) return;
+    this.#drag.toContent = toContent;
+    this.#renderer?.beginFlip(this.#currentContent, toContent, direction);
+    this.#renderer?.setFlipProgress(this.#drag.t, direction);
+  }
+
+  #onDragMove(dx: number): void {
+    const drag = this.#drag;
+    if (!drag) return;
+    const signed = drag.direction === 'forward' ? -dx : dx;
+    drag.t = clamp(signed / drag.width, 0, 1);
+    this.#renderer?.setFlipProgress(drag.t, drag.direction);
+  }
+
+  #onDragEnd(gesture: GestureEnd): void {
+    const drag = this.#drag;
+    if (!drag) return;
+    this.#drag = null;
+    this.#machine.send('release');
+
+    const swiped =
+      gesture.swipe &&
+      (drag.direction === 'forward' ? gesture.dx < 0 : gesture.dx > 0);
+    if (drag.t >= 0.5 || swiped) {
+      this.#animateProgress(drag.t, 1, drag.direction, () =>
+        this.#commit(drag.targetIndex, drag.toPage, drag.toContent),
+      );
+    } else {
+      this.#animateProgress(drag.t, 0, drag.direction, () => this.#cancelFlip());
+    }
+  }
+
+  #cancelFlip(): void {
+    const spread = this.#spreads[this.#current];
+    if (spread) this.#renderer?.renderSpread(spread, this.#currentContent);
+    this.#machine.send('settle');
+    this.#emitter.emit('flipEnd', { page: this.#currentPage });
+  }
+
   async #init(rendererOption: RendererOption): Promise<void> {
     // Load the renderer chunk and decode the first spread concurrently.
     const rendererPromise = selectRenderer(rendererOption);
@@ -178,6 +278,13 @@ export class Zine {
     const renderer = await rendererPromise;
     await renderer.mount(this.#container);
     this.#renderer = renderer;
+
+    const recognizer = new PointerRecognizer({
+      onStart: (g) => this.#onDragStart(g.x, g.y),
+      onMove: (g) => this.#onDragMove(g.dx),
+      onEnd: (g) => this.#onDragEnd(g),
+    });
+    this.#unbindInput = bindPointerInput(this.#container, recognizer);
 
     if (spread) {
       this.#currentContent = await contentPromise;
