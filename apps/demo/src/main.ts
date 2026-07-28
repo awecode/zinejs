@@ -43,5 +43,15 @@ function updateLabel(): void {
 zine.on('ready', updateLabel);
 zine.on('pageChanged', updateLabel);
 
+const zoomLabel = document.getElementById('zoom');
+function updateZoom(): void {
+  if (zoomLabel) zoomLabel.textContent = `${zine.getZoom().toFixed(1)}×`;
+}
+zine.on('ready', updateZoom);
+zine.on('zoomChanged', updateZoom);
+
 document.getElementById('next')?.addEventListener('click', () => zine.flipNext());
 document.getElementById('prev')?.addEventListener('click', () => zine.flipPrev());
+document.getElementById('zoomin')?.addEventListener('click', () => zine.setZoom(zine.getZoom() * 1.5));
+document.getElementById('zoomout')?.addEventListener('click', () => zine.setZoom(zine.getZoom() / 1.5));
+document.getElementById('zoomreset')?.addEventListener('click', () => zine.resetZoom());

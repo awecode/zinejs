@@ -18,6 +18,7 @@ const RAD_TO_DEG = 180 / Math.PI;
  */
 export class CssRenderer implements Renderer {
   #container: HTMLElement | null = null;
+  #clip!: HTMLDivElement;
   #viewport!: HTMLDivElement;
   #book!: HTMLDivElement;
   #pageLeft!: HTMLCanvasElement;
@@ -31,10 +32,15 @@ export class CssRenderer implements Renderer {
     const doc = container.ownerDocument;
     this.#container = container;
 
+    // Fixed-size clip box; NOT transformed, so zoom can't scale the crop region.
+    this.#clip = doc.createElement('div');
+    this.#clip.className = 'zine-clip';
+    this.#clip.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;';
+
+    // Transform target for zoom/pan; lives inside the clip.
     this.#viewport = doc.createElement('div');
     this.#viewport.className = 'zine-viewport';
-    this.#viewport.style.cssText =
-      'position:relative;width:100%;height:100%;overflow:hidden;transform-origin:0 0;';
+    this.#viewport.style.cssText = 'position:absolute;inset:0;transform-origin:0 0;';
 
     this.#book = doc.createElement('div');
     this.#book.className = 'zine-book';
@@ -67,13 +73,14 @@ export class CssRenderer implements Renderer {
     this.#leaf.append(this.#leafFront, this.#leafBack, this.#leafShadow);
     this.#book.append(this.#pageLeft, this.#pageRight, this.#leaf);
     this.#viewport.append(this.#book);
-    container.append(this.#viewport);
+    this.#clip.append(this.#viewport);
+    container.append(this.#clip);
 
     return Promise.resolve();
   }
 
   destroy(): void {
-    this.#viewport?.remove();
+    this.#clip?.remove();
     this.#container = null;
   }
 

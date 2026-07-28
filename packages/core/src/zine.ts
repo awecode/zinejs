@@ -33,6 +33,8 @@ export interface ZineOptions {
   startPage?: number;
   /** Flip animation duration in ms; default 500. */
   flipDuration?: number;
+  /** Maximum zoom scale; default 4. */
+  maxZoom?: number;
 }
 
 /**
@@ -53,9 +55,14 @@ export class Zine {
   #currentPage: number;
   #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
+  #maxZoom: number;
+  #scale = 1;
+  #tx = 0;
+  #ty = 0;
   #renderer: Renderer | null = null;
   #raf: number | null = null;
   #drag: DragState | null = null;
+  #pan: { baseTx: number; baseTy: number } | null = null;
   #unbindInput: (() => void) | null = null;
   #ready: Promise<void>;
 
@@ -76,6 +83,7 @@ export class Zine {
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
     this.#current = this.#spreadIndexForPage(this.#currentPage);
     this.#flipDuration = options.flipDuration ?? 500;
+    this.#maxZoom = options.maxZoom ?? 4;
     this.#ready = this.#init(options.renderer ?? 'auto');
   }
 
@@ -103,6 +111,37 @@ export class Zine {
   flipTo(page: number): void {
     const target = clamp(page, 0, Math.max(0, this.#source.pageCount - 1));
     this.#startFlip(this.#spreadIndexForPage(target));
+  }
+
+  getZoom(): number {
+    return this.#scale;
+  }
+
+  /** Zoom to `scale` (clamped to [1, maxZoom]), keeping `center` (container-local) fixed. */
+  setZoom(scale: number, center?: { x: number; y: number }): void {
+    if (!this.#renderer) return;
+    const s2 = clamp(scale, 1, this.#maxZoom);
+    const m = this.#renderer.measure();
+    const focal = center ?? { x: m.containerWidth / 2, y: m.containerHeight / 2 };
+    const s1 = this.#scale;
+    // Solve for the translate that keeps the focal screen point fixed as s1→s2.
+    let tx = s2 === 1 ? 0 : focal.x - (s2 / s1) * (focal.x - this.#tx);
+    let ty = s2 === 1 ? 0 : focal.y - (s2 / s1) * (focal.y - this.#ty);
+    [tx, ty] = this.#clampPan(tx, ty, s2, m.containerWidth, m.containerHeight);
+    this.#scale = s2;
+    this.#tx = tx;
+    this.#ty = ty;
+    this.#renderer.setViewTransform(s2, tx, ty);
+    this.#emitter.emit('zoomChanged', { scale: s2 });
+  }
+
+  resetZoom(): void {
+    this.setZoom(1);
+  }
+
+  #clampPan(tx: number, ty: number, scale: number, w: number, h: number): [number, number] {
+    // Keep the scaled content covering the viewport (transform-origin is 0,0).
+    return [clamp(tx, w * (1 - scale), 0), clamp(ty, h * (1 - scale), 0)];
   }
 
   on<K extends keyof ZineEventMap>(
@@ -194,6 +233,12 @@ export class Zine {
 
   #onDragStart(clientX: number, clientY: number): void {
     if (!this.#renderer || this.#machine.state !== 'idle') return;
+    // Zoomed in → a drag pans; at scale 1 → a corner drag flips (§9 mode switch).
+    if (this.#scale > 1) {
+      if (this.#machine.send('panStart') === null) return;
+      this.#pan = { baseTx: this.#tx, baseTy: this.#ty };
+      return;
+    }
     const rect = this.#container.getBoundingClientRect();
     const point = { x: clientX - rect.left, y: clientY - rect.top };
     const { containerWidth, containerHeight } = this.#renderer.measure();
@@ -234,7 +279,22 @@ export class Zine {
     this.#renderer?.setFlipProgress(this.#drag.t, direction);
   }
 
-  #onDragMove(dx: number): void {
+  #onDragMove(dx: number, dy: number): void {
+    if (this.#pan) {
+      if (!this.#renderer) return;
+      const m = this.#renderer.measure();
+      const [tx, ty] = this.#clampPan(
+        this.#pan.baseTx + dx,
+        this.#pan.baseTy + dy,
+        this.#scale,
+        m.containerWidth,
+        m.containerHeight,
+      );
+      this.#tx = tx;
+      this.#ty = ty;
+      this.#renderer.setViewTransform(this.#scale, tx, ty);
+      return;
+    }
     const drag = this.#drag;
     if (!drag) return;
     const signed = drag.direction === 'forward' ? -dx : dx;
@@ -243,6 +303,11 @@ export class Zine {
   }
 
   #onDragEnd(gesture: GestureEnd): void {
+    if (this.#pan) {
+      this.#pan = null;
+      this.#machine.send('panEnd');
+      return;
+    }
     const drag = this.#drag;
     if (!drag) return;
     this.#drag = null;
@@ -281,7 +346,7 @@ export class Zine {
 
     const recognizer = new PointerRecognizer({
       onStart: (g) => this.#onDragStart(g.x, g.y),
-      onMove: (g) => this.#onDragMove(g.dx),
+      onMove: (g) => this.#onDragMove(g.dx, g.dy),
       onEnd: (g) => this.#onDragEnd(g),
     });
     this.#unbindInput = bindPointerInput(this.#container, recognizer);
