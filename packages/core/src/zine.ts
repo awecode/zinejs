@@ -1,4 +1,4 @@
-import { buildSpreads, type Direction, type Spread } from './engine/spread';
+import { buildSpreads, shouldSinglePage, type Direction, type Spread } from './engine/spread';
 import { Virtualizer } from './engine/virtualizer';
 import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
@@ -35,6 +35,8 @@ export interface ZineOptions {
   flipDuration?: number;
   /** Maximum zoom scale; default 4. */
   maxZoom?: number;
+  /** Container widths below this (px) switch to one page per spread; default 600. */
+  singlePageThreshold?: number;
 }
 
 /**
@@ -50,12 +52,17 @@ export class Zine {
   #virtualizer = new Virtualizer(2);
   #machine = new FlipMachine();
   #direction: Direction;
+  #cover: boolean;
+  #singlePageThreshold: number;
+  #singlePage = false;
   #spreads: Spread[];
   #current = 0;
   #currentPage: number;
   #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
   #maxZoom: number;
+  #resizeObserver: ResizeObserver | null = null;
+  #updateScheduled = false;
   #scale = 1;
   #tx = 0;
   #ty = 0;
@@ -81,6 +88,8 @@ export class Zine {
     const direction = options.direction ?? 'ltr';
     const cover = options.cover ?? false;
     this.#direction = direction;
+    this.#cover = cover;
+    this.#singlePageThreshold = options.singlePageThreshold ?? 600;
     this.#spreads = buildSpreads(this.#source.pageCount, { direction, cover });
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
     this.#current = this.#spreadIndexForPage(this.#currentPage);
@@ -155,8 +164,10 @@ export class Zine {
 
   destroy(): void {
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
+    this.#resizeObserver?.disconnect();
     this.#unbindInput?.();
     this.#renderer?.destroy();
+    this.#renderer = null;
     this.#source.destroy();
     this.#emitter.clear();
   }
@@ -363,16 +374,16 @@ export class Zine {
   }
 
   async #init(rendererOption: RendererOption): Promise<void> {
-    // Load the renderer chunk and decode the first spread concurrently.
+    // Warm the current page's decode in parallel with loading the renderer chunk.
     const rendererPromise = selectRenderer(rendererOption);
-    const spread = this.#spreads[this.#current];
-    const contentPromise: Promise<SpreadContent> = spread
-      ? this.#resolveContent(spread)
-      : Promise.resolve({ left: null, right: null });
+    this.#source.prefetch([this.#currentPage]);
 
     const renderer = await rendererPromise;
     await renderer.mount(this.#container);
     this.#renderer = renderer;
+
+    // Now that we can measure, apply single-page mode if the container is narrow.
+    this.#applySinglePage(renderer.measure().containerWidth);
 
     const pointer = new PointerRecognizer({
       onStart: (g) => this.#onDragStart(g.x, g.y),
@@ -386,12 +397,51 @@ export class Zine {
     });
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
 
-    if (spread) {
-      this.#currentContent = await contentPromise;
-      renderer.renderSpread(spread, this.#currentContent);
-    }
+    await this.#renderCurrent();
+    this.#observeResize();
     this.#prefetchWindow();
     this.#emitter.emit('ready');
+  }
+
+  /** Re-measure and re-render; call after the container resizes. */
+  update(): void {
+    if (!this.#renderer || this.#machine.state !== 'idle') return;
+    this.#applySinglePage(this.#renderer.measure().containerWidth);
+    void this.#renderCurrent();
+  }
+
+  #applySinglePage(containerWidth: number): void {
+    const single = shouldSinglePage(containerWidth, this.#singlePageThreshold);
+    if (single === this.#singlePage) return;
+    this.#singlePage = single;
+    this.#spreads = buildSpreads(this.#source.pageCount, {
+      direction: this.#direction,
+      cover: this.#cover,
+      singlePage: single,
+    });
+    this.#current = this.#spreadIndexForPage(this.#currentPage);
+  }
+
+  async #renderCurrent(): Promise<void> {
+    const spread = this.#spreads[this.#current];
+    if (!spread || !this.#renderer) return;
+    this.#currentContent = await this.#resolveContent(spread);
+    this.#renderer.renderSpread(spread, this.#currentContent);
+  }
+
+  #observeResize(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    this.#resizeObserver = new ResizeObserver(() => this.#scheduleUpdate());
+    this.#resizeObserver.observe(this.#container);
+  }
+
+  #scheduleUpdate(): void {
+    if (this.#updateScheduled) return;
+    this.#updateScheduled = true;
+    requestAnimationFrame(() => {
+      this.#updateScheduled = false;
+      this.update();
+    });
   }
 
   async #resolveContent(spread: Spread): Promise<SpreadContent> {

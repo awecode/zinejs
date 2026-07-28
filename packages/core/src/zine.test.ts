@@ -30,6 +30,10 @@ class FakeSource implements Source {
 
 function container(): HTMLElement {
   const el = document.createElement('div');
+  // happy-dom reports 0 for client dimensions; give it a wide size so the book
+  // stays in two-page (not single-page) mode.
+  Object.defineProperty(el, 'clientWidth', { value: 800, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { value: 600, configurable: true });
   document.body.append(el);
   return el;
 }
