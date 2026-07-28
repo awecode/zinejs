@@ -36,6 +36,7 @@ export class Zine {
   #spreads: Spread[];
   #current = 0;
   #currentPage: number;
+  #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
   #renderer: Renderer | null = null;
   #raf: number | null = null;
@@ -109,11 +110,27 @@ export class Zine {
 
     const direction: FlipDirection = targetIndex > this.#current ? 'forward' : 'backward';
     const toPage = this.#leadPage(targetIndex);
+    // State is already locked (send('flip') above), so re-entrant flips are rejected
+    // even though staging the destination content below is async.
     this.#emitter.emit('flipStart', { from: this.#currentPage, to: toPage });
-    this.#animate(targetIndex, direction, toPage);
+    void this.#runFlip(targetIndex, direction, toPage);
   }
 
-  #animate(targetIndex: number, direction: FlipDirection, toPage: number): void {
+  async #runFlip(targetIndex: number, direction: FlipDirection, toPage: number): Promise<void> {
+    const toSpread = this.#spreads[targetIndex];
+    const toContent: SpreadContent = toSpread
+      ? await this.#resolveContent(toSpread)
+      : { left: null, right: null };
+    this.#renderer?.beginFlip(this.#currentContent, toContent, direction);
+    this.#animate(targetIndex, direction, toPage, toContent);
+  }
+
+  #animate(
+    targetIndex: number,
+    direction: FlipDirection,
+    toPage: number,
+    toContent: SpreadContent,
+  ): void {
     const duration = this.#flipDuration;
     const start = performance.now();
     const step = (now: number): void => {
@@ -124,21 +141,19 @@ export class Zine {
         this.#raf = requestAnimationFrame(step);
       } else {
         this.#raf = null;
-        void this.#commit(targetIndex, toPage);
+        this.#commit(targetIndex, toPage, toContent);
       }
     };
     this.#raf = requestAnimationFrame(step);
   }
 
-  async #commit(targetIndex: number, toPage: number): Promise<void> {
+  #commit(targetIndex: number, toPage: number, toContent: SpreadContent): void {
     const spread = this.#spreads[targetIndex];
-    const content: SpreadContent = spread
-      ? await this.#resolveContent(spread)
-      : { left: null, right: null };
     this.#current = targetIndex;
     this.#currentPage = toPage;
+    this.#currentContent = toContent;
     // renderSpread paints the landed spread and clears the turning leaf.
-    if (spread) this.#renderer?.renderSpread(spread, content);
+    if (spread) this.#renderer?.renderSpread(spread, toContent);
     this.#prefetchWindow();
     this.#machine.send('settle');
     this.#emitter.emit('pageChanged', { page: toPage });
@@ -165,7 +180,8 @@ export class Zine {
     this.#renderer = renderer;
 
     if (spread) {
-      renderer.renderSpread(spread, await contentPromise);
+      this.#currentContent = await contentPromise;
+      renderer.renderSpread(spread, this.#currentContent);
     }
     this.#prefetchWindow();
     this.#emitter.emit('ready');

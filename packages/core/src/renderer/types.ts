@@ -31,12 +31,19 @@ export interface Renderer {
   /** Tear down: remove DOM/listeners, release any GPU context. */
   destroy(): void;
 
-  /** Paint a spread from already-resolved page rasters. */
+  /** Paint a spread from already-resolved page rasters (static, no flip). */
   renderSpread(spread: Spread, content: SpreadContent): void;
 
   /**
+   * Set up a flip: the turning leaf's front is `from`'s leading page and its back
+   * is `to`'s facing page, with the destination revealed underneath. Call once at
+   * flip start, then drive `setFlipProgress`.
+   */
+  beginFlip(from: SpreadContent, to: SpreadContent, direction: FlipDirection): void;
+
+  /**
    * Drive the turning page to progress `t` (0..1) in `direction`. Also the stable
-   * seek API used by visual-regression tests.
+   * seek API used by visual-regression tests (call `beginFlip` first to stage content).
    */
   setFlipProgress(t: number, direction: FlipDirection): void;
 

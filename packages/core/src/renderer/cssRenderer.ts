@@ -12,11 +12,9 @@ const RAD_TO_DEG = 180 / Math.PI;
 
 /**
  * Baseline renderer: a 2-panel CSS-3D fold. Runs on every browser, no GPU. Pages
- * are <canvas> elements; the turning leaf rotates about the spine driven by
- * flipProgressToPose(), with a gradient shadow overlay for depth.
- *
- * The leaf currently paints the departing page's face; wiring the arriving page
- * onto its back face needs adjacent-spread content and is an engine concern.
+ * are <canvas> elements; the turning leaf (front + back faces, backface-hidden)
+ * rotates about the spine driven by flipProgressToPose(), with a gradient shadow
+ * overlay for depth. `beginFlip` stages the surfaces; `setFlipProgress` animates.
  */
 export class CssRenderer implements Renderer {
   #container: HTMLElement | null = null;
@@ -25,9 +23,9 @@ export class CssRenderer implements Renderer {
   #pageLeft!: HTMLCanvasElement;
   #pageRight!: HTMLCanvasElement;
   #leaf!: HTMLDivElement;
-  #leafFace!: HTMLCanvasElement;
+  #leafFront!: HTMLCanvasElement;
+  #leafBack!: HTMLCanvasElement;
   #leafShadow!: HTMLDivElement;
-  #content: SpreadContent = { left: null, right: null };
 
   mount(container: HTMLElement): Promise<void> {
     const doc = container.ownerDocument;
@@ -51,16 +49,22 @@ export class CssRenderer implements Renderer {
     this.#leaf.style.cssText =
       'position:absolute;top:0;width:50%;height:100%;transform-style:preserve-3d;display:none;';
 
-    this.#leafFace = doc.createElement('canvas');
-    this.#leafFace.className = 'zine-leaf-face';
-    this.#leafFace.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+    this.#leafFront = doc.createElement('canvas');
+    this.#leafFront.className = 'zine-leaf-front';
+    this.#leafFront.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;backface-visibility:hidden;';
+
+    this.#leafBack = doc.createElement('canvas');
+    this.#leafBack.className = 'zine-leaf-back';
+    this.#leafBack.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;backface-visibility:hidden;transform:rotateY(180deg);';
 
     this.#leafShadow = doc.createElement('div');
     this.#leafShadow.className = 'zine-leaf-shadow';
     this.#leafShadow.style.cssText =
       'position:absolute;inset:0;opacity:0;background:linear-gradient(to right,rgba(0,0,0,0.35),rgba(0,0,0,0));';
 
-    this.#leaf.append(this.#leafFace, this.#leafShadow);
+    this.#leaf.append(this.#leafFront, this.#leafBack, this.#leafShadow);
     this.#book.append(this.#pageLeft, this.#pageRight, this.#leaf);
     this.#viewport.append(this.#book);
     container.append(this.#viewport);
@@ -74,7 +78,6 @@ export class CssRenderer implements Renderer {
   }
 
   renderSpread(_spread: Spread, content: SpreadContent): void {
-    this.#content = content;
     this.#paint(this.#pageLeft, content.left);
     this.#paint(this.#pageRight, content.right);
     // A fresh spread cancels any in-progress flip.
@@ -83,19 +86,34 @@ export class CssRenderer implements Renderer {
     this.#leafShadow.style.opacity = '0';
   }
 
+  beginFlip(from: SpreadContent, to: SpreadContent, direction: FlipDirection): void {
+    if (direction === 'forward') {
+      // Right page lifts and swings left about the spine. Left stays; right reveals `to`.
+      this.#paint(this.#pageLeft, from.left);
+      this.#paint(this.#pageRight, to.right);
+      this.#paint(this.#leafFront, from.right);
+      this.#paint(this.#leafBack, to.left);
+      this.#leaf.style.left = '50%';
+      this.#leaf.style.transformOrigin = 'left center';
+    } else {
+      // Left page swings right about its right edge. Right stays; left reveals `to`.
+      this.#paint(this.#pageRight, from.right);
+      this.#paint(this.#pageLeft, to.left);
+      this.#paint(this.#leafFront, from.left);
+      this.#paint(this.#leafBack, to.right);
+      this.#leaf.style.left = '0';
+      this.#leaf.style.transformOrigin = 'right center';
+    }
+    this.#leaf.style.display = 'block';
+    this.#leaf.style.transform = 'rotateY(0deg)';
+    this.#leafShadow.style.opacity = '0';
+  }
+
   setFlipProgress(t: number, direction: FlipDirection): void {
     const pose = flipProgressToPose(t);
     const deg = pose.angle * RAD_TO_DEG;
-    const forward = direction === 'forward';
-
-    // Forward: the right page lifts and swings left about the spine (its left edge).
-    // Backward: the left page swings right about its right edge.
-    this.#paint(this.#leafFace, forward ? this.#content.right : this.#content.left);
-
     this.#leaf.style.display = 'block';
-    this.#leaf.style.left = forward ? '50%' : '0';
-    this.#leaf.style.transformOrigin = forward ? 'left center' : 'right center';
-    this.#leaf.style.transform = `rotateY(${forward ? -deg : deg}deg)`;
+    this.#leaf.style.transform = `rotateY(${direction === 'forward' ? -deg : deg}deg)`;
     this.#leafShadow.style.opacity = String(pose.shadowAlpha);
   }
 

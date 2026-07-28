@@ -55,27 +55,44 @@ describe('CssRenderer', () => {
     expect(pageLeft.height).toBe(400);
   });
 
+  const blank = { left: null, right: null };
+
+  it('beginFlip stages the leaf on the correct side per direction', async () => {
+    const { container, r } = await mounted();
+    const leaf = container.querySelector('.zine-leaf') as HTMLElement;
+
+    r.beginFlip(blank, blank, 'forward');
+    expect(leaf.style.display).toBe('block');
+    expect(leaf.style.left).toBe('50%');
+    expect(leaf.style.transformOrigin).toBe('left center');
+
+    r.beginFlip(blank, blank, 'backward');
+    expect(leaf.style.left).toBe('0px');
+    expect(leaf.style.transformOrigin).toBe('right center');
+  });
+
   it('setFlipProgress rotates the leaf about the spine with a shadow (forward)', async () => {
     const { container, r } = await mounted();
+    r.beginFlip(blank, blank, 'forward');
     r.setFlipProgress(0.5, 'forward'); // pose.angle = π/2 → 90deg
     const leaf = container.querySelector('.zine-leaf') as HTMLElement;
     expect(leaf.style.display).toBe('block');
     expect(leaf.style.transform).toBe('rotateY(-90deg)');
-    expect(leaf.style.transformOrigin).toBe('left center');
     const shadow = container.querySelector('.zine-leaf-shadow') as HTMLElement;
     expect(Number(shadow.style.opacity)).toBeCloseTo(1);
   });
 
-  it('backward flip rotates the other way about the opposite edge', async () => {
+  it('backward flip rotates the other way', async () => {
     const { container, r } = await mounted();
+    r.beginFlip(blank, blank, 'backward');
     r.setFlipProgress(0.5, 'backward');
     const leaf = container.querySelector('.zine-leaf') as HTMLElement;
     expect(leaf.style.transform).toBe('rotateY(90deg)');
-    expect(leaf.style.transformOrigin).toBe('right center');
   });
 
   it('renderSpread cancels an in-progress flip', async () => {
     const { container, r } = await mounted();
+    r.beginFlip(blank, blank, 'forward');
     r.setFlipProgress(0.5, 'forward');
     r.renderSpread({ left: 0, right: 1 }, { left: null, right: null });
     const leaf = container.querySelector('.zine-leaf') as HTMLElement;

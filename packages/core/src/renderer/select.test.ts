@@ -36,6 +36,7 @@ describe('selectRenderer', () => {
       mount: () => Promise.resolve(),
       destroy: () => {},
       renderSpread: () => {},
+      beginFlip: () => {},
       setFlipProgress: () => {},
       setViewTransform: () => {},
       measure: (): LayoutMetrics => ({

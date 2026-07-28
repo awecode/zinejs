@@ -16,6 +16,9 @@ class NoopRenderer implements Renderer {
   renderSpread(spread: Spread, _content: SpreadContent): void {
     this.calls.push(`renderSpread:${spread.left}/${spread.right}`);
   }
+  beginFlip(_from: SpreadContent, _to: SpreadContent, direction: FlipDirection): void {
+    this.calls.push(`beginFlip:${direction}`);
+  }
   setFlipProgress(t: number, direction: FlipDirection): void {
     this.calls.push(`flip:${t}:${direction}`);
   }
@@ -32,6 +35,8 @@ describe('Renderer contract', () => {
     const r = new NoopRenderer();
     await r.mount({} as HTMLElement);
     r.renderSpread({ left: 0, right: 1 }, { left: null, right: null });
+    const blank = { left: null, right: null };
+    r.beginFlip(blank, blank, 'forward');
     r.setFlipProgress(0.5, 'forward');
     r.setViewTransform(2, 10, 20);
     const metrics = r.measure();
@@ -40,6 +45,7 @@ describe('Renderer contract', () => {
     expect(r.calls).toEqual([
       'mount',
       'renderSpread:0/1',
+      'beginFlip:forward',
       'flip:0.5:forward',
       'view:2,10,20',
       'destroy',

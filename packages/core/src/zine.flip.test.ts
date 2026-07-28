@@ -33,12 +33,16 @@ class FakeSource implements Source {
 class MockRenderer implements Renderer {
   readonly flips: Array<[number, FlipDirection]> = [];
   readonly rendered: Spread[] = [];
+  readonly begun: FlipDirection[] = [];
   mount(_container: HTMLElement): Promise<void> {
     return Promise.resolve();
   }
   destroy(): void {}
   renderSpread(spread: Spread, _content: SpreadContent): void {
     this.rendered.push(spread);
+  }
+  beginFlip(_from: SpreadContent, _to: SpreadContent, direction: FlipDirection): void {
+    this.begun.push(direction);
   }
   setFlipProgress(t: number, direction: FlipDirection): void {
     this.flips.push([t, direction]);
@@ -85,10 +89,12 @@ describe('Zine — slice 2 (programmatic flips)', () => {
   it('flipNext animates forward and lands on the next spread', async () => {
     const { zine, renderer } = await makeZine(4); // spreads [0,1] and [2,3]
     zine.flipNext();
+    await flush(); // stage destination content + schedule first frame
     tick(250); // t = 0.5
     tick(250); // t = 1 → commit
     await flush();
 
+    expect(renderer.begun).toEqual(['forward']);
     expect(renderer.flips.every(([, dir]) => dir === 'forward')).toBe(true);
     expect(renderer.flips.length).toBeGreaterThanOrEqual(2);
     expect(renderer.rendered.at(-1)).toEqual({ left: 2, right: 3 });
@@ -103,6 +109,7 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     zine.on('flipEnd', (p) => events.push(`end:${p.page}`));
 
     zine.flipNext();
+    await flush();
     tick(500);
     await flush();
 
@@ -112,9 +119,11 @@ describe('Zine — slice 2 (programmatic flips)', () => {
   it('flipPrev animates backward', async () => {
     const { zine, renderer } = await makeZine(4, 2); // start on spread 1
     zine.flipPrev();
+    await flush();
     tick(500);
     await flush();
 
+    expect(renderer.begun).toEqual(['backward']);
     expect(renderer.flips.every(([, dir]) => dir === 'backward')).toBe(true);
     expect(zine.getPage()).toBe(0);
   });
@@ -125,9 +134,10 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     zine.on('flipStart', starts);
 
     zine.flipNext();
-    zine.flipNext(); // busy → ignored
+    zine.flipNext(); // busy → ignored (state locks synchronously)
     expect(starts).toHaveBeenCalledTimes(1);
 
+    await flush();
     tick(500);
     await flush();
     zine.flipNext(); // now idle again → allowed
