@@ -5,6 +5,7 @@ import type {
   LayoutMetrics,
   PageContent,
   Renderer,
+  RenderOptions,
   SpreadContent,
 } from './types';
 
@@ -84,9 +85,18 @@ export class CssRenderer implements Renderer {
     this.#container = null;
   }
 
-  renderSpread(_spread: Spread, content: SpreadContent): void {
-    this.#paint(this.#pageLeft, content.left);
-    this.#paint(this.#pageRight, content.right);
+  renderSpread(_spread: Spread, content: SpreadContent, options?: RenderOptions): void {
+    if (options?.fill) {
+      // Single-page mode: the lone page fills the container; hide the other panel.
+      this.#pageLeft.style.width = '100%';
+      this.#pageRight.style.display = 'none';
+      this.#paint(this.#pageLeft, content.right ?? content.left);
+    } else {
+      this.#pageLeft.style.width = '50%';
+      this.#pageRight.style.display = '';
+      this.#paint(this.#pageLeft, content.left);
+      this.#paint(this.#pageRight, content.right);
+    }
     // A fresh spread cancels any in-progress flip.
     this.#leaf.style.display = 'none';
     this.#leaf.style.transform = '';

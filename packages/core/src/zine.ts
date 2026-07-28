@@ -231,7 +231,7 @@ export class Zine {
     this.#currentPage = toPage;
     this.#currentContent = toContent;
     // renderSpread paints the landed spread and clears the turning leaf.
-    if (spread) this.#renderer?.renderSpread(spread, toContent);
+    if (spread) this.#paintSpread(spread, toContent);
     this.#prefetchWindow();
     this.#machine.send('settle');
     this.#emitter.emit('pageChanged', { page: toPage });
@@ -343,7 +343,7 @@ export class Zine {
 
   #cancelFlip(): void {
     const spread = this.#spreads[this.#current];
-    if (spread) this.#renderer?.renderSpread(spread, this.#currentContent);
+    if (spread) this.#paintSpread(spread, this.#currentContent);
     this.#machine.send('settle');
     this.#emitter.emit('flipEnd', { page: this.#currentPage });
   }
@@ -355,7 +355,7 @@ export class Zine {
       this.#machine.send('release');
       this.#machine.send('settle');
       const spread = this.#spreads[this.#current];
-      if (spread) this.#renderer?.renderSpread(spread, this.#currentContent);
+      if (spread) this.#paintSpread(spread, this.#currentContent);
     } else if (this.#pan) {
       this.#pan = null;
       this.#machine.send('panEnd');
@@ -427,7 +427,11 @@ export class Zine {
     const spread = this.#spreads[this.#current];
     if (!spread || !this.#renderer) return;
     this.#currentContent = await this.#resolveContent(spread);
-    this.#renderer.renderSpread(spread, this.#currentContent);
+    this.#paintSpread(spread, this.#currentContent);
+  }
+
+  #paintSpread(spread: Spread, content: SpreadContent): void {
+    this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
   }
 
   #observeResize(): void {

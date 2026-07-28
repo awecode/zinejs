@@ -11,6 +11,11 @@ export interface SpreadContent {
 
 export type FlipDirection = 'forward' | 'backward';
 
+export interface RenderOptions {
+  /** Render a lone page filling the container (single-page mode), not a half panel. */
+  fill?: boolean;
+}
+
 /** Layout metrics the engine needs for geometry and mode decisions. */
 export interface LayoutMetrics {
   containerWidth: number;
@@ -32,7 +37,7 @@ export interface Renderer {
   destroy(): void;
 
   /** Paint a spread from already-resolved page rasters (static, no flip). */
-  renderSpread(spread: Spread, content: SpreadContent): void;
+  renderSpread(spread: Spread, content: SpreadContent, options?: RenderOptions): void;
 
   /**
    * Set up a flip: the turning leaf's front is `from`'s leading page and its back

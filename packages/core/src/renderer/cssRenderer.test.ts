@@ -44,6 +44,18 @@ describe('CssRenderer', () => {
     expect(vp.style.transform).toBe('translate(10px, 20px) scale(2)');
   });
 
+  it('fills the container with a lone page when fill is set (single-page mode)', async () => {
+    const { container, r } = await mounted();
+    const canvas = document.createElement('canvas');
+    canvas.width = 300;
+    canvas.height = 400;
+    r.renderSpread({ left: null, right: 2 }, { left: null, right: canvas }, { fill: true });
+    const pageLeft = container.querySelector('.zine-page-left') as HTMLElement;
+    const pageRight = container.querySelector('.zine-page-right') as HTMLElement;
+    expect(pageLeft.style.width).toBe('100%');
+    expect(pageRight.style.display).toBe('none');
+  });
+
   it('renderSpread sizes a page canvas to its content', async () => {
     const { container, r } = await mounted();
     const content = document.createElement('canvas');
