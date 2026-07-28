@@ -39,10 +39,11 @@ describe('foldFromPointer', () => {
     };
     expect(drag.x * crease.x + drag.y * crease.y).toBeCloseTo(0);
     // (3) both endpoints sit on the page border
-    for (const [x, y] of [
+    const endpoints: Array<[number, number]> = [
       [fold.foldLine.x1, fold.foldLine.y1],
       [fold.foldLine.x2, fold.foldLine.y2],
-    ]) {
+    ];
+    for (const [x, y] of endpoints) {
       const onBorder =
         Math.abs(x) < 1e-6 ||
         Math.abs(x - 100) < 1e-6 ||
