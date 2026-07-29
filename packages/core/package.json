@@ -17,7 +17,7 @@
       }
     },
     "scripts": {
-        "build": "vite build",
+        "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
         "test": "vitest run"
     }
   }
