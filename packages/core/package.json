@@ -19,7 +19,8 @@
     },
     "scripts": {
         "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
-        "test": "vitest run",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "pnpm typecheck && vitest run",
         "size": "pnpm build && size-limit"
     },
     "size-limit": [
