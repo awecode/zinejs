@@ -71,8 +71,10 @@ describe('Zine option validation', () => {
     );
   });
 
-  it('rejects maxZoom below 1', () => {
-    expect(() => new Zine(fakeContainer(), { source: src(), maxZoom: 0.5 })).toThrow(/maxZoom/);
+  it('rejects zoom.max below 1', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), zoom: { max: 0.5 } })).toThrow(
+      /zoom\.max/,
+    );
   });
 
   it('rejects an unknown renderer token', () => {

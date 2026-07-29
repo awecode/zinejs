@@ -47,11 +47,14 @@
       "default": 500,
       "description": "Flip animation duration in milliseconds."
     },
-    "maxZoom": {
-      "type": "number",
-      "minimum": 1,
-      "default": 4,
-      "description": "Maximum zoom scale."
+    "zoom": {
+      "type": "object",
+      "description": "Zoom behavior.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "Whether zooming is allowed." },
+        "max": { "type": "number", "minimum": 1, "default": 4, "description": "Maximum zoom scale." }
+      }
     },
     "singlePageThreshold": {
       "type": "number",

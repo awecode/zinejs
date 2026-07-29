@@ -61,7 +61,7 @@ async function makeZine(): Promise<{ zine: Zine; renderer: MockRenderer; el: HTM
   const el = document.createElement('div');
   document.body.append(el);
   const renderer = new MockRenderer();
-  const zine = new Zine(el, { source: new FakeSource(4), renderer, maxZoom: 4 });
+  const zine = new Zine(el, { source: new FakeSource(4), renderer, zoom: { max: 4 } });
   await zine.ready;
   return { zine, renderer, el };
 }
@@ -78,7 +78,7 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(zoomed).toHaveBeenCalledWith({ scale: 2 });
   });
 
-  it('clamps scale to [1, maxZoom]', async () => {
+  it('clamps scale to [1, zoom.max]', async () => {
     const { zine } = await makeZine();
     zine.setZoom(99);
     expect(zine.getZoom()).toBe(4);
@@ -92,6 +92,17 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     zine.resetZoom();
     expect(zine.getZoom()).toBe(1);
     expect(renderer.views.at(-1)).toEqual([1, 0, 0]);
+  });
+
+  it('ignores zoom when disabled', async () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, zoom: { enabled: false } });
+    await zine.ready;
+    zine.setZoom(3);
+    expect(zine.getZoom()).toBe(1);
+    expect(renderer.views).toEqual([]);
   });
 
   it('pans instead of flipping when zoomed in', async () => {

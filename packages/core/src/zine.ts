@@ -20,6 +20,13 @@ interface DragState {
   t: number;
 }
 
+export interface ZoomOptions {
+  /** Whether zooming is allowed at all; default true. */
+  enabled?: boolean;
+  /** Maximum zoom scale; default 4. */
+  max?: number;
+}
+
 export interface ZineOptions {
   /** Content source (e.g. an ImageSource). Required. */
   source: Source;
@@ -33,8 +40,8 @@ export interface ZineOptions {
   startPage?: number;
   /** Flip animation duration in ms; default 500. */
   flipDuration?: number;
-  /** Maximum zoom scale; default 4. */
-  maxZoom?: number;
+  /** Zoom behavior. */
+  zoom?: ZoomOptions;
   /** Container widths below this (px) switch to one page per spread; default 600. */
   singlePageThreshold?: number;
 }
@@ -60,6 +67,7 @@ export class Zine {
   #currentPage: number;
   #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
+  #zoomEnabled: boolean;
   #maxZoom: number;
   #resizeObserver: ResizeObserver | null = null;
   #updateScheduled = false;
@@ -98,7 +106,8 @@ export class Zine {
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
     this.#current = this.#spreadIndexForPage(this.#currentPage);
     this.#flipDuration = options.flipDuration ?? 500;
-    this.#maxZoom = options.maxZoom ?? 4;
+    this.#zoomEnabled = options.zoom?.enabled ?? true;
+    this.#maxZoom = options.zoom?.max ?? 4;
     this.#ready = this.#init(options.renderer ?? 'auto');
   }
 
@@ -132,9 +141,9 @@ export class Zine {
     return this.#scale;
   }
 
-  /** Zoom to `scale` (clamped to [1, maxZoom]), keeping `center` (container-local) fixed. */
+  /** Zoom to `scale` (clamped to [1, zoom.max]), keeping `center` (container-local) fixed. */
   setZoom(scale: number, center?: { x: number; y: number }): void {
-    if (!this.#renderer) return;
+    if (!this.#renderer || !this.#zoomEnabled) return;
     const s2 = clamp(scale, 1, this.#maxZoom);
     const m = this.#renderer.measure();
     const focal = center ?? { x: m.containerWidth / 2, y: m.containerHeight / 2 };
@@ -616,8 +625,8 @@ function validateOptions(container: unknown, options: unknown): void {
   }
 
   assertMin(o.flipDuration, 'flipDuration', 0);
-  assertMin(o.maxZoom, 'maxZoom', 1);
   assertMin(o.singlePageThreshold, 'singlePageThreshold', 0);
+  validateZoomOption(o.zoom);
   validateRendererOption(o.renderer);
 }
 
@@ -626,6 +635,18 @@ function assertMin(value: unknown, name: string, min: number): void {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
     throw new Error(`Zine: ${name} must be a number >= ${min}; got ${JSON.stringify(value)}.`);
   }
+}
+
+function validateZoomOption(zoom: unknown): void {
+  if (zoom === undefined) return;
+  if (typeof zoom !== 'object' || zoom === null || Array.isArray(zoom)) {
+    throw new Error('Zine: zoom must be an object, e.g. { max: 4 }.');
+  }
+  const z = zoom as Record<string, unknown>;
+  if (z.enabled !== undefined && typeof z.enabled !== 'boolean') {
+    throw new Error(`Zine: zoom.enabled must be a boolean; got ${JSON.stringify(z.enabled)}.`);
+  }
+  assertMin(z.max, 'zoom.max', 1);
 }
 
 function validateRendererOption(renderer: unknown): void {

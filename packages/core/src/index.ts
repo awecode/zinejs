@@ -1,5 +1,5 @@
 export { Zine } from './zine';
-export type { ZineOptions } from './zine';
+export type { ZineOptions, ZoomOptions } from './zine';
 
 export { ImageSource } from './source/imageSource';
 export type { ImageSourceOptions, ImageFit } from './source/imageSource';
