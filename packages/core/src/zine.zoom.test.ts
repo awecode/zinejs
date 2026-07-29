@@ -198,8 +198,9 @@ describe('Zine — slice 4a (zoom + pan)', () => {
   });
 
   it('flips (not pans) when at scale 1', async () => {
-    const { zine, renderer, el } = await makeZine();
+    const { renderer, el } = await makeZine();
     fire(el, 'pointerdown', { pointerId: 1, clientX: 790, clientY: 10 }); // right corner
+    fire(el, 'pointermove', { pointerId: 1, clientX: 600, clientY: 10 }); // move → promote to a flip
     await flush();
     expect(renderer.begun).toEqual(['forward']);
   });
