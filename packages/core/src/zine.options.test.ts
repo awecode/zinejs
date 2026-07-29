@@ -65,6 +65,12 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects an invalid clickToFlip', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), clickToFlip: 'corner' as any })).toThrow(
+      /clickToFlip/,
+    );
+  });
+
   it('rejects a negative flipDuration', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), flipDuration: -5 })).toThrow(
       /flipDuration/,

@@ -83,8 +83,8 @@ describe('Zine — slice 3 (drag to flip)', () => {
   it('completes a forward flip when a right-corner drag passes the halfway point', async () => {
     const { zine, renderer, el } = await makeZine(4); // spreads [0,1], [2,3]
     fire(el, 'pointerdown', { pointerId: 1, clientX: 790, clientY: 10 }); // right corner
-    await flush(); // stage content → beginFlip
-    fire(el, 'pointermove', { pointerId: 1, clientX: 390, clientY: 10 }); // dx=-400 → t=0.5
+    fire(el, 'pointermove', { pointerId: 1, clientX: 390, clientY: 10 }); // dx=-400 → promote + t=0.5
+    await flush(); // drag promoted on move → stage content → beginFlip
     fire(el, 'pointerup', { pointerId: 1, clientX: 390, clientY: 10 });
     await flush();
     tick(1000); // finish the settle animation
@@ -115,8 +115,8 @@ describe('Zine — slice 3 (drag to flip)', () => {
   it('drives a backward flip from a left-corner drag', async () => {
     const { zine, renderer, el } = await makeZine(4, 2); // start on spread 1
     fire(el, 'pointerdown', { pointerId: 1, clientX: 10, clientY: 10 }); // left corner
+    fire(el, 'pointermove', { pointerId: 1, clientX: 410, clientY: 10 }); // dx=+400 → promote + t=0.5
     await flush();
-    fire(el, 'pointermove', { pointerId: 1, clientX: 410, clientY: 10 }); // dx=+400 → t=0.5
     fire(el, 'pointerup', { pointerId: 1, clientX: 410, clientY: 10 });
     await flush();
     tick(1000);

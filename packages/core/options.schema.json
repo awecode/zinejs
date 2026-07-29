@@ -47,6 +47,18 @@
       "default": 500,
       "description": "Flip animation duration in milliseconds."
     },
+    "clickToFlip": {
+      "type": "string",
+      "enum": ["edge", "half", "off"],
+      "default": "edge",
+      "description": "How a tap/click turns pages: near an edge, by page half, or off."
+    },
+    "clickZoneSize": {
+      "type": "number",
+      "minimum": 0,
+      "default": 64,
+      "description": "Edge-zone size in px per side, used when clickToFlip is 'edge'."
+    },
     "zoom": {
       "type": "object",
       "description": "Zoom behavior.",

@@ -14,6 +14,12 @@ const CORNER_FRACTION = 0.25;
 /** Wheel-zoom sensitivity: scale multiplies by exp(-deltaY * this) per wheel event. */
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 
+/** Pointer movement (px) beyond which a press becomes a drag rather than a tap. */
+const DRAG_THRESHOLD = 6;
+
+/** Window (ms) a single click waits to rule out a double-click before flipping. */
+const DOUBLE_CLICK_MS = 250;
+
 interface DragState {
   direction: FlipDirection;
   targetIndex: number;
@@ -47,6 +53,10 @@ export interface ZineOptions {
   startPage?: number;
   /** Flip animation duration in ms; default 500. */
   flipDuration?: number;
+  /** How a tap/click turns pages: near an edge ('edge'), by page half ('half'), or 'off'. Default 'edge'. */
+  clickToFlip?: 'edge' | 'half' | 'off';
+  /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
+  clickZoneSize?: number;
   /** Zoom behavior. */
   zoom?: ZoomOptions;
   /** Container widths below this (px) switch to one page per spread; default 600. */
@@ -67,6 +77,8 @@ export class Zine {
   #machine = new FlipMachine();
   #direction: Direction;
   #cover: boolean;
+  #clickToFlip: 'edge' | 'half' | 'off';
+  #clickZoneSize: number;
   #singlePageThreshold: number;
   #singlePage = false;
   #spreads: Spread[];
@@ -86,6 +98,9 @@ export class Zine {
   #renderer: Renderer | null = null;
   #raf: number | null = null;
   #drag: DragState | null = null;
+  #pendingGrab: { direction: FlipDirection; targetIndex: number; toPage: number; width: number } | null = null;
+  #press: { x: number; y: number } | null = null;
+  #pendingClickTimer: ReturnType<typeof setTimeout> | null = null;
   #pan: { baseTx: number; baseTy: number } | null = null;
   #pinching = false;
   #pinchBaseScale = 1;
@@ -112,6 +127,8 @@ export class Zine {
     const cover = options.cover ?? false;
     this.#direction = direction;
     this.#cover = cover;
+    this.#clickToFlip = options.clickToFlip ?? 'edge';
+    this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 600;
     this.#spreads = buildSpreads(this.#source.pageCount, { direction, cover });
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
@@ -192,6 +209,7 @@ export class Zine {
 
   destroy(): void {
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
+    this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
@@ -281,6 +299,7 @@ export class Zine {
 
   #onDragStart(clientX: number, clientY: number): void {
     if (this.#pinching || !this.#renderer || this.#machine.state !== 'idle') return;
+    this.#clearPendingClickFlip(); // a new press cancels a click-flip still waiting out its window
     // Zoomed in → a drag pans; at scale 1 → a corner drag flips (§9 mode switch).
     if (this.#scale > 1) {
       if (this.#machine.send('panStart') === null) return;
@@ -289,30 +308,43 @@ export class Zine {
     }
     const rect = this.#container.getBoundingClientRect();
     const point = { x: clientX - rect.left, y: clientY - rect.top };
+    this.#press = point; // remembered for tap classification / click-to-flip zone
     const { containerWidth, containerHeight } = this.#renderer.measure();
     const cornerSize = Math.min(containerWidth, containerHeight) * CORNER_FRACTION;
     if (hitTest(point, { width: containerWidth, height: containerHeight }, cornerSize) !== 'corner') {
-      return;
+      return; // not a corner — no drag; a tap here may still click-to-flip on release
     }
-    // Right-side corner turns the page left (forward) in LTR; RTL mirrors it.
+    // Arm a potential drag; it only becomes a real flip once the pointer moves
+    // (so a corner *tap* never fires a spurious flipStart). Right-side corner
+    // turns the page forward in LTR; RTL mirrors it.
     const rightSide = point.x > containerWidth / 2;
     const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
     const targetIndex = this.#current + (forward ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
-    if (this.#machine.send('grab') === null) return;
-
-    const direction: FlipDirection = forward ? 'forward' : 'backward';
-    const toPage = this.#leadPage(targetIndex);
-    this.#drag = {
-      direction,
+    this.#pendingGrab = {
+      direction: forward ? 'forward' : 'backward',
       targetIndex,
-      toPage,
-      toContent: { left: null, right: null },
+      toPage: this.#leadPage(targetIndex),
       width: containerWidth,
+    };
+  }
+
+  /** Turn an armed corner press into a live drag flip once the pointer has moved. */
+  #promoteGrab(): void {
+    const grab = this.#pendingGrab;
+    if (!grab) return;
+    this.#pendingGrab = null;
+    if (this.#machine.send('grab') === null) return;
+    this.#drag = {
+      direction: grab.direction,
+      targetIndex: grab.targetIndex,
+      toPage: grab.toPage,
+      toContent: { left: null, right: null },
+      width: grab.width,
       t: 0,
     };
-    this.#emitter.emit('flipStart', { from: this.#currentPage, to: toPage });
-    void this.#stageDrag(targetIndex, direction);
+    this.#emitter.emit('flipStart', { from: this.#currentPage, to: grab.toPage });
+    void this.#stageDrag(grab.targetIndex, grab.direction);
   }
 
   async #stageDrag(targetIndex: number, direction: FlipDirection): Promise<void> {
@@ -346,6 +378,10 @@ export class Zine {
       this.#renderer.setViewTransform(this.#scale, tx, ty);
       return;
     }
+    // An armed corner press becomes a real flip once it moves past the threshold.
+    if (this.#pendingGrab && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      this.#promoteGrab();
+    }
     const drag = this.#drag;
     if (!drag) return;
     const signed = drag.direction === 'forward' ? -dx : dx;
@@ -361,7 +397,12 @@ export class Zine {
       return;
     }
     const drag = this.#drag;
-    if (!drag) return;
+    if (!drag) {
+      // Never became a drag → it was a tap; maybe flip via clickToFlip.
+      this.#pendingGrab = null;
+      this.#maybeClickFlip(gesture);
+      return;
+    }
     this.#drag = null;
     this.#machine.send('release');
 
@@ -377,6 +418,48 @@ export class Zine {
     }
   }
 
+  #maybeClickFlip(gesture: GestureEnd): void {
+    if (this.#clickToFlip === 'off' || this.#scale > 1 || !this.#press) return;
+    // A tap barely moves; anything more was a drag we already ignored.
+    if (Math.abs(gesture.dx) > DRAG_THRESHOLD || Math.abs(gesture.dy) > DRAG_THRESHOLD) return;
+    const direction = this.#clickFlipDirection(this.#press);
+    if (!direction) return;
+    const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
+    if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
+    // Wait out the double-click window; a double-click (zoom) cancels this.
+    this.#clearPendingClickFlip();
+    this.#pendingClickTimer = setTimeout(() => {
+      this.#pendingClickTimer = null;
+      this.#startFlip(targetIndex);
+    }, DOUBLE_CLICK_MS);
+  }
+
+  /** Which way a tap at `point` (container-local) turns the page, or null for a dead zone. */
+  #clickFlipDirection(point: { x: number; y: number }): FlipDirection | null {
+    if (!this.#renderer) return null;
+    const { containerWidth } = this.#renderer.measure();
+    let side: 'left' | 'right' | null;
+    if (this.#clickToFlip === 'half') {
+      side = point.x > containerWidth / 2 ? 'right' : 'left';
+    } else if (point.x <= this.#clickZoneSize) {
+      side = 'left';
+    } else if (point.x >= containerWidth - this.#clickZoneSize) {
+      side = 'right';
+    } else {
+      side = null; // center dead zone in 'edge' mode
+    }
+    if (!side) return null;
+    const forwardSide = this.#direction === 'rtl' ? 'left' : 'right';
+    return side === forwardSide ? 'forward' : 'backward';
+  }
+
+  #clearPendingClickFlip(): void {
+    if (this.#pendingClickTimer !== null) {
+      clearTimeout(this.#pendingClickTimer);
+      this.#pendingClickTimer = null;
+    }
+  }
+
   #cancelFlip(): void {
     const spread = this.#spreads[this.#current];
     if (spread) this.#paintSpread(spread, this.#currentContent);
@@ -386,6 +469,8 @@ export class Zine {
 
   #onPinchStart(): void {
     // A second finger abandons any single-pointer gesture in flight.
+    this.#pendingGrab = null;
+    this.#clearPendingClickFlip();
     if (this.#drag) {
       this.#drag = null;
       this.#machine.send('release');
@@ -432,6 +517,8 @@ export class Zine {
     const onDoubleClick = (event: MouseEvent): void => {
       const levels = this.#doubleClickLevels;
       if (!this.#zoomEnabled || levels === null) return;
+      // A double-click means the single-click flip we may have queued was really a zoom.
+      this.#clearPendingClickFlip();
       event.preventDefault();
       // Next configured level above the current scale, else wrap to the first.
       const next = levels.find((l) => l > this.#scale + 1e-6) ?? levels[0] ?? this.#scale;
@@ -676,7 +763,13 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(`Zine: direction must be 'ltr' or 'rtl'; got ${JSON.stringify(direction)}.`);
   }
 
+  const clickToFlip = o.clickToFlip;
+  if (clickToFlip !== undefined && !['edge', 'half', 'off'].includes(clickToFlip as string)) {
+    throw new Error(`Zine: clickToFlip must be 'edge', 'half', or 'off'; got ${JSON.stringify(clickToFlip)}.`);
+  }
+
   assertMin(o.flipDuration, 'flipDuration', 0);
+  assertMin(o.clickZoneSize, 'clickZoneSize', 0);
   assertMin(o.singlePageThreshold, 'singlePageThreshold', 0);
   validateZoomOption(o.zoom);
   validateRendererOption(o.renderer);
