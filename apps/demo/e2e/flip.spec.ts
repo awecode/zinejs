@@ -1,0 +1,46 @@
+import { test, expect } from '@playwright/test';
+
+// The demo shows "page N / M" in #page; we assert navigation through that label.
+
+test('Next button flips to the next spread', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#page')).toHaveText('page 1 / 8');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('#page')).toHaveText('page 3 / 8');
+});
+
+test('ArrowRight flips forward once the book is focused', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#book').click(); // focus the flipbook
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#page')).toHaveText('page 3 / 8');
+});
+
+test('Home and End jump to the first and last pages', async ({ page }) => {
+  await page.goto('/?start=4');
+  await page.locator('#book').click();
+  await page.keyboard.press('End');
+  await expect(page.locator('#page')).toHaveText('page 7 / 8'); // last spread = pages 7,8
+  await page.keyboard.press('Home');
+  await expect(page.locator('#page')).toHaveText('page 1 / 8');
+});
+
+test('a corner drag across the book completes the flip', async ({ page }) => {
+  await page.goto('/');
+  const box = (await page.locator('#book').boundingBox())!;
+  await page.mouse.move(box.x + box.width - 12, box.y + 12); // top-right corner
+  await page.mouse.down();
+  await page.mouse.move(box.x + 12, box.y + 12, { steps: 12 }); // drag left across
+  await page.mouse.up();
+  await expect(page.locator('#page')).toHaveText('page 3 / 8');
+});
+
+test('a short corner drag cancels and stays put', async ({ page }) => {
+  await page.goto('/');
+  const box = (await page.locator('#book').boundingBox())!;
+  await page.mouse.move(box.x + box.width - 12, box.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 70, box.y + 12, { steps: 5 }); // small drag
+  await page.mouse.up();
+  await expect(page.locator('#page')).toHaveText('page 1 / 8');
+});

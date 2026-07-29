@@ -1,6 +1,11 @@
 import { Zine, ImageSource } from '@zinejs/core';
 
-const TOTAL = 8;
+// URL params let E2E tests drive different configurations.
+const params = new URLSearchParams(location.search);
+const TOTAL = Number(params.get('pages') ?? 8);
+const direction = params.get('direction') === 'rtl' ? 'rtl' : 'ltr';
+const cover = params.get('cover') === '1';
+const startPage = Number(params.get('start') ?? 0);
 
 /** Draw a procedural page as a data URL — no external assets needed. */
 function makePage(n: number): string {
@@ -34,7 +39,7 @@ const pages = Array.from({ length: TOTAL }, (_, i) => makePage(i));
 const container = document.getElementById('book');
 if (!container) throw new Error('#book not found');
 
-const zine = new Zine(container, { source: new ImageSource(pages) });
+const zine = new Zine(container, { source: new ImageSource(pages), direction, cover, startPage });
 
 const label = document.getElementById('page');
 function updateLabel(): void {

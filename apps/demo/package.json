@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "vite": "^8.1.5"
