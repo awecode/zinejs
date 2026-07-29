@@ -12,7 +12,7 @@ interface PdfDocumentLike {
 }
 interface PdfjsModule {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument(src: string | { data: ArrayBuffer | Uint8Array }): { promise: Promise<PdfDocumentLike> };
+  getDocument(src: { url: string } | { data: ArrayBuffer | Uint8Array }): { promise: Promise<PdfDocumentLike> };
 }
 
 /** A URL, raw bytes, or a pre-created pdf.js document. */
@@ -70,7 +70,7 @@ export class PdfSource implements Source {
       }
       const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsModule;
       pdfjs.GlobalWorkerOptions.workerSrc = this.#workerSrc;
-      const params = typeof this.#src === 'string' ? this.#src : { data: this.#src };
+      const params = typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
       this.#doc = await pdfjs.getDocument(params).promise;
     }
     this.pageCount = this.#doc.numPages;

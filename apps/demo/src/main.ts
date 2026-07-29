@@ -1,4 +1,5 @@
-import { Zine, ImageSource } from '@zinejs/core';
+import { Zine, ImageSource, type Source } from '@zinejs/core';
+import { PdfSource } from '@zinejs/pdf';
 
 // URL params let E2E tests drive different configurations.
 const params = new URLSearchParams(location.search);
@@ -6,6 +7,8 @@ const TOTAL = Number(params.get('pages') ?? 8);
 const direction = params.get('direction') === 'rtl' ? 'rtl' : 'ltr';
 const cover = params.get('cover') === '1';
 const startPage = Number(params.get('start') ?? 0);
+// ?pdf loads a PDF (proxied same-origin); ?pdf=<url> uses a specific one.
+const usePdf = params.has('pdf');
 
 /** Draw a procedural page as a data URL — no external assets needed. */
 function makePage(n: number): string {
@@ -35,11 +38,18 @@ function makePage(n: number): string {
   return canvas.toDataURL('image/png');
 }
 
-const pages = Array.from({ length: TOTAL }, (_, i) => makePage(i));
+function makeSource(): Source {
+  if (usePdf) {
+    const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+    return new PdfSource(params.get('pdf') || '/sample.pdf', { workerSrc });
+  }
+  return new ImageSource(Array.from({ length: TOTAL }, (_, i) => makePage(i)));
+}
+
 const container = document.getElementById('book');
 if (!container) throw new Error('#book not found');
 
-const zine = new Zine(container, { source: new ImageSource(pages), direction, cover, startPage });
+const zine = new Zine(container, { source: makeSource(), direction, cover, startPage });
 
 const label = document.getElementById('page');
 function updateLabel(): void {
