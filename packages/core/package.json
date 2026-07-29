@@ -19,6 +19,21 @@
     },
     "scripts": {
         "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
-        "test": "vitest run"
-    }
+        "test": "vitest run",
+        "size": "pnpm build && size-limit"
+    },
+    "size-limit": [
+      {
+        "name": "core (ESM, gzip, excl. lazy renderer chunks)",
+        "path": "dist/index.js",
+        "limit": "15 kB",
+        "gzip": true
+      },
+      {
+        "name": "CSS renderer chunk (lazy, gzip)",
+        "path": "dist/cssRenderer-*.js",
+        "limit": "12 kB",
+        "gzip": true
+      }
+    ]
   }
