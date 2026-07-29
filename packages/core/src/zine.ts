@@ -72,7 +72,10 @@ export class Zine {
   #pan: { baseTx: number; baseTy: number } | null = null;
   #pinching = false;
   #pinchBaseScale = 1;
+  #reducedMotion = false;
+  #liveRegion: HTMLElement | null = null;
   #unbindInput: (() => void) | null = null;
+  #a11yCleanup: (() => void) | null = null;
   #ready: Promise<void>;
 
   /** Stable seek API: drive the fold to a fixed progress without animating (visual regression). */
@@ -166,6 +169,7 @@ export class Zine {
   destroy(): void {
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
     this.#resizeObserver?.disconnect();
+    this.#a11yCleanup?.();
     this.#unbindInput?.();
     this.#renderer?.destroy();
     this.#renderer = null;
@@ -206,8 +210,9 @@ export class Zine {
     direction: FlipDirection,
     onDone: () => void,
   ): void {
-    const duration = this.#flipDuration * Math.abs(toT - fromT);
+    const duration = this.#effectiveDuration() * Math.abs(toT - fromT);
     if (duration <= 0) {
+      // Reduced motion (or zero-duration): swap without the curl sweep.
       this.#renderer?.setFlipProgress(toT, direction);
       onDone();
       return;
@@ -236,6 +241,7 @@ export class Zine {
     if (spread) this.#paintSpread(spread, toContent);
     this.#prefetchWindow();
     this.#machine.send('settle');
+    this.#announce();
     this.#emitter.emit('pageChanged', { page: toPage });
     this.#emitter.emit('flipEnd', { page: toPage });
   }
@@ -401,11 +407,81 @@ export class Zine {
       onPinchEnd: () => this.#onPinchEnd(),
     });
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
+    this.#setupReducedMotion();
+    this.#a11yCleanup = this.#setupA11y();
 
     await this.#renderCurrent();
     this.#observeResize();
     this.#prefetchWindow();
+    this.#announce();
     this.#emitter.emit('ready');
+  }
+
+  #setupReducedMotion(): void {
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia('(prefers-reduced-motion: reduce)');
+    this.#reducedMotion = query.matches;
+    query.addEventListener?.('change', (e) => {
+      this.#reducedMotion = e.matches;
+    });
+  }
+
+  /** Wire keyboard nav + an aria-live page announcer. Skips non-DOM containers. */
+  #setupA11y(): (() => void) | null {
+    const container = this.#container;
+    const doc = container.ownerDocument;
+    if (!doc || typeof container.setAttribute !== 'function') return null;
+
+    if (!container.hasAttribute('tabindex')) container.tabIndex = 0;
+    container.setAttribute('aria-roledescription', 'flipbook');
+    const onKey = (e: KeyboardEvent): void => this.#onKeyDown(e);
+    container.addEventListener('keydown', onKey);
+
+    const live = doc.createElement('div');
+    live.setAttribute('aria-live', 'polite');
+    live.setAttribute('aria-atomic', 'true');
+    live.style.cssText =
+      'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+    container.appendChild(live);
+    this.#liveRegion = live;
+
+    return () => {
+      container.removeEventListener('keydown', onKey);
+      live.remove();
+      this.#liveRegion = null;
+    };
+  }
+
+  #onKeyDown(event: KeyboardEvent): void {
+    const forwardKey = this.#direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowLeft':
+        if (event.key === forwardKey) this.flipNext();
+        else this.flipPrev();
+        event.preventDefault();
+        break;
+      case 'Home':
+        this.flipTo(0);
+        event.preventDefault();
+        break;
+      case 'End':
+        this.flipTo(this.#source.pageCount - 1);
+        event.preventDefault();
+        break;
+      default:
+        break;
+    }
+  }
+
+  #announce(): void {
+    if (this.#liveRegion) {
+      this.#liveRegion.textContent = `Page ${this.#currentPage + 1} of ${this.#source.pageCount}`;
+    }
+  }
+
+  #effectiveDuration(): number {
+    return this.#reducedMotion ? 0 : this.#flipDuration;
   }
 
   /** Re-measure and re-render; call after the container resizes. */
