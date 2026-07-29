@@ -51,6 +51,10 @@ export interface ZineOptions {
   source: Source;
   /** Renderer selection; default 'auto'. */
   renderer?: RendererOption;
+  /** Fixed container width in px; omit to let the container/CSS drive the size. */
+  width?: number;
+  /** Fixed container height in px; omit to let the container/CSS drive the size. */
+  height?: number;
   /** Reading direction; default 'ltr'. */
   direction?: Direction;
   /** First page is a lone cover; default false. */
@@ -135,6 +139,8 @@ export class Zine {
   constructor(container: HTMLElement, options: ZineOptions) {
     validateOptions(container, options);
     this.#container = container;
+    if (options.width !== undefined) container.style.width = `${options.width}px`;
+    if (options.height !== undefined) container.style.height = `${options.height}px`;
     this.#source = options.source;
     const direction = options.direction ?? 'ltr';
     const cover = options.cover ?? false;
@@ -817,6 +823,8 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(`Zine: clickToFlip must be 'edge', 'half', or 'off'; got ${JSON.stringify(clickToFlip)}.`);
   }
 
+  assertMin(o.width, 'width', 1);
+  assertMin(o.height, 'height', 1);
   assertMin(o.flipDuration, 'flipDuration', 0);
   assertMin(o.clickZoneSize, 'clickZoneSize', 0);
   assertMin(o.clickFlipDelay, 'clickFlipDelay', 0);

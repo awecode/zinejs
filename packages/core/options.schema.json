@@ -11,6 +11,16 @@
       "type": "object",
       "description": "Content source resolving page indices to rasters, e.g. new ImageSource(urls). Required; a runtime object, not JSON-serializable."
     },
+    "width": {
+      "type": "number",
+      "minimum": 1,
+      "description": "Fixed container width in px; omit to let the container/CSS drive the size."
+    },
+    "height": {
+      "type": "number",
+      "minimum": 1,
+      "description": "Fixed container height in px; omit to let the container/CSS drive the size."
+    },
     "renderer": {
       "description": "Which renderer to use. Default 'auto' (prefer GPU, else CSS).",
       "default": "auto",

@@ -86,6 +86,15 @@ describe('Zine — slice 1 (construct → mount → first spread)', () => {
     expect(source.prefetched).toContain(3);
   });
 
+  it('applies fixed width/height options to the container', async () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const zine = new Zine(el, { source: new FakeSource(4), renderer: 'css', width: 500, height: 700 });
+    await zine.ready;
+    expect(el.style.width).toBe('500px');
+    expect(el.style.height).toBe('700px');
+  });
+
   it('tears down renderer and source on destroy', async () => {
     const el = container();
     const source = new FakeSource(4);

@@ -12,6 +12,8 @@ describe('options.schema.json', () => {
       [
         'cover',
         'direction',
+        'width',
+        'height',
         'flipDuration',
         'clickToFlip',
         'clickZoneSize',

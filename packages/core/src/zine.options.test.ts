@@ -71,6 +71,10 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects a non-positive width', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), width: 0 })).toThrow(/width/);
+  });
+
   it('rejects a negative flipDuration', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), flipDuration: -5 })).toThrow(
       /flipDuration/,
