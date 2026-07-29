@@ -8,6 +8,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.33.4",
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
     "@playwright/test": "^1.62.0",
     "@size-limit/file": "^13.0.2",
     "happy-dom": "^20.11.1",
