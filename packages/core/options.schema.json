@@ -53,7 +53,8 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean", "default": true, "description": "Whether zooming is allowed." },
-        "max": { "type": "number", "minimum": 1, "default": 4, "description": "Maximum zoom scale." }
+        "max": { "type": "number", "minimum": 1, "default": 4, "description": "Maximum zoom scale." },
+        "wheel": { "type": "boolean", "default": true, "description": "Zoom on Ctrl/Cmd + wheel." }
       }
     },
     "singlePageThreshold": {

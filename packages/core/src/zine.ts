@@ -11,6 +11,9 @@ import type { Source } from './source/types';
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
 
+/** Wheel-zoom sensitivity: scale multiplies by exp(-deltaY * this) per wheel event. */
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+
 interface DragState {
   direction: FlipDirection;
   targetIndex: number;
@@ -25,6 +28,8 @@ export interface ZoomOptions {
   enabled?: boolean;
   /** Maximum zoom scale; default 4. */
   max?: number;
+  /** Zoom on Ctrl/⌘ + wheel (also how trackpad pinch arrives on desktop); default true. */
+  wheel?: boolean;
 }
 
 export interface ZineOptions {
@@ -68,6 +73,7 @@ export class Zine {
   #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
   #zoomEnabled: boolean;
+  #wheelZoom: boolean;
   #maxZoom: number;
   #resizeObserver: ResizeObserver | null = null;
   #updateScheduled = false;
@@ -83,6 +89,7 @@ export class Zine {
   #reducedMotion = false;
   #liveRegion: HTMLElement | null = null;
   #unbindInput: (() => void) | null = null;
+  #unbindWheel: (() => void) | null = null;
   #a11yCleanup: (() => void) | null = null;
   #ready: Promise<void>;
 
@@ -107,6 +114,7 @@ export class Zine {
     this.#current = this.#spreadIndexForPage(this.#currentPage);
     this.#flipDuration = options.flipDuration ?? 500;
     this.#zoomEnabled = options.zoom?.enabled ?? true;
+    this.#wheelZoom = options.zoom?.wheel ?? true;
     this.#maxZoom = options.zoom?.max ?? 4;
     this.#ready = this.#init(options.renderer ?? 'auto');
   }
@@ -179,6 +187,7 @@ export class Zine {
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
     this.#resizeObserver?.disconnect();
     this.#a11yCleanup?.();
+    this.#unbindWheel?.();
     this.#unbindInput?.();
     this.#renderer?.destroy();
     this.#renderer = null;
@@ -393,6 +402,24 @@ export class Zine {
     this.#pinching = false;
   }
 
+  #bindWheelZoom(): void {
+    const onWheel = (event: WheelEvent): void => {
+      // Ctrl/⌘ + wheel only — this is also what a desktop trackpad pinch emits.
+      if (!this.#wheelZoom || !this.#zoomEnabled || !(event.ctrlKey || event.metaKey)) return;
+      // Override the browser's native page zoom.
+      event.preventDefault();
+      const rect = this.#container.getBoundingClientRect();
+      const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY);
+      this.setZoom(this.#scale * factor, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    };
+    this.#container.addEventListener('wheel', onWheel as EventListener, { passive: false });
+    this.#unbindWheel = () =>
+      this.#container.removeEventListener('wheel', onWheel as EventListener);
+  }
+
   async #init(rendererOption: RendererOption): Promise<void> {
     // Warm the current page's decode in parallel with loading the renderer chunk.
     const rendererPromise = selectRenderer(rendererOption);
@@ -416,6 +443,7 @@ export class Zine {
       onPinchEnd: () => this.#onPinchEnd(),
     });
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
+    this.#bindWheelZoom();
     this.#setupReducedMotion();
     this.#a11yCleanup = this.#setupA11y();
 
@@ -645,6 +673,9 @@ function validateZoomOption(zoom: unknown): void {
   const z = zoom as Record<string, unknown>;
   if (z.enabled !== undefined && typeof z.enabled !== 'boolean') {
     throw new Error(`Zine: zoom.enabled must be a boolean; got ${JSON.stringify(z.enabled)}.`);
+  }
+  if (z.wheel !== undefined && typeof z.wheel !== 'boolean') {
+    throw new Error(`Zine: zoom.wheel must be a boolean; got ${JSON.stringify(z.wheel)}.`);
   }
   assertMin(z.max, 'zoom.max', 1);
 }

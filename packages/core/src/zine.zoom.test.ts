@@ -105,6 +105,37 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(renderer.views).toEqual([]);
   });
 
+  it('zooms on Ctrl+wheel but ignores a plain wheel', async () => {
+    const { zine, el } = await makeZine();
+    const wheel = (props: Record<string, unknown>): void => {
+      el.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true, bubbles: true }), props));
+    };
+    wheel({ deltaY: -200, clientX: 400, clientY: 300 }); // no modifier → scroll, not zoom
+    expect(zine.getZoom()).toBe(1);
+    wheel({ deltaY: -200, ctrlKey: true, clientX: 400, clientY: 300 });
+    expect(zine.getZoom()).toBeGreaterThan(1);
+  });
+
+  it('does not wheel-zoom when zoom.wheel is false', async () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer: new MockRenderer(),
+      zoom: { wheel: false },
+    });
+    await zine.ready;
+    el.dispatchEvent(
+      Object.assign(new Event('wheel', { cancelable: true, bubbles: true }), {
+        deltaY: -200,
+        ctrlKey: true,
+        clientX: 400,
+        clientY: 300,
+      }),
+    );
+    expect(zine.getZoom()).toBe(1);
+  });
+
   it('pans instead of flipping when zoomed in', async () => {
     const { zine, renderer, el } = await makeZine();
     zine.setZoom(2); // tx=-400, ty=-300
