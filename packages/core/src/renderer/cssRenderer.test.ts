@@ -83,6 +83,16 @@ describe('CssRenderer', () => {
     expect(leaf.style.transformOrigin).toBe('right center');
   });
 
+  it('turns a full-width leaf about one edge in single-page (fill) flips', async () => {
+    const { container, r } = await mounted();
+    r.beginFlip(blank, blank, 'forward', { fill: true });
+    const leaf = container.querySelector('.zine-leaf') as HTMLElement;
+    const pageRight = container.querySelector('.zine-page-right') as HTMLElement;
+    expect(leaf.style.width).toBe('100%');
+    expect(leaf.style.transformOrigin).toBe('left center');
+    expect(pageRight.style.display).toBe('none');
+  });
+
   it('setFlipProgress rotates the leaf about the spine with a shadow (forward)', async () => {
     const { container, r } = await mounted();
     r.beginFlip(blank, blank, 'forward');

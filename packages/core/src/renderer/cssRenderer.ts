@@ -103,23 +103,43 @@ export class CssRenderer implements Renderer {
     this.#leafShadow.style.opacity = '0';
   }
 
-  beginFlip(from: SpreadContent, to: SpreadContent, direction: FlipDirection): void {
-    if (direction === 'forward') {
-      // Right page lifts and swings left about the spine. Left stays; right reveals `to`.
-      this.#paint(this.#pageLeft, from.left);
-      this.#paint(this.#pageRight, to.right);
-      this.#paint(this.#leafFront, from.right);
-      this.#paint(this.#leafBack, to.left);
-      this.#leaf.style.left = '50%';
-      this.#leaf.style.transformOrigin = 'left center';
-    } else {
-      // Left page swings right about its right edge. Right stays; left reveals `to`.
-      this.#paint(this.#pageRight, from.right);
-      this.#paint(this.#pageLeft, to.left);
-      this.#paint(this.#leafFront, from.left);
-      this.#paint(this.#leafBack, to.right);
+  beginFlip(
+    from: SpreadContent,
+    to: SpreadContent,
+    direction: FlipDirection,
+    options?: RenderOptions,
+  ): void {
+    if (options?.fill) {
+      // Single-page: a full-width leaf turns about one edge, revealing `to` underneath.
+      this.#pageLeft.style.width = '100%';
+      this.#pageRight.style.display = 'none';
+      this.#leaf.style.width = '100%';
       this.#leaf.style.left = '0';
-      this.#leaf.style.transformOrigin = 'right center';
+      this.#leaf.style.transformOrigin = direction === 'forward' ? 'left center' : 'right center';
+      this.#paint(this.#pageLeft, to.right ?? to.left);
+      this.#paint(this.#leafFront, from.right ?? from.left);
+      this.#paint(this.#leafBack, to.right ?? to.left);
+    } else {
+      this.#pageLeft.style.width = '50%';
+      this.#pageRight.style.display = '';
+      this.#leaf.style.width = '50%';
+      if (direction === 'forward') {
+        // Right page lifts and swings left about the spine. Left stays; right reveals `to`.
+        this.#paint(this.#pageLeft, from.left);
+        this.#paint(this.#pageRight, to.right);
+        this.#paint(this.#leafFront, from.right);
+        this.#paint(this.#leafBack, to.left);
+        this.#leaf.style.left = '50%';
+        this.#leaf.style.transformOrigin = 'left center';
+      } else {
+        // Left page swings right about its right edge. Right stays; left reveals `to`.
+        this.#paint(this.#pageRight, from.right);
+        this.#paint(this.#pageLeft, to.left);
+        this.#paint(this.#leafFront, from.left);
+        this.#paint(this.#leafBack, to.right);
+        this.#leaf.style.left = '0';
+        this.#leaf.style.transformOrigin = 'right center';
+      }
     }
     this.#leaf.style.display = 'block';
     this.#leaf.style.transform = 'rotateY(0deg)';

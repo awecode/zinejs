@@ -193,7 +193,9 @@ export class Zine {
     const toContent: SpreadContent = toSpread
       ? await this.#resolveContent(toSpread)
       : { left: null, right: null };
-    this.#renderer?.beginFlip(this.#currentContent, toContent, direction);
+    this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
+      fill: this.#singlePage,
+    });
     this.#animateProgress(0, 1, direction, () => this.#commit(targetIndex, toPage, toContent));
   }
 
@@ -289,7 +291,9 @@ export class Zine {
     // The drag may have ended (or retargeted) while content was resolving.
     if (this.#drag?.targetIndex !== targetIndex) return;
     this.#drag.toContent = toContent;
-    this.#renderer?.beginFlip(this.#currentContent, toContent, direction);
+    this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
+      fill: this.#singlePage,
+    });
     this.#renderer?.setFlipProgress(this.#drag.t, direction);
   }
 

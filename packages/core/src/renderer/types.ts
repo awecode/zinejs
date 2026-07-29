@@ -44,7 +44,12 @@ export interface Renderer {
    * is `to`'s facing page, with the destination revealed underneath. Call once at
    * flip start, then drive `setFlipProgress`.
    */
-  beginFlip(from: SpreadContent, to: SpreadContent, direction: FlipDirection): void;
+  beginFlip(
+    from: SpreadContent,
+    to: SpreadContent,
+    direction: FlipDirection,
+    options?: RenderOptions,
+  ): void;
 
   /**
    * Drive the turning page to progress `t` (0..1) in `direction`. Also the stable
