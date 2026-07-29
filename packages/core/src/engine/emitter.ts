@@ -47,7 +47,7 @@ export interface ZineEventMap {
   flipEnd: { page: number };
   pageChanged: { page: number };
   zoomChanged: { scale: number };
-  sourceError: { error: Error };
+  sourceError: { index: number; error: unknown };
   rendererFallback: { from: string; to: string };
 }
 

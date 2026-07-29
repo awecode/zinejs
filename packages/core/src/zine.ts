@@ -5,7 +5,7 @@ import { FlipMachine } from './engine/stateMachine';
 import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
 import { hitTest } from './geometry/hitTest';
 import { selectRenderer, type RendererOption } from './renderer/select';
-import type { FlipDirection, Renderer, SpreadContent } from './renderer/types';
+import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { Source } from './source/types';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
@@ -719,11 +719,19 @@ export class Zine {
   }
 
   async #resolveContent(spread: Spread): Promise<SpreadContent> {
-    const [left, right] = await Promise.all([
-      spread.left === null ? Promise.resolve(null) : this.#source.get(spread.left),
-      spread.right === null ? Promise.resolve(null) : this.#source.get(spread.right),
-    ]);
+    const [left, right] = await Promise.all([this.#getPage(spread.left), this.#getPage(spread.right)]);
     return { left, right };
+  }
+
+  /** Decode one page; on failure emit `sourceError` and degrade to a blank (null) page. */
+  async #getPage(index: number | null): Promise<PageContent | null> {
+    if (index === null) return null;
+    try {
+      return await this.#source.get(index);
+    } catch (error) {
+      this.#emitter.emit('sourceError', { index, error });
+      return null;
+    }
   }
 
   #prefetchWindow(): void {
