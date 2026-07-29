@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://zinejs.dev/options.schema.json",
+  "title": "ZineOptions",
+  "description": "Constructor options for the Zine flipbook: new Zine(container, options).",
+  "type": "object",
+  "required": ["source"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "type": "object",
+      "description": "Content source resolving page indices to rasters, e.g. new ImageSource(urls). Required; a runtime object, not JSON-serializable."
+    },
+    "renderer": {
+      "description": "Which renderer to use. Default 'auto' (prefer GPU, else CSS).",
+      "default": "auto",
+      "oneOf": [
+        { "type": "string", "enum": ["auto", "css", "pixi"] },
+        {
+          "type": "array",
+          "items": { "type": "string", "enum": ["css", "pixi"] },
+          "description": "Ordered fallback list; the first available renderer wins."
+        },
+        { "type": "object", "description": "A custom Renderer instance." }
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["ltr", "rtl"],
+      "default": "ltr",
+      "description": "Reading direction."
+    },
+    "cover": {
+      "type": "boolean",
+      "default": false,
+      "description": "Treat the first page as a lone cover."
+    },
+    "startPage": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Zero-based page to open on; must be within the source's page count."
+    },
+    "flipDuration": {
+      "type": "number",
+      "minimum": 0,
+      "default": 500,
+      "description": "Flip animation duration in milliseconds."
+    },
+    "maxZoom": {
+      "type": "number",
+      "minimum": 1,
+      "default": 4,
+      "description": "Maximum zoom scale."
+    },
+    "singlePageThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "default": 600,
+      "description": "Container widths (px) below this switch to one page per spread."
+    }
+  }
+}
