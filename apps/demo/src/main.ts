@@ -48,6 +48,11 @@ function updateLabel(): void {
 zine.on('ready', updateLabel);
 zine.on('pageChanged', updateLabel);
 
+// Record when the first spread is ready, for the perf E2E test.
+zine.on('ready', () => {
+  (window as unknown as { __zineFirstSpreadMs?: number }).__zineFirstSpreadMs = performance.now();
+});
+
 const zoomLabel = document.getElementById('zoom');
 function updateZoom(): void {
   if (zoomLabel) zoomLabel.textContent = `${zine.getZoom().toFixed(1)}×`;
