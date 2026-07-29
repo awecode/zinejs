@@ -7,6 +7,12 @@ import type { PageContent } from '../renderer/types';
  */
 export interface Source {
   readonly pageCount: number;
+  /**
+   * Optional async initialization (e.g. loading a PDF to learn its page count).
+   * Zine awaits this before reading `pageCount` / building spreads. Sources with a
+   * synchronously-known page count (e.g. ImageSource) can omit it.
+   */
+  open?(): Promise<void>;
   /** Decode/resolve a single page to a raster. */
   get(index: number): Promise<PageContent>;
   /** Hint that these pages will be needed soon; out-of-range indices are ignored. */

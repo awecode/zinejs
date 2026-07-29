@@ -98,9 +98,10 @@ export class Zine {
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
   #singlePage = false;
-  #spreads: Spread[];
+  #startPageOption: number | undefined;
+  #spreads: Spread[] = [];
   #current = 0;
-  #currentPage: number;
+  #currentPage = 0;
   #currentContent: SpreadContent = { left: null, right: null };
   #flipDuration: number;
   #zoomEnabled: boolean;
@@ -149,9 +150,12 @@ export class Zine {
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
-    this.#spreads = buildSpreads(this.#source.pageCount, { direction, cover });
-    this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
-    this.#current = this.#spreadIndexForPage(this.#currentPage);
+    this.#startPageOption = options.startPage;
+    // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
+    // throw immediately from `new Zine`. Async sources (an `open()`) defer to #init.
+    if (typeof this.#source.open !== 'function') {
+      this.#buildSpreadModel();
+    }
     this.#flipDuration = options.flipDuration ?? 500;
     this.#zoomEnabled = options.zoom?.enabled ?? true;
     this.#wheelZoom = options.zoom?.wheel ?? true;
@@ -578,8 +582,12 @@ export class Zine {
   }
 
   async #init(rendererOption: RendererOption): Promise<void> {
-    // Warm the current page's decode in parallel with loading the renderer chunk.
+    // Load the renderer chunk while opening an async source (e.g. a PDF) in parallel.
     const rendererPromise = selectRenderer(rendererOption);
+    if (typeof this.#source.open === 'function') {
+      await this.#source.open();
+      this.#buildSpreadModel(); // page count known now; validates + builds spreads
+    }
     this.#source.prefetch([this.#currentPage]);
 
     const renderer = await rendererPromise;
@@ -755,6 +763,26 @@ export class Zine {
     const index = this.#spreads.findIndex((s) => s.left === page || s.right === page);
     return index === -1 ? 0 : index;
   }
+
+  /** Validate the (now-known) page count + startPage and build the spread model. */
+  #buildSpreadModel(): void {
+    const pageCount = this.#source.pageCount;
+    if (!Number.isInteger(pageCount) || pageCount < 1) {
+      throw new Error(`Zine: source has ${pageCount} pages; a Source must have at least 1 page.`);
+    }
+    const startPage = this.#startPageOption;
+    if (
+      startPage !== undefined &&
+      (!Number.isInteger(startPage) || startPage < 0 || startPage >= pageCount)
+    ) {
+      throw new Error(
+        `Zine: startPage ${JSON.stringify(startPage)} is out of range for a ${pageCount}-page book (valid 0..${pageCount - 1}).`,
+      );
+    }
+    this.#spreads = buildSpreads(pageCount, { direction: this.#direction, cover: this.#cover });
+    this.#currentPage = clamp(startPage ?? 0, 0, pageCount - 1);
+    this.#current = this.#spreadIndexForPage(this.#currentPage);
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -795,22 +823,12 @@ function validateOptions(container: unknown, options: unknown): void {
   ) {
     throw new Error('Zine: `source` is required and must be a Source, e.g. new ImageSource(urls).');
   }
-  const pageCount = source.pageCount;
-  if (!Number.isInteger(pageCount) || pageCount < 1) {
-    throw new Error(`Zine: source has ${pageCount} pages; a Source must have at least 1 page.`);
-  }
+  // Note: pageCount >= 1 and startPage-in-range are validated in #buildSpreadModel —
+  // synchronously for a sync source, or after open() for an async one (e.g. PdfSource).
 
   const startPage = o.startPage;
-  if (
-    startPage !== undefined &&
-    (typeof startPage !== 'number' ||
-      !Number.isInteger(startPage) ||
-      startPage < 0 ||
-      startPage >= pageCount)
-  ) {
-    throw new Error(
-      `Zine: startPage ${JSON.stringify(startPage)} is out of range for a ${pageCount}-page book (valid 0..${pageCount - 1}).`,
-    );
+  if (startPage !== undefined && (typeof startPage !== 'number' || !Number.isInteger(startPage) || startPage < 0)) {
+    throw new Error(`Zine: startPage must be a non-negative integer; got ${JSON.stringify(startPage)}.`);
   }
 
   const direction = o.direction;
