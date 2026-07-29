@@ -77,6 +77,12 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects a zoom.doubleClick with an out-of-range level', () => {
+    expect(
+      () => new Zine(fakeContainer(), { source: src(), zoom: { doubleClick: [1, 0.5] } }),
+    ).toThrow(/doubleClick/);
+  });
+
   it('rejects an unknown renderer token', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), renderer: 'webgl' as any })).toThrow(
       /renderer/,

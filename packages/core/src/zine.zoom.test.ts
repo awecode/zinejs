@@ -136,6 +136,42 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(zine.getZoom()).toBe(1);
   });
 
+  it('cycles zoom levels on double-click (1 → 2 → 4 → 1)', async () => {
+    const { zine, el } = await makeZine(); // default doubleClick [1, 2, 4]
+    const dbl = (): void => {
+      el.dispatchEvent(
+        Object.assign(new Event('dblclick', { cancelable: true, bubbles: true }), {
+          clientX: 400,
+          clientY: 300,
+        }),
+      );
+    };
+    dbl();
+    expect(zine.getZoom()).toBe(2);
+    dbl();
+    expect(zine.getZoom()).toBe(4);
+    dbl();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('does not double-click zoom when doubleClick is false', async () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer: new MockRenderer(),
+      zoom: { doubleClick: false },
+    });
+    await zine.ready;
+    el.dispatchEvent(
+      Object.assign(new Event('dblclick', { cancelable: true, bubbles: true }), {
+        clientX: 400,
+        clientY: 300,
+      }),
+    );
+    expect(zine.getZoom()).toBe(1);
+  });
+
   it('pans instead of flipping when zoomed in', async () => {
     const { zine, renderer, el } = await makeZine();
     zine.setZoom(2); // tx=-400, ty=-300

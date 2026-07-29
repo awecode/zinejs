@@ -30,6 +30,8 @@ export interface ZoomOptions {
   max?: number;
   /** Zoom on Ctrl/⌘ + wheel (also how trackpad pinch arrives on desktop); default true. */
   wheel?: boolean;
+  /** Zoom levels cycled by double-click (wraps to the first); `false` disables. Default [1, 2, 4]. */
+  doubleClick?: number[] | false;
 }
 
 export interface ZineOptions {
@@ -74,6 +76,7 @@ export class Zine {
   #flipDuration: number;
   #zoomEnabled: boolean;
   #wheelZoom: boolean;
+  #doubleClickLevels: number[] | null;
   #maxZoom: number;
   #resizeObserver: ResizeObserver | null = null;
   #updateScheduled = false;
@@ -90,6 +93,7 @@ export class Zine {
   #liveRegion: HTMLElement | null = null;
   #unbindInput: (() => void) | null = null;
   #unbindWheel: (() => void) | null = null;
+  #unbindDblClick: (() => void) | null = null;
   #a11yCleanup: (() => void) | null = null;
   #ready: Promise<void>;
 
@@ -115,6 +119,9 @@ export class Zine {
     this.#flipDuration = options.flipDuration ?? 500;
     this.#zoomEnabled = options.zoom?.enabled ?? true;
     this.#wheelZoom = options.zoom?.wheel ?? true;
+    const dbl = options.zoom?.doubleClick;
+    const levels = dbl === false ? [] : [...(dbl ?? [1, 2, 4])].sort((a, b) => a - b);
+    this.#doubleClickLevels = levels.length > 0 ? levels : null;
     this.#maxZoom = options.zoom?.max ?? 4;
     this.#ready = this.#init(options.renderer ?? 'auto');
   }
@@ -188,6 +195,7 @@ export class Zine {
     this.#resizeObserver?.disconnect();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
+    this.#unbindDblClick?.();
     this.#unbindInput?.();
     this.#renderer?.destroy();
     this.#renderer = null;
@@ -420,6 +428,21 @@ export class Zine {
       this.#container.removeEventListener('wheel', onWheel as EventListener);
   }
 
+  #bindDoubleClickZoom(): void {
+    const onDoubleClick = (event: MouseEvent): void => {
+      const levels = this.#doubleClickLevels;
+      if (!this.#zoomEnabled || levels === null) return;
+      event.preventDefault();
+      // Next configured level above the current scale, else wrap to the first.
+      const next = levels.find((l) => l > this.#scale + 1e-6) ?? levels[0] ?? this.#scale;
+      const rect = this.#container.getBoundingClientRect();
+      this.setZoom(next, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+    };
+    this.#container.addEventListener('dblclick', onDoubleClick as EventListener);
+    this.#unbindDblClick = () =>
+      this.#container.removeEventListener('dblclick', onDoubleClick as EventListener);
+  }
+
   async #init(rendererOption: RendererOption): Promise<void> {
     // Warm the current page's decode in parallel with loading the renderer chunk.
     const rendererPromise = selectRenderer(rendererOption);
@@ -444,6 +467,7 @@ export class Zine {
     });
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
     this.#bindWheelZoom();
+    this.#bindDoubleClickZoom();
     this.#setupReducedMotion();
     this.#a11yCleanup = this.#setupA11y();
 
@@ -676,6 +700,17 @@ function validateZoomOption(zoom: unknown): void {
   }
   if (z.wheel !== undefined && typeof z.wheel !== 'boolean') {
     throw new Error(`Zine: zoom.wheel must be a boolean; got ${JSON.stringify(z.wheel)}.`);
+  }
+  if (z.doubleClick !== undefined && z.doubleClick !== false) {
+    const levels = z.doubleClick;
+    if (
+      !Array.isArray(levels) ||
+      levels.some((n) => typeof n !== 'number' || !Number.isFinite(n) || n < 1)
+    ) {
+      throw new Error(
+        'Zine: zoom.doubleClick must be false or an array of zoom levels >= 1, e.g. [1, 2, 4].',
+      );
+    }
   }
   assertMin(z.max, 'zoom.max', 1);
 }

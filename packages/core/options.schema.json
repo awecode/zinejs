@@ -54,7 +54,15 @@
       "properties": {
         "enabled": { "type": "boolean", "default": true, "description": "Whether zooming is allowed." },
         "max": { "type": "number", "minimum": 1, "default": 4, "description": "Maximum zoom scale." },
-        "wheel": { "type": "boolean", "default": true, "description": "Zoom on Ctrl/Cmd + wheel." }
+        "wheel": { "type": "boolean", "default": true, "description": "Zoom on Ctrl/Cmd + wheel." },
+        "doubleClick": {
+          "default": [1, 2, 4],
+          "description": "Zoom levels cycled by double-click (wraps); false to disable.",
+          "oneOf": [
+            { "type": "boolean", "enum": [false] },
+            { "type": "array", "items": { "type": "number", "minimum": 1 } }
+          ]
+        }
       }
     },
     "singlePageThreshold": {
