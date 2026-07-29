@@ -38,6 +38,12 @@ export interface ZoomOptions {
   wheel?: boolean;
   /** Zoom levels cycled by double-click (wraps to the first); `false` disables. Default [1, 2, 4]. */
   doubleClick?: number[] | false;
+  /**
+   * Listen for double-click zoom inside the click-to-flip zones. Default: off in 'edge' mode
+   * (edges flip instantly, no delay), on in 'half' mode. Turning it on in 'edge' mode makes
+   * clicks wait out `clickFlipDelay` so a double-click can preempt them with a zoom.
+   */
+  doubleClickInFlipZone?: boolean;
 }
 
 export interface ZineOptions {
@@ -57,6 +63,11 @@ export interface ZineOptions {
   clickToFlip?: 'edge' | 'half' | 'off';
   /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
   clickZoneSize?: number;
+  /**
+   * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
+   * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
+   */
+  clickFlipDelay?: number;
   /** Zoom behavior. */
   zoom?: ZoomOptions;
   /** Container widths below this (px) switch to one page per spread; default 600. */
@@ -79,6 +90,8 @@ export class Zine {
   #cover: boolean;
   #clickToFlip: 'edge' | 'half' | 'off';
   #clickZoneSize: number;
+  #honorDoubleClickInFlipZone: boolean;
+  #clickFlipDelayValue: number;
   #singlePageThreshold: number;
   #singlePage = false;
   #spreads: Spread[];
@@ -140,6 +153,22 @@ export class Zine {
     const levels = dbl === false ? [] : [...(dbl ?? [1, 2, 4])].sort((a, b) => a - b);
     this.#doubleClickLevels = levels.length > 0 ? levels : null;
     this.#maxZoom = options.zoom?.max ?? 4;
+
+    // Arbitrate click-to-flip vs double-click zoom inside the flip zones.
+    // Listen for double-click zoom in flip zones: default off in 'edge', on in 'half'.
+    // clickFlipDelay === 0 hard-disables it. When honored, a delay lets a click wait
+    // out a possible double-click; auto default 250 ms, overridable.
+    const doubleClickZoomActive = this.#zoomEnabled && this.#doubleClickLevels !== null;
+    const listenInFlipZone = options.zoom?.doubleClickInFlipZone ?? (this.#clickToFlip === 'half');
+    this.#honorDoubleClickInFlipZone =
+      this.#clickToFlip !== 'off' &&
+      doubleClickZoomActive &&
+      listenInFlipZone &&
+      options.clickFlipDelay !== 0;
+    this.#clickFlipDelayValue = this.#honorDoubleClickInFlipZone
+      ? (options.clickFlipDelay ?? DOUBLE_CLICK_MS)
+      : 0;
+
     this.#ready = this.#init(options.renderer ?? 'auto');
   }
 
@@ -426,12 +455,17 @@ export class Zine {
     if (!direction) return;
     const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
-    // Wait out the double-click window; a double-click (zoom) cancels this.
     this.#clearPendingClickFlip();
+    if (this.#clickFlipDelayValue <= 0) {
+      // No double-click competing here → flip right away.
+      this.#startFlip(targetIndex);
+      return;
+    }
+    // Wait out the window; a double-click (zoom) cancels this.
     this.#pendingClickTimer = setTimeout(() => {
       this.#pendingClickTimer = null;
       this.#startFlip(targetIndex);
-    }, DOUBLE_CLICK_MS);
+    }, this.#clickFlipDelayValue);
   }
 
   /** Which way a tap at `point` (container-local) turns the page, or null for a dead zone. */
@@ -517,6 +551,13 @@ export class Zine {
     const onDoubleClick = (event: MouseEvent): void => {
       const levels = this.#doubleClickLevels;
       if (!this.#zoomEnabled || levels === null) return;
+      // At scale 1 a double-click inside a flip zone belongs to click-to-flip, not zoom,
+      // unless we're honoring double-click zoom there.
+      if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
+        const rect = this.#container.getBoundingClientRect();
+        const local = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        if (this.#clickFlipDirection(local) !== null) return; // in a flip zone → leave it to click-to-flip
+      }
       // A double-click means the single-click flip we may have queued was really a zoom.
       this.#clearPendingClickFlip();
       event.preventDefault();
@@ -770,6 +811,7 @@ function validateOptions(container: unknown, options: unknown): void {
 
   assertMin(o.flipDuration, 'flipDuration', 0);
   assertMin(o.clickZoneSize, 'clickZoneSize', 0);
+  assertMin(o.clickFlipDelay, 'clickFlipDelay', 0);
   assertMin(o.singlePageThreshold, 'singlePageThreshold', 0);
   validateZoomOption(o.zoom);
   validateRendererOption(o.renderer);
@@ -793,6 +835,11 @@ function validateZoomOption(zoom: unknown): void {
   }
   if (z.wheel !== undefined && typeof z.wheel !== 'boolean') {
     throw new Error(`Zine: zoom.wheel must be a boolean; got ${JSON.stringify(z.wheel)}.`);
+  }
+  if (z.doubleClickInFlipZone !== undefined && typeof z.doubleClickInFlipZone !== 'boolean') {
+    throw new Error(
+      `Zine: zoom.doubleClickInFlipZone must be a boolean; got ${JSON.stringify(z.doubleClickInFlipZone)}.`,
+    );
   }
   if (z.doubleClick !== undefined && z.doubleClick !== false) {
     const levels = z.doubleClick;

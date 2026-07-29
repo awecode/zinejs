@@ -89,6 +89,12 @@ describe('Zine option validation', () => {
     ).toThrow(/doubleClick/);
   });
 
+  it('rejects a non-boolean zoom.doubleClickInFlipZone', () => {
+    expect(
+      () => new Zine(fakeContainer(), { source: src(), zoom: { doubleClickInFlipZone: 'yes' as any } }),
+    ).toThrow(/doubleClickInFlipZone/);
+  });
+
   it('rejects an unknown renderer token', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), renderer: 'webgl' as any })).toThrow(
       /renderer/,

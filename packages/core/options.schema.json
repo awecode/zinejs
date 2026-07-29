@@ -59,6 +59,11 @@
       "default": 64,
       "description": "Edge-zone size in px per side, used when clickToFlip is 'edge'."
     },
+    "clickFlipDelay": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Delay (ms) before a click flips, to let a double-click zoom preempt it. Omit for auto (0 when double-click zoom is inactive, 250 when active)."
+    },
     "zoom": {
       "type": "object",
       "description": "Zoom behavior.",
@@ -74,6 +79,10 @@
             { "type": "boolean", "enum": [false] },
             { "type": "array", "items": { "type": "number", "minimum": 1 } }
           ]
+        },
+        "doubleClickInFlipZone": {
+          "type": "boolean",
+          "description": "Listen for double-click zoom inside click-to-flip zones. Default: off in 'edge' mode, on in 'half'. Enabling it makes clicks wait out clickFlipDelay."
         }
       }
     },

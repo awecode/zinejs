@@ -15,6 +15,7 @@ describe('options.schema.json', () => {
         'flipDuration',
         'clickToFlip',
         'clickZoneSize',
+        'clickFlipDelay',
         'zoom',
         'renderer',
         'singlePageThreshold',
