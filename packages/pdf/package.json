@@ -1,0 +1,38 @@
+{
+  "name": "@zinejs/pdf",
+  "version": "0.0.0",
+  "description": "PDF content source for zinejs, powered by pdf.js.",
+  "type": "module",
+  "sideEffects": false,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm typecheck && vitest run",
+    "size": "pnpm build && size-limit"
+  },
+  "peerDependencies": {
+    "@zinejs/core": "workspace:*",
+    "pdfjs-dist": ">=4"
+  },
+  "devDependencies": {
+    "@zinejs/core": "workspace:*"
+  },
+  "size-limit": [
+    {
+      "name": "pdf plugin (ESM, gzip, excl. pdf.js)",
+      "path": "dist/index.js",
+      "limit": "8 kB",
+      "gzip": true
+    }
+  ]
+}

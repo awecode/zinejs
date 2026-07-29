@@ -12,6 +12,7 @@
     "@playwright/test": "^1.62.0",
     "@size-limit/file": "^13.0.2",
     "happy-dom": "^20.11.1",
+    "pdfjs-dist": "^6.2.108",
     "size-limit": "^13.0.2",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
