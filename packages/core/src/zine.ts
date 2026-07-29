@@ -70,7 +70,7 @@ export interface ZineOptions {
   clickFlipDelay?: number;
   /** Zoom behavior. */
   zoom?: ZoomOptions;
-  /** Container widths below this (px) switch to one page per spread; default 600. */
+  /** Container widths below this (px) switch to one page per spread; default 640. */
   singlePageThreshold?: number;
 }
 
@@ -142,7 +142,7 @@ export class Zine {
     this.#cover = cover;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
-    this.#singlePageThreshold = options.singlePageThreshold ?? 600;
+    this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#spreads = buildSpreads(this.#source.pageCount, { direction, cover });
     this.#currentPage = clamp(options.startPage ?? 0, 0, Math.max(0, this.#source.pageCount - 1));
     this.#current = this.#spreadIndexForPage(this.#currentPage);

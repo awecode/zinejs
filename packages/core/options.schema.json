@@ -89,7 +89,7 @@
     "singlePageThreshold": {
       "type": "number",
       "minimum": 0,
-      "default": 600,
+      "default": 640,
       "description": "Container widths (px) below this switch to one page per spread."
     }
   }

@@ -27,7 +27,7 @@ describe('options.schema.json', () => {
 
   it('states the same defaults the constructor uses', () => {
     expect(schema.properties.flipDuration?.default).toBe(500);
-    expect(schema.properties.singlePageThreshold?.default).toBe(600);
+    expect(schema.properties.singlePageThreshold?.default).toBe(640);
     expect(schema.properties.direction?.default).toBe('ltr');
   });
 });

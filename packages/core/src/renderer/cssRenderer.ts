@@ -12,6 +12,20 @@ import type {
 const RAD_TO_DEG = 180 / Math.PI;
 
 /**
+ * Layered gradients painted over the turning leaf to fake paper depth on the flat
+ * fold: a crease shadow at the spine, a soft curve sheen, and a free-edge shade.
+ * The spine is the leaf's pivot edge — left for a forward flip, right for backward.
+ */
+function foldOverlay(direction: FlipDirection): string {
+  const dir = direction === 'forward' ? 'to right' : 'to left';
+  return [
+    `linear-gradient(${dir}, rgba(0,0,0,0.6), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0) 60%)`,
+    `linear-gradient(${dir}, transparent 40%, rgba(255,255,255,0.32) 66%, transparent 90%)`,
+    `linear-gradient(${dir}, transparent 66%, rgba(0,0,0,0.35))`,
+  ].join(',');
+}
+
+/**
  * Baseline renderer: a 2-panel CSS-3D fold. Runs on every browser, no GPU. Pages
  * are <canvas> elements; the turning leaf (front + back faces, backface-hidden)
  * rotates about the spine driven by flipProgressToPose(), with a gradient shadow
@@ -68,8 +82,8 @@ export class CssRenderer implements Renderer {
 
     this.#leafShadow = doc.createElement('div');
     this.#leafShadow.className = 'zine-leaf-shadow';
-    this.#leafShadow.style.cssText =
-      'position:absolute;inset:0;opacity:0;background:linear-gradient(to right,rgba(0,0,0,0.35),rgba(0,0,0,0));';
+    this.#leafShadow.style.cssText = 'position:absolute;inset:0;opacity:0;pointer-events:none;';
+    this.#leafShadow.style.background = foldOverlay('forward'); // default; beginFlip sets per direction
 
     this.#leaf.append(this.#leafFront, this.#leafBack, this.#leafShadow);
     this.#book.append(this.#pageLeft, this.#pageRight, this.#leaf);
@@ -143,6 +157,7 @@ export class CssRenderer implements Renderer {
     }
     this.#leaf.style.display = 'block';
     this.#leaf.style.transform = 'rotateY(0deg)';
+    this.#leafShadow.style.background = foldOverlay(direction);
     this.#leafShadow.style.opacity = '0';
   }
 
