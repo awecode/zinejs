@@ -1,3 +1,4 @@
+import { flipProgressToPose } from '../geometry/flipProgressToPose';
 import type { Spread } from '../engine/spread';
 import type {
   FlipDirection,
@@ -10,9 +11,9 @@ import { createGlContext } from './gl/context';
 import { createProgram } from './gl/program';
 import { createTexture, uploadTexture } from './gl/texture';
 
-// Maps a unit quad to a page rect (device px, top-left origin) and applies zoom/pan.
-// vUv = aUnit; paired with UNPACK_FLIP_Y on upload this lands the image right-side up.
-const VERTEX_SRC = `#version 300 es
+// Flat program: maps a unit quad to a page rect (device px, top-left origin) with
+// zoom/pan. vUv = aUnit pairs with UNPACK_FLIP_Y so the image lands right-side up.
+const FLAT_VERT = `#version 300 es
 in vec2 aUnit;
 uniform vec2 uViewport;
 uniform vec4 uRect;
@@ -26,14 +27,70 @@ void main() {
   vUv = aUnit;
 }`;
 
-const FRAGMENT_SRC = `#version 300 es
+const FLAT_FRAG = `#version 300 es
 precision mediump float;
 in vec2 vUv;
 uniform sampler2D uTex;
 out vec4 outColor;
+void main() { outColor = texture(uTex, vUv); }`;
+
+// Curl program: the turning leaf. u runs from the spine (0) to the free edge (1).
+// The page wraps around a vertical cylinder (radius shrinks with `uCurl`) and the
+// whole thing rotates about the spine by `uAngle`; orthographic (no perspective yet).
+const CURL_VERT = `#version 300 es
+in vec2 aUnit;
+uniform vec2 uViewport;
+uniform vec4 uLeaf;   // spineX, y, width, height (device px)
+uniform vec3 uView;   // scale, tx, ty
+uniform float uAngle; // spine rotation 0..PI
+uniform float uCurl;  // 0..1 bend amount
+uniform float uDir;   // +1 leaf sweeps from +x side, -1 from -x side
+out vec2 vUv;
+out float vU;
 void main() {
-  outColor = texture(uTex, vUv);
+  float u = aUnit.x;
+  float W = uLeaf.z;
+  float bend = uCurl * 1.4;
+  float xw, zw;
+  if (bend > 0.001) {
+    float R = W / bend;      // arc length stays ~W
+    float phi = u * bend;
+    xw = R * sin(phi);
+    zw = R * (1.0 - cos(phi));
+  } else {
+    xw = u * W;
+    zw = 0.0;
+  }
+  float X = xw * cos(uAngle) - zw * sin(uAngle); // rotate about spine (y axis)
+  float px = uLeaf.x + uDir * X;
+  float py = uLeaf.y + aUnit.y * uLeaf.w;
+  vec2 p = vec2(px, py) * uView.x + uView.yz;
+  vec2 clip = p / uViewport * 2.0 - 1.0;
+  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+  vUv = aUnit;
+  vU = u;
 }`;
+
+const CURL_FRAG = `#version 300 es
+precision mediump float;
+in vec2 vUv;
+in float vU;
+uniform sampler2D uTex;
+uniform float uFlipU;  // 1 = back face (mirror horizontally)
+uniform float uShadow; // 0..1 fold shading strength
+out vec4 outColor;
+void main() {
+  vec2 uv = vec2(mix(vUv.x, 1.0 - vUv.x, uFlipU), vUv.y);
+  vec4 c = texture(uTex, uv);
+  float crease = 1.0 - smoothstep(0.0, 0.12, vU);   // dark at the spine
+  float freeEdge = smoothstep(0.82, 1.0, vU);        // dark at the free edge
+  float shade = 1.0 - uShadow * (0.4 * crease + 0.22 * freeEdge);
+  float sheen = uShadow * 0.12 * smoothstep(0.3, 0.55, vU) * (1.0 - smoothstep(0.55, 0.82, vU));
+  c.rgb = clamp(c.rgb * shade + sheen, 0.0, 1.0);
+  outColor = c;
+}`;
+
+const GRID_COLS = 24;
 
 interface Rect {
   x: number;
@@ -42,28 +99,45 @@ interface Rect {
   h: number;
 }
 
+interface FlipState {
+  underLeft: TexImageSource | null;
+  underRight: TexImageSource | null;
+  underFull: TexImageSource | null; // fill mode
+  front: TexImageSource | null;
+  back: TexImageSource | null;
+  dir: number; // +1 / -1 for the curl sweep
+  spineAtStart: number; // 0 = spine at left edge, 0.5 = center, 1 = right edge
+  fill: boolean;
+}
+
 /**
- * GPU renderer (WebGL2, hand-written — no third-party library). Slice 1: paints a
- * static spread as textured quads with in-shader zoom/pan. The cylinder-wrap mesh
- * curl (Slice 2) and GPU hardening + CSS fallback (Slice 3) build on this. Selected
- * only via `renderer: 'webgl2'` for now; `'auto'` stays on CSS until it's complete.
+ * GPU renderer (WebGL2, hand-written — no third-party library). The turning leaf is
+ * a grid mesh bent around a cylinder (driven by the shared flipProgressToPose), the
+ * static pages are flat textured quads underneath. Selected via `renderer: 'webgl2'`
+ * for now; `'auto'` stays on CSS until the renderer is complete + hardened (§8.3/§8.4).
  */
 export class WebglRenderer implements Renderer {
   #container: HTMLElement | null = null;
   #canvas: HTMLCanvasElement | null = null;
   #gl: WebGL2RenderingContext | null = null;
-  #program: WebGLProgram | null = null;
-  #vao: WebGLVertexArrayObject | null = null;
+
+  #flat: WebGLProgram | null = null;
+  #curl: WebGLProgram | null = null;
+  #quadVao: WebGLVertexArrayObject | null = null;
+  #gridVao: WebGLVertexArrayObject | null = null;
+  #gridCount = 0;
   #texture: WebGLTexture | null = null;
-  #uViewport: WebGLUniformLocation | null = null;
-  #uRect: WebGLUniformLocation | null = null;
-  #uView: WebGLUniformLocation | null = null;
+
+  #flatU: Record<string, WebGLUniformLocation | null> = {};
+  #curlU: Record<string, WebGLUniformLocation | null> = {};
 
   #view = { scale: 1, tx: 0, ty: 0 };
   #dpr = 1;
   #content: SpreadContent | null = null;
   #fill = false;
-  #flip: { from: SpreadContent; to: SpreadContent } | null = null;
+  #flip: FlipState | null = null;
+  #flipT = 0;
+  #flipDir: FlipDirection = 'forward';
 
   mount(container: HTMLElement): Promise<void> {
     this.#container = container;
@@ -74,29 +148,32 @@ export class WebglRenderer implements Renderer {
 
     const gl = createGlContext(canvas);
     this.#gl = gl;
-    const program = createProgram(gl, VERTEX_SRC, FRAGMENT_SRC);
-    this.#program = program;
-    this.#uViewport = gl.getUniformLocation(program, 'uViewport');
-    this.#uRect = gl.getUniformLocation(program, 'uRect');
-    this.#uView = gl.getUniformLocation(program, 'uView');
 
-    // A single unit quad, drawn as a triangle strip.
-    const vao = gl.createVertexArray();
-    const buffer = gl.createBuffer();
-    if (vao === null || buffer === null) throw new Error('WebglRenderer: could not create buffers.');
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
-    const aUnit = gl.getAttribLocation(program, 'aUnit');
-    gl.enableVertexAttribArray(aUnit);
-    gl.vertexAttribPointer(aUnit, 2, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
-    this.#vao = vao;
+    this.#flat = createProgram(gl, FLAT_VERT, FLAT_FRAG);
+    this.#curl = createProgram(gl, CURL_VERT, CURL_FRAG);
+    for (const name of ['uViewport', 'uRect', 'uView', 'uTex']) {
+      this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
+    }
+    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFlipU', 'uShadow', 'uTex']) {
+      this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
+    }
+
+    this.#quadVao = this.#makeVao(gl, this.#flat, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]));
+
+    // Grid strip across the width (columns subdivided, 2 rows) for a smooth bend.
+    const grid: number[] = [];
+    for (let c = 0; c <= GRID_COLS; c++) {
+      const u = c / GRID_COLS;
+      grid.push(u, 0, u, 1);
+    }
+    this.#gridCount = (GRID_COLS + 1) * 2;
+    this.#gridVao = this.#makeVao(gl, this.#curl, new Float32Array(grid));
 
     this.#texture = createTexture(gl);
-
-    gl.useProgram(program);
-    gl.uniform1i(gl.getUniformLocation(program, 'uTex'), 0);
+    gl.useProgram(this.#flat);
+    gl.uniform1i(this.#flatU.uTex ?? null, 0);
+    gl.useProgram(this.#curl);
+    gl.uniform1i(this.#curlU.uTex ?? null, 0);
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied alpha
@@ -108,17 +185,16 @@ export class WebglRenderer implements Renderer {
     const gl = this.#gl;
     if (gl !== null) {
       if (this.#texture !== null) gl.deleteTexture(this.#texture);
-      if (this.#vao !== null) gl.deleteVertexArray(this.#vao);
-      if (this.#program !== null) gl.deleteProgram(this.#program);
+      if (this.#quadVao !== null) gl.deleteVertexArray(this.#quadVao);
+      if (this.#gridVao !== null) gl.deleteVertexArray(this.#gridVao);
+      if (this.#flat !== null) gl.deleteProgram(this.#flat);
+      if (this.#curl !== null) gl.deleteProgram(this.#curl);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
     this.#canvas?.remove();
     this.#container = null;
     this.#canvas = null;
     this.#gl = null;
-    this.#program = null;
-    this.#vao = null;
-    this.#texture = null;
     this.#content = null;
     this.#flip = null;
   }
@@ -127,32 +203,67 @@ export class WebglRenderer implements Renderer {
     this.#content = content;
     this.#fill = options?.fill ?? false;
     this.#flip = null;
-    this.#paint();
+    this.#render();
   }
 
-  // Slice 1 placeholder: stage from/to and swap at the halfway point. The real
-  // cylinder-wrap curl lands in Slice 2 (this keeps flips functional meanwhile).
   beginFlip(
     from: SpreadContent,
     to: SpreadContent,
-    _direction: FlipDirection,
+    direction: FlipDirection,
     options?: RenderOptions,
   ): void {
-    this.#fill = options?.fill ?? false;
-    this.#flip = { from, to };
-    this.#content = from;
-    this.#paint();
+    const fill = options?.fill ?? false;
+    this.#flipDir = direction;
+    this.#flipT = 0;
+    if (fill) {
+      // A full-width leaf turns about one edge, revealing `to` underneath.
+      this.#flip = {
+        underLeft: null,
+        underRight: null,
+        underFull: to.right ?? to.left,
+        front: from.right ?? from.left,
+        back: to.right ?? to.left,
+        dir: direction === 'forward' ? 1 : -1,
+        spineAtStart: direction === 'forward' ? 0 : 1,
+        fill: true,
+      };
+    } else if (direction === 'forward') {
+      // Right page lifts and swings left about the spine; left stays, right reveals `to`.
+      this.#flip = {
+        underLeft: from.left,
+        underRight: to.right,
+        underFull: null,
+        front: from.right,
+        back: to.left,
+        dir: 1,
+        spineAtStart: 0.5,
+        fill: false,
+      };
+    } else {
+      // Left page swings right about the spine; right stays, left reveals `to`.
+      this.#flip = {
+        underLeft: to.left,
+        underRight: from.right,
+        underFull: null,
+        front: from.left,
+        back: to.right,
+        dir: -1,
+        spineAtStart: 0.5,
+        fill: false,
+      };
+    }
+    this.#render();
   }
 
-  setFlipProgress(t: number, _direction: FlipDirection): void {
-    if (this.#flip === null) return;
-    this.#content = t < 0.5 ? this.#flip.from : this.#flip.to;
-    this.#paint();
+  setFlipProgress(t: number, direction: FlipDirection): void {
+    this.#flipT = t;
+    this.#flipDir = direction;
+    this.#render();
   }
 
   setViewTransform(scale: number, x: number, y: number): void {
     this.#view = { scale, tx: x, ty: y };
-    this.#paint();
+    this.#render();
   }
 
   measure(): LayoutMetrics {
@@ -162,38 +273,98 @@ export class WebglRenderer implements Renderer {
     return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h };
   }
 
-  #paint(): void {
+  #render(): void {
     const gl = this.#gl;
     const canvas = this.#canvas;
     if (gl === null || canvas === null) return;
-
     this.#resize();
     gl.clear(gl.COLOR_BUFFER_BIT);
+    if (this.#flip !== null) this.#drawFlip();
+    else if (this.#content !== null) this.#drawStatic();
+  }
 
-    const content = this.#content;
-    if (content === null) return;
-
+  #drawStatic(): void {
+    const gl = this.#gl!;
+    const canvas = this.#canvas!;
     const w = canvas.width;
     const h = canvas.height;
-    gl.useProgram(this.#program);
-    gl.bindVertexArray(this.#vao);
-    gl.uniform2f(this.#uViewport, w, h);
-    gl.uniform3f(this.#uView, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
-
+    this.#useFlat();
+    const content = this.#content!;
     if (this.#fill) {
-      this.#drawPage({ x: 0, y: 0, w, h }, content.right ?? content.left);
+      this.#drawQuad({ x: 0, y: 0, w, h }, content.right ?? content.left);
     } else {
-      this.#drawPage({ x: 0, y: 0, w: w / 2, h }, content.left);
-      this.#drawPage({ x: w / 2, y: 0, w: w / 2, h }, content.right);
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right);
     }
   }
 
-  #drawPage(rect: Rect, source: TexImageSource | null): void {
-    const gl = this.#gl;
-    if (gl === null || source === null || this.#texture === null) return;
+  #drawFlip(): void {
+    const gl = this.#gl!;
+    const canvas = this.#canvas!;
+    const w = canvas.width;
+    const h = canvas.height;
+    const flip = this.#flip!;
+    const pose = flipProgressToPose(this.#flipT);
+
+    // Static pages underneath.
+    this.#useFlat();
+    if (flip.fill) {
+      this.#drawQuad({ x: 0, y: 0, w, h }, flip.underFull);
+    } else {
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, flip.underLeft);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight);
+    }
+
+    // Turning leaf: front face until half-turned, then the back (mirrored).
+    const showBack = pose.angle >= Math.PI / 2;
+    const source = showBack ? flip.back : flip.front;
+    if (source === null) return;
+
+    const leafW = flip.fill ? w : w / 2;
+    const spineX = flip.spineAtStart * w;
+    gl.useProgram(this.#curl);
+    gl.bindVertexArray(this.#gridVao);
+    gl.uniform2f(this.#curlU.uViewport ?? null, w, h);
+    gl.uniform3f(this.#curlU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
+    gl.uniform4f(this.#curlU.uLeaf ?? null, spineX, 0, leafW, h);
+    gl.uniform1f(this.#curlU.uAngle ?? null, pose.angle);
+    gl.uniform1f(this.#curlU.uCurl ?? null, pose.curl);
+    gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
+    gl.uniform1f(this.#curlU.uFlipU ?? null, showBack ? 1 : 0);
+    gl.uniform1f(this.#curlU.uShadow ?? null, pose.shadowAlpha);
+    uploadTexture(gl, this.#texture!, source);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.#gridCount);
+  }
+
+  #useFlat(): void {
+    const gl = this.#gl!;
+    const canvas = this.#canvas!;
+    gl.useProgram(this.#flat);
+    gl.bindVertexArray(this.#quadVao);
+    gl.uniform2f(this.#flatU.uViewport ?? null, canvas.width, canvas.height);
+    gl.uniform3f(this.#flatU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
+  }
+
+  #drawQuad(rect: Rect, source: TexImageSource | null): void {
+    const gl = this.#gl!;
+    if (source === null || this.#texture === null) return;
     uploadTexture(gl, this.#texture, source);
-    gl.uniform4f(this.#uRect, rect.x, rect.y, rect.w, rect.h);
+    gl.uniform4f(this.#flatU.uRect ?? null, rect.x, rect.y, rect.w, rect.h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  #makeVao(gl: WebGL2RenderingContext, program: WebGLProgram, data: Float32Array): WebGLVertexArrayObject {
+    const vao = gl.createVertexArray();
+    const buffer = gl.createBuffer();
+    if (vao === null || buffer === null) throw new Error('WebglRenderer: could not create buffers.');
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    const aUnit = gl.getAttribLocation(program, 'aUnit');
+    gl.enableVertexAttribArray(aUnit);
+    gl.vertexAttribPointer(aUnit, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    return vao;
   }
 
   #resize(): void {
