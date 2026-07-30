@@ -91,9 +91,9 @@ export class PdfSource implements Source {
       return new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
     } catch {
       throw new Error(
-        "PdfSource: couldn't auto-resolve pdf.js's worker. Pass `workerSrc` explicitly — e.g. " +
-          "workerSrc: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href — " +
-          'or configure pdfjs GlobalWorkerOptions.workerSrc, or pass a pre-created pdf.js document.',
+        "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +
+          '(see the @zinejs/pdf README, "The pdf.js worker"), set pdfjs ' +
+          'GlobalWorkerOptions.workerSrc yourself, or pass a pre-created pdf.js document.',
       );
     }
   }
