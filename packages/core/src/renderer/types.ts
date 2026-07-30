@@ -62,4 +62,11 @@ export interface Renderer {
 
   /** Current layout metrics (container + page dimensions). */
   measure(): LayoutMetrics;
+
+  /**
+   * Optional: register a handler the renderer calls when it hits an unrecoverable
+   * state (e.g. a GPU context that cannot be restored), so the engine can swap to
+   * the CSS fallback (§8.4). Renderers that cannot fail this way omit it.
+   */
+  onFatal?(handler: () => void): void;
 }

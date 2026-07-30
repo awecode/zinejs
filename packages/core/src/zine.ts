@@ -114,6 +114,8 @@ export class Zine {
   #tx = 0;
   #ty = 0;
   #renderer: Renderer | null = null;
+  #fellBack = false;
+  #destroyed = false;
   #raf: number | null = null;
   #drag: DragState | null = null;
   #pendingGrab: { direction: FlipDirection; targetIndex: number; toPage: number; width: number } | null = null;
@@ -247,6 +249,7 @@ export class Zine {
   }
 
   destroy(): void {
+    this.#destroyed = true;
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
@@ -590,8 +593,8 @@ export class Zine {
     }
     this.#source.prefetch([this.#currentPage]);
 
-    const renderer = await rendererPromise;
-    await renderer.mount(this.#container);
+    const selected = await rendererPromise;
+    const renderer = await this.#mountWithFallback(selected);
     this.#renderer = renderer;
 
     // Now that we can measure, apply single-page mode if the container is narrow.
@@ -618,6 +621,42 @@ export class Zine {
     this.#prefetchWindow();
     this.#announce();
     this.#emitter.emit('ready');
+  }
+
+  /** Mount `renderer`; if it can't initialize (e.g. no WebGL2 context) fall back to CSS. */
+  async #mountWithFallback(renderer: Renderer): Promise<Renderer> {
+    try {
+      await renderer.mount(this.#container);
+      renderer.onFatal?.(() => {
+        void this.#fallbackToCss();
+      });
+      return renderer;
+    } catch {
+      renderer.destroy();
+      const css = await selectRenderer('css');
+      await css.mount(this.#container);
+      this.#fellBack = true;
+      this.#emitter.emit('rendererFallback', { from: 'webgl2', to: 'css' });
+      return css;
+    }
+  }
+
+  /** Runtime fallback: a live renderer signaled an unrecoverable failure (§8.4). */
+  async #fallbackToCss(): Promise<void> {
+    if (this.#fellBack || this.#destroyed) return;
+    this.#fellBack = true;
+    this.#renderer?.destroy();
+    this.#renderer = null;
+    const css = await selectRenderer('css');
+    if (this.#destroyed) {
+      css.destroy();
+      return;
+    }
+    await css.mount(this.#container);
+    this.#renderer = css;
+    this.#applySinglePage(css.measure().containerWidth);
+    await this.#renderCurrent();
+    this.#emitter.emit('rendererFallback', { from: 'webgl2', to: 'css' });
   }
 
   #setupReducedMotion(): void {

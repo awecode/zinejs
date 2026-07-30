@@ -72,9 +72,7 @@ void main() {
 }`;
 
 // Per-fragment facing: whichever side of the curling sheet faces the viewer shows
-// its own page, so mid-curl you see a sliver of the next page (the front/back
-// handoff is continuous, not a whole-leaf swap). The back page is mirrored so it
-// reads correctly once the sheet lands on the far side.
+// its own page, so mid-curl you see a sliver of the next page (continuous handoff).
 const CURL_FRAG = `#version 300 es
 precision mediump float;
 in vec2 vUv;
@@ -99,6 +97,9 @@ void main() {
 }`;
 
 const GRID_COLS = 24;
+// If a lost context is not restored within this window, give up and let the engine
+// fall back to the CSS renderer (§8.4).
+const RESTORE_TIMEOUT_MS = 4000;
 
 interface Rect {
   x: number;
@@ -121,8 +122,8 @@ interface FlipState {
 /**
  * GPU renderer (WebGL2, hand-written, no third-party library). The turning leaf is
  * a grid mesh bent around a cylinder (driven by the shared flipProgressToPose), the
- * static pages are flat textured quads underneath. Selected via `renderer: 'webgl2'`
- * for now; `'auto'` stays on CSS until the renderer is complete and hardened.
+ * static pages are flat textured quads underneath. Restores its GL state in place on
+ * context loss; if that fails it signals `onFatal` so the engine can fall back to CSS.
  */
 export class WebglRenderer implements Renderer {
   #container: HTMLElement | null = null;
@@ -148,51 +149,37 @@ export class WebglRenderer implements Renderer {
   #flipT = 0;
   #flipDir: FlipDirection = 'forward';
 
+  #contextLost = false;
+  #fatalFired = false;
+  #restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  #fatalHandler: (() => void) | null = null;
+
   mount(container: HTMLElement): Promise<void> {
     this.#container = container;
-    const canvas = container.ownerDocument.createElement('canvas');
+    const doc = container.ownerDocument;
+    const canvas = doc.createElement('canvas');
     canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
     container.append(canvas);
     this.#canvas = canvas;
 
-    const gl = createGlContext(canvas);
-    this.#gl = gl;
+    canvas.addEventListener('webglcontextlost', this.#onContextLost as EventListener);
+    canvas.addEventListener('webglcontextrestored', this.#onContextRestored as EventListener);
+    doc.addEventListener('visibilitychange', this.#onVisibilityChange);
 
-    this.#flat = createProgram(gl, FLAT_VERT, FLAT_FRAG);
-    this.#curl = createProgram(gl, CURL_VERT, CURL_FRAG);
-    for (const name of ['uViewport', 'uRect', 'uView', 'uTex']) {
-      this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
-    }
-    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFront', 'uBack', 'uShadow']) {
-      this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
-    }
-
-    this.#quadVao = this.#makeVao(gl, this.#flat, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]));
-
-    // Grid strip across the width (columns subdivided, 2 rows) for a smooth bend.
-    const grid: number[] = [];
-    for (let c = 0; c <= GRID_COLS; c++) {
-      const u = c / GRID_COLS;
-      grid.push(u, 0, u, 1);
-    }
-    this.#gridCount = (GRID_COLS + 1) * 2;
-    this.#gridVao = this.#makeVao(gl, this.#curl, new Float32Array(grid));
-
-    this.#texA = createTexture(gl);
-    this.#texB = createTexture(gl);
-    gl.useProgram(this.#flat);
-    gl.uniform1i(this.#flatU.uTex ?? null, 0);
-    gl.useProgram(this.#curl);
-    gl.uniform1i(this.#curlU.uFront ?? null, 0);
-    gl.uniform1i(this.#curlU.uBack ?? null, 1);
-    gl.clearColor(0, 0, 0, 0);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied alpha
+    this.#gl = createGlContext(canvas); // throws if unavailable -> engine falls back (§8.4)
+    this.#buildGlResources();
 
     return Promise.resolve();
   }
 
   destroy(): void {
+    this.#clearRestoreTimer();
+    const canvas = this.#canvas;
+    if (canvas !== null) {
+      canvas.removeEventListener('webglcontextlost', this.#onContextLost as EventListener);
+      canvas.removeEventListener('webglcontextrestored', this.#onContextRestored as EventListener);
+      canvas.ownerDocument.removeEventListener('visibilitychange', this.#onVisibilityChange);
+    }
     const gl = this.#gl;
     if (gl !== null) {
       if (this.#texA !== null) gl.deleteTexture(this.#texA);
@@ -203,12 +190,16 @@ export class WebglRenderer implements Renderer {
       if (this.#curl !== null) gl.deleteProgram(this.#curl);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
-    this.#canvas?.remove();
+    canvas?.remove();
     this.#container = null;
     this.#canvas = null;
     this.#gl = null;
     this.#content = null;
     this.#flip = null;
+  }
+
+  onFatal(handler: () => void): void {
+    this.#fatalHandler = handler;
   }
 
   renderSpread(_spread: Spread, content: SpreadContent, options?: RenderOptions): void {
@@ -228,7 +219,6 @@ export class WebglRenderer implements Renderer {
     this.#flipDir = direction;
     this.#flipT = 0;
     if (fill) {
-      // A full-width leaf turns about one edge, revealing `to` underneath.
       this.#flip = {
         underLeft: null,
         underRight: null,
@@ -285,10 +275,82 @@ export class WebglRenderer implements Renderer {
     return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h };
   }
 
+  // --- context loss / restore ---------------------------------------------------
+
+  #onContextLost = (event: Event): void => {
+    event.preventDefault(); // required, or the browser won't fire 'restored'
+    this.#contextLost = true;
+    if (this.#restoreTimer === null) {
+      this.#restoreTimer = setTimeout(() => this.#fatal(), RESTORE_TIMEOUT_MS);
+    }
+  };
+
+  #onContextRestored = (): void => {
+    this.#clearRestoreTimer();
+    this.#contextLost = false;
+    this.#buildGlResources(); // old GL objects are gone; rebuild on the same context
+    this.#render(); // CPU-side content/flip/view were retained, so re-upload + repaint
+  };
+
+  #onVisibilityChange = (): void => {
+    if (this.#canvas?.ownerDocument.visibilityState === 'visible') this.#render();
+  };
+
+  #fatal(): void {
+    if (this.#fatalFired) return;
+    this.#fatalFired = true;
+    this.#fatalHandler?.();
+  }
+
+  #clearRestoreTimer(): void {
+    if (this.#restoreTimer !== null) {
+      clearTimeout(this.#restoreTimer);
+      this.#restoreTimer = null;
+    }
+  }
+
+  #buildGlResources(): void {
+    const gl = this.#gl;
+    if (gl === null) return;
+
+    this.#flat = createProgram(gl, FLAT_VERT, FLAT_FRAG);
+    this.#curl = createProgram(gl, CURL_VERT, CURL_FRAG);
+    for (const name of ['uViewport', 'uRect', 'uView', 'uTex']) {
+      this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
+    }
+    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFront', 'uBack', 'uShadow']) {
+      this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
+    }
+
+    this.#quadVao = this.#makeVao(gl, this.#flat, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]));
+
+    // Grid strip across the width (columns subdivided, 2 rows) for a smooth bend.
+    const grid: number[] = [];
+    for (let c = 0; c <= GRID_COLS; c++) {
+      const u = c / GRID_COLS;
+      grid.push(u, 0, u, 1);
+    }
+    this.#gridCount = (GRID_COLS + 1) * 2;
+    this.#gridVao = this.#makeVao(gl, this.#curl, new Float32Array(grid));
+
+    this.#texA = createTexture(gl);
+    this.#texB = createTexture(gl);
+    gl.useProgram(this.#flat);
+    gl.uniform1i(this.#flatU.uTex ?? null, 0);
+    gl.useProgram(this.#curl);
+    gl.uniform1i(this.#curlU.uFront ?? null, 0);
+    gl.uniform1i(this.#curlU.uBack ?? null, 1);
+    gl.clearColor(0, 0, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied alpha
+  }
+
+  // --- drawing ------------------------------------------------------------------
+
   #render(): void {
     const gl = this.#gl;
     const canvas = this.#canvas;
-    if (gl === null || canvas === null) return;
+    if (gl === null || canvas === null || this.#contextLost || gl.isContextLost()) return;
     this.#resize();
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (this.#flip !== null) this.#drawFlip();
