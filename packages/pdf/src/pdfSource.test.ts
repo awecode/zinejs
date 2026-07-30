@@ -54,4 +54,41 @@ describe('PdfSource', () => {
     await src.open();
     expect(src.pageCount).toBe(5);
   });
+
+  // A pre-created document lets us spy on getPage and count (re-)renders.
+  const spyDoc = () => {
+    const page = {
+      getViewport: () => ({ width: 120, height: 160 }), // 120*160*4 = 76,800 bytes / page
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const getPage = vi.fn(async () => page);
+    return { getPage, doc: { numPages: 5, getPage, destroy: () => {} } as unknown as PdfSrc };
+  };
+
+  it('evicts least-recently-used pages past the byte cap', async () => {
+    const { getPage, doc } = spyDoc();
+    const src = new PdfSource(doc, { maxCacheBytes: 100_000, preload: 0 }); // fits one page, not two
+    await src.open();
+
+    await src.get(0);
+    await src.get(1); // over cap → page 0 evicted
+    expect(getPage).toHaveBeenCalledTimes(2);
+
+    await src.get(1); // most-recently-used → still cached
+    expect(getPage).toHaveBeenCalledTimes(2);
+
+    await src.get(0); // was evicted → re-renders
+    expect(getPage).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps pages cached while under the byte cap', async () => {
+    const { getPage, doc } = spyDoc();
+    const src = new PdfSource(doc, { maxCacheBytes: 10_000_000, preload: 0 });
+    await src.open();
+
+    await src.get(0);
+    await src.get(1);
+    await src.get(0); // under cap → never evicted → no re-render
+    expect(getPage).toHaveBeenCalledTimes(2);
+  });
 });

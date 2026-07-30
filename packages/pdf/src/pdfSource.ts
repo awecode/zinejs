@@ -25,6 +25,15 @@ export interface PdfSourceOptions {
   renderScale?: number;
   /** How many adjacent pages to prefetch around a requested page. Default 1. */
   preload?: number;
+  /** Soft cap on cached page bytes; least-recently-used pages evict beyond it. Default ~256 MB. */
+  maxCacheBytes?: number;
+}
+
+const DEFAULT_MAX_CACHE_BYTES = 256 * 1024 * 1024;
+
+interface CacheEntry {
+  promise: Promise<PageContent>;
+  bytes: number; // 0 until the render resolves and its size is known
 }
 
 function isPdfDocument(src: PdfSrc): src is PdfDocumentLike {
@@ -48,13 +57,16 @@ export class PdfSource implements Source {
   #renderScale: number;
   #preload: number;
   #doc: PdfDocumentLike | null = null;
-  #cache = new Map<number, Promise<PageContent>>();
+  #maxCacheBytes: number;
+  #cache = new Map<number, CacheEntry>();
+  #cachedBytes = 0;
 
   constructor(src: PdfSrc, options: PdfSourceOptions = {}) {
     this.#src = src;
     this.#workerSrc = options.workerSrc;
     this.#renderScale = options.renderScale ?? 1;
     this.#preload = options.preload ?? 1;
+    this.#maxCacheBytes = options.maxCacheBytes ?? DEFAULT_MAX_CACHE_BYTES;
   }
 
   async open(): Promise<void> {
@@ -95,19 +107,44 @@ export class PdfSource implements Source {
   destroy(): void {
     this.#doc?.destroy?.();
     this.#cache.clear();
+    this.#cachedBytes = 0;
     this.#doc = null;
   }
 
   #renderPage(index: number): Promise<PageContent> {
-    const cached = this.#cache.get(index);
-    if (cached) return cached;
+    const existing = this.#cache.get(index);
+    if (existing) {
+      // Mark most-recently-used: re-insert so it sits at the end of the Map's order.
+      this.#cache.delete(index);
+      this.#cache.set(index, existing);
+      return existing.promise;
+    }
 
-    const promise = this.#rasterize(index).catch((error: unknown) => {
-      this.#cache.delete(index); // let a later get() retry
-      throw error;
-    });
-    this.#cache.set(index, promise);
-    return promise;
+    const entry: CacheEntry = { promise: undefined as unknown as Promise<PageContent>, bytes: 0 };
+    entry.promise = this.#rasterize(index).then(
+      (content) => {
+        entry.bytes = content.width * content.height * 4; // RGBA
+        this.#cachedBytes += entry.bytes;
+        this.#evictToFit(index);
+        return content;
+      },
+      (error: unknown) => {
+        this.#cache.delete(index); // let a later get() retry
+        throw error;
+      },
+    );
+    this.#cache.set(index, entry);
+    return entry.promise;
+  }
+
+  /** Drop least-recently-used pages (front of the Map) until under the byte cap. */
+  #evictToFit(keepIndex: number): void {
+    for (const [index, entry] of this.#cache) {
+      if (this.#cachedBytes <= this.#maxCacheBytes) break;
+      if (index === keepIndex || entry.bytes === 0) continue; // keep the newest; skip in-flight renders
+      this.#cache.delete(index);
+      this.#cachedBytes -= entry.bytes;
+    }
   }
 
   async #rasterize(index: number): Promise<PageContent> {
