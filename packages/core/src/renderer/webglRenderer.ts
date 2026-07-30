@@ -158,7 +158,9 @@ export class WebglRenderer implements Renderer {
     this.#container = container;
     const doc = container.ownerDocument;
     const canvas = doc.createElement('canvas');
-    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    // Fill the container as a plain block, so it doesn't depend on the container
+    // being positioned (an absolute canvas would escape a static container).
+    canvas.style.cssText = 'display:block;width:100%;height:100%;';
     container.append(canvas);
     this.#canvas = canvas;
 
