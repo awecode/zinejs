@@ -35,8 +35,8 @@ out vec4 outColor;
 void main() { outColor = texture(uTex, vUv); }`;
 
 // Curl program: the turning leaf. u runs from the spine (0) to the free edge (1).
-// The page wraps around a vertical cylinder (radius shrinks with `uCurl`) and the
-// whole thing rotates about the spine by `uAngle`; orthographic (no perspective yet).
+// The page wraps around a vertical cylinder (radius shrinks with uCurl) and rotates
+// about the spine by uAngle; orthographic (no perspective yet).
 const CURL_VERT = `#version 300 es
 in vec2 aUnit;
 uniform vec2 uViewport;
@@ -71,17 +71,20 @@ void main() {
   vU = u;
 }`;
 
+// Per-fragment facing: whichever side of the curling sheet faces the viewer shows
+// its own page, so mid-curl you see a sliver of the next page (the front/back
+// handoff is continuous, not a whole-leaf swap). The back page is mirrored so it
+// reads correctly once the sheet lands on the far side.
 const CURL_FRAG = `#version 300 es
 precision mediump float;
 in vec2 vUv;
 in float vU;
-uniform sampler2D uTex;
-uniform float uFlipU;  // 1 = back face (mirror horizontally)
-uniform float uShadow; // 0..1 fold shading strength
+uniform sampler2D uFront;
+uniform sampler2D uBack;
+uniform float uShadow;
 out vec4 outColor;
 void main() {
-  vec2 uv = vec2(mix(vUv.x, 1.0 - vUv.x, uFlipU), vUv.y);
-  vec4 c = texture(uTex, uv);
+  vec4 c = gl_FrontFacing ? texture(uFront, vUv) : texture(uBack, vec2(1.0 - vUv.x, vUv.y));
   float crease = 1.0 - smoothstep(0.0, 0.12, vU);   // dark at the spine
   float freeEdge = smoothstep(0.82, 1.0, vU);        // dark at the free edge
   float shade = 1.0 - uShadow * (0.4 * crease + 0.22 * freeEdge);
@@ -111,10 +114,10 @@ interface FlipState {
 }
 
 /**
- * GPU renderer (WebGL2, hand-written — no third-party library). The turning leaf is
+ * GPU renderer (WebGL2, hand-written, no third-party library). The turning leaf is
  * a grid mesh bent around a cylinder (driven by the shared flipProgressToPose), the
  * static pages are flat textured quads underneath. Selected via `renderer: 'webgl2'`
- * for now; `'auto'` stays on CSS until the renderer is complete + hardened (§8.3/§8.4).
+ * for now; `'auto'` stays on CSS until the renderer is complete and hardened.
  */
 export class WebglRenderer implements Renderer {
   #container: HTMLElement | null = null;
@@ -126,7 +129,8 @@ export class WebglRenderer implements Renderer {
   #quadVao: WebGLVertexArrayObject | null = null;
   #gridVao: WebGLVertexArrayObject | null = null;
   #gridCount = 0;
-  #texture: WebGLTexture | null = null;
+  #texA: WebGLTexture | null = null; // flats + leaf front (unit 0)
+  #texB: WebGLTexture | null = null; // leaf back (unit 1)
 
   #flatU: Record<string, WebGLUniformLocation | null> = {};
   #curlU: Record<string, WebGLUniformLocation | null> = {};
@@ -154,7 +158,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFlipU', 'uShadow', 'uTex']) {
+    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFront', 'uBack', 'uShadow']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -169,11 +173,13 @@ export class WebglRenderer implements Renderer {
     this.#gridCount = (GRID_COLS + 1) * 2;
     this.#gridVao = this.#makeVao(gl, this.#curl, new Float32Array(grid));
 
-    this.#texture = createTexture(gl);
+    this.#texA = createTexture(gl);
+    this.#texB = createTexture(gl);
     gl.useProgram(this.#flat);
     gl.uniform1i(this.#flatU.uTex ?? null, 0);
     gl.useProgram(this.#curl);
-    gl.uniform1i(this.#curlU.uTex ?? null, 0);
+    gl.uniform1i(this.#curlU.uFront ?? null, 0);
+    gl.uniform1i(this.#curlU.uBack ?? null, 1);
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied alpha
@@ -184,7 +190,8 @@ export class WebglRenderer implements Renderer {
   destroy(): void {
     const gl = this.#gl;
     if (gl !== null) {
-      if (this.#texture !== null) gl.deleteTexture(this.#texture);
+      if (this.#texA !== null) gl.deleteTexture(this.#texA);
+      if (this.#texB !== null) gl.deleteTexture(this.#texB);
       if (this.#quadVao !== null) gl.deleteVertexArray(this.#quadVao);
       if (this.#gridVao !== null) gl.deleteVertexArray(this.#gridVao);
       if (this.#flat !== null) gl.deleteProgram(this.#flat);
@@ -284,7 +291,6 @@ export class WebglRenderer implements Renderer {
   }
 
   #drawStatic(): void {
-    const gl = this.#gl!;
     const canvas = this.#canvas!;
     const w = canvas.width;
     const h = canvas.height;
@@ -315,10 +321,11 @@ export class WebglRenderer implements Renderer {
       this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight);
     }
 
-    // Turning leaf: front face until half-turned, then the back (mirrored).
-    const showBack = pose.angle >= Math.PI / 2;
-    const source = showBack ? flip.back : flip.front;
-    if (source === null) return;
+    // Turning leaf: both faces uploaded, per-fragment facing picks front vs back.
+    if (flip.front === null && flip.back === null) return;
+    this.#uploadFace(gl.TEXTURE0, this.#texA!, flip.front);
+    this.#uploadFace(gl.TEXTURE1, this.#texB!, flip.back);
+    gl.activeTexture(gl.TEXTURE0);
 
     const leafW = flip.fill ? w : w / 2;
     const spineX = flip.spineAtStart * w;
@@ -330,9 +337,7 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uAngle ?? null, pose.angle);
     gl.uniform1f(this.#curlU.uCurl ?? null, pose.curl);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
-    gl.uniform1f(this.#curlU.uFlipU ?? null, showBack ? 1 : 0);
     gl.uniform1f(this.#curlU.uShadow ?? null, pose.shadowAlpha);
-    uploadTexture(gl, this.#texture!, source);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.#gridCount);
   }
 
@@ -341,16 +346,29 @@ export class WebglRenderer implements Renderer {
     const canvas = this.#canvas!;
     gl.useProgram(this.#flat);
     gl.bindVertexArray(this.#quadVao);
+    gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(this.#flatU.uViewport ?? null, canvas.width, canvas.height);
     gl.uniform3f(this.#flatU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
   }
 
   #drawQuad(rect: Rect, source: TexImageSource | null): void {
     const gl = this.#gl!;
-    if (source === null || this.#texture === null) return;
-    uploadTexture(gl, this.#texture, source);
+    if (source === null || this.#texA === null) return;
+    uploadTexture(gl, this.#texA, source);
     gl.uniform4f(this.#flatU.uRect ?? null, rect.x, rect.y, rect.w, rect.h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  #uploadFace(unit: number, tex: WebGLTexture, source: TexImageSource | null): void {
+    const gl = this.#gl!;
+    gl.activeTexture(unit);
+    if (source !== null) {
+      uploadTexture(gl, tex, source);
+    } else {
+      // Blank face (e.g. a cover edge): a 1x1 transparent texel, no garbage sampled.
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+    }
   }
 
   #makeVao(gl: WebGL2RenderingContext, program: WebGLProgram, data: Float32Array): WebGLVertexArrayObject {
