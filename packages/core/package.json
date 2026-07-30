@@ -35,6 +35,12 @@
         "path": "dist/cssRenderer-*.js",
         "limit": "12 kB",
         "gzip": true
+      },
+      {
+        "name": "WebGL2 renderer chunk (lazy, gzip)",
+        "path": "dist/webglRenderer-*.js",
+        "limit": "12 kB",
+        "gzip": true
       }
     ]
   }

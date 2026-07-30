@@ -12,8 +12,8 @@ describe('selectRenderer', () => {
     expect(await selectRenderer('auto', noGpu)).toBeInstanceOf(CssRenderer);
   });
 
-  it("resolves 'auto' to CSS even on a GPU device (WebGL2 not auto-selected yet)", async () => {
-    expect(await selectRenderer('auto', gpu)).toBeInstanceOf(CssRenderer);
+  it("resolves 'auto' to the WebGL2 renderer on a GPU device", async () => {
+    expect(await selectRenderer('auto', gpu)).toBeInstanceOf(WebglRenderer);
   });
 
   it("forces the CSS renderer when asked", async () => {

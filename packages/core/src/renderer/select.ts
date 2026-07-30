@@ -27,10 +27,9 @@ const LOADERS: Partial<Record<RendererKind, RendererLoader>> = {
   webgl2: async () => new (await import('./webglRenderer')).WebglRenderer(),
 };
 
-// Phase 2 staging: the WebGL2 renderer is opt-in (`renderer: 'webgl2'`) while it's
-// built and hardened; `'auto'` stays on CSS everywhere. Flip to `true` once it
-// passes its §9 budgets so GPU devices auto-select it.
-const WEBGL2_AUTO = false;
+// The WebGL2 renderer is auto-selected on GPU-capable devices; CSS is the baseline
+// for non-GPU devices and the fallback for unrecoverable GPU failures (§8.4).
+const WEBGL2_AUTO = true;
 
 function isRenderer(option: RendererOption): option is Renderer {
   return (
