@@ -5,16 +5,16 @@ import { test, expect } from '@playwright/test';
 // the real listeners. RTL uses genuine keyboard input.
 
 test('RTL: ArrowLeft flips forward', async ({ page }) => {
-  await page.goto('/?direction=rtl');
+  await page.goto('/fixture.html?direction=rtl');
   await page.locator('#book').click();
   await page.keyboard.press('ArrowLeft'); // forward key in RTL
-  await expect(page.locator('#page')).toHaveText('page 3 / 8');
+  await expect(page.locator('#page')).toHaveText('page 3 / 20');
   await page.keyboard.press('ArrowRight'); // back
-  await expect(page.locator('#page')).toHaveText('page 1 / 8');
+  await expect(page.locator('#page')).toHaveText('page 1 / 20');
 });
 
 test('a touch drag across the book flips the page', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/fixture.html');
   const box = (await page.locator('#book').boundingBox())!;
   const y = box.y + 12;
   // Dispatch each touch pointer event in its own step so the flip's async
@@ -32,11 +32,11 @@ test('a touch drag across the book flips the page', async ({ page }) => {
   await fire('pointermove', box.x + box.width / 2);
   await fire('pointermove', box.x + 12);
   await fire('pointerup', box.x + 12);
-  await expect(page.locator('#page')).toHaveText('page 3 / 8');
+  await expect(page.locator('#page')).toHaveText('page 3 / 20');
 });
 
 test('pinch spreads two fingers to zoom in', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/fixture.html');
   await expect(page.locator('#zoom')).toHaveText('1.0×');
   await page.evaluate(() => {
     const book = document.getElementById('book')!;

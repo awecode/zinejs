@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>zinejs — image book</title>
+    <title>zinejs — e2e fixture</title>
     <style>
       body {
         margin: 0;
@@ -21,13 +21,21 @@
         height: 560px;
         max-width: 96vw;
         background: #0c0c11;
-        border-radius: 4px;
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
         touch-action: none;
         user-select: none;
       }
-      a {
-        color: #8ab4ff;
+      .bar {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+      button {
+        padding: 8px 18px;
+        border: 0;
+        border-radius: 6px;
+        background: #34344a;
+        color: #eaeaf0;
+        cursor: pointer;
       }
       .hint {
         opacity: 0.6;
@@ -36,10 +44,18 @@
     </style>
   </head>
   <body>
-    <h1>zinejs — image book</h1>
     <div id="book"></div>
-    <p class="hint">Drag a page corner (or click near an edge) to flip · double-click / Ctrl+wheel / pinch to zoom.</p>
-    <p><a href="pdf.html">View the PDF demo →</a></p>
-    <script type="module" src="/src/images.ts"></script>
+    <div class="bar">
+      <button id="prev">← Prev</button>
+      <span id="page" class="hint"></span>
+      <button id="next">Next →</button>
+    </div>
+    <div class="bar">
+      <button id="zoomout">−</button>
+      <span id="zoom" class="hint"></span>
+      <button id="zoomin">+</button>
+      <button id="zoomreset">Reset</button>
+    </div>
+    <script type="module" src="/src/fixture.ts"></script>
   </body>
 </html>
