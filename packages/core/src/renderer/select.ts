@@ -21,11 +21,16 @@ type RendererLoader = () => Promise<Renderer>;
 /**
  * Lazy loaders, one per kind. Each is a dynamic `import()` so the bundler
  * code-splits it into its own chunk and a device fetches only the one selected.
- * The `webgl2` loader is added in Phase 2; until then only CSS can be selected.
  */
 const LOADERS: Partial<Record<RendererKind, RendererLoader>> = {
   css: async () => new (await import('./cssRenderer')).CssRenderer(),
+  webgl2: async () => new (await import('./webglRenderer')).WebglRenderer(),
 };
+
+// Phase 2 staging: the WebGL2 renderer is opt-in (`renderer: 'webgl2'`) while it's
+// built and hardened; `'auto'` stays on CSS everywhere. Flip to `true` once it
+// passes its §9 budgets so GPU devices auto-select it.
+const WEBGL2_AUTO = false;
 
 function isRenderer(option: RendererOption): option is Renderer {
   return (
@@ -37,7 +42,7 @@ function isRenderer(option: RendererOption): option is Renderer {
 }
 
 function autoOrder(caps: Capabilities): RendererKind[] {
-  return caps.gpu ? ['webgl2', 'css'] : ['css'];
+  return caps.gpu && WEBGL2_AUTO ? ['webgl2', 'css'] : ['css'];
 }
 
 /** Detect WebGL2 support — the GPU renderer's only backend (no WebGL1, no WebGPU). */
@@ -77,6 +82,6 @@ export async function selectRenderer(
     );
   }
   throw new Error(
-    `renderer: none of [${order.join(', ')}] is available. The 'webgl2' renderer ships in a later release — use 'css' or 'auto'.`,
+    `renderer: none of [${order.join(', ')}] could be loaded — use 'css' or 'auto'.`,
   );
 }

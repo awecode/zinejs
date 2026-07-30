@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { selectRenderer, detectCapabilities } from './select';
 import { CssRenderer } from './cssRenderer';
+import { WebglRenderer } from './webglRenderer';
 import type { Renderer, LayoutMetrics } from './types';
 
 const noGpu = { gpu: false };
@@ -11,7 +12,7 @@ describe('selectRenderer', () => {
     expect(await selectRenderer('auto', noGpu)).toBeInstanceOf(CssRenderer);
   });
 
-  it("resolves 'auto' to CSS even on a GPU device (WebGL2 renderer ships later)", async () => {
+  it("resolves 'auto' to CSS even on a GPU device (WebGL2 not auto-selected yet)", async () => {
     expect(await selectRenderer('auto', gpu)).toBeInstanceOf(CssRenderer);
   });
 
@@ -19,16 +20,16 @@ describe('selectRenderer', () => {
     expect(await selectRenderer('css', gpu)).toBeInstanceOf(CssRenderer);
   });
 
+  it("resolves 'webgl2' to the WebGL2 renderer on a GPU device", async () => {
+    expect(await selectRenderer('webgl2', gpu)).toBeInstanceOf(WebglRenderer);
+  });
+
   it('walks an order array and picks the first loadable kind', async () => {
-    expect(await selectRenderer(['webgl2', 'css'], gpu)).toBeInstanceOf(CssRenderer);
+    expect(await selectRenderer(['webgl2', 'css'], gpu)).toBeInstanceOf(WebglRenderer);
   });
 
   it("throws a descriptive error when 'webgl2' is forced without WebGL2", async () => {
     await expect(selectRenderer('webgl2', noGpu)).rejects.toThrow(/WebGL2/);
-  });
-
-  it("throws when 'webgl2' is forced on a GPU device but not yet shipped", async () => {
-    await expect(selectRenderer('webgl2', gpu)).rejects.toThrow(/later release/);
   });
 
   it('returns a custom Renderer instance as-is', async () => {
