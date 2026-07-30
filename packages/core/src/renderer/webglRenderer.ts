@@ -11,7 +11,7 @@ import { createProgram } from './gl/program';
 import { createTexture, uploadTexture } from './gl/texture';
 
 // Maps a unit quad to a page rect (device px, top-left origin) and applies zoom/pan.
-// vUv flips Y to pair with UNPACK_FLIP_Y so the image's top row lands at the page top.
+// vUv = aUnit; paired with UNPACK_FLIP_Y on upload this lands the image right-side up.
 const VERTEX_SRC = `#version 300 es
 in vec2 aUnit;
 uniform vec2 uViewport;
@@ -23,7 +23,7 @@ void main() {
   px = px * uView.x + uView.yz;
   vec2 clip = px / uViewport * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
-  vUv = vec2(aUnit.x, 1.0 - aUnit.y);
+  vUv = aUnit;
 }`;
 
 const FRAGMENT_SRC = `#version 300 es
