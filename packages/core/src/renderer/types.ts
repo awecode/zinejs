@@ -25,12 +25,12 @@ export interface LayoutMetrics {
 }
 
 /**
- * The contract every renderer implements (CSS baseline, Pixi/GPU). The engine
+ * The contract every renderer implements (CSS baseline, WebGL2/GPU). The engine
  * drives it and never reaches past it, so the renderers are interchangeable and
  * behaviorally identical (PRD §8). One is selected at init; a device fetches one.
  */
 export interface Renderer {
-  /** Attach to a container. Async to accommodate GPU context init (Pixi). */
+  /** Attach to a container. Async to accommodate GPU context init (WebGL2). */
   mount(container: HTMLElement): Promise<void>;
 
   /** Tear down: remove DOM/listeners, release any GPU context. */

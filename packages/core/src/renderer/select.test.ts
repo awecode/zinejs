@@ -11,7 +11,7 @@ describe('selectRenderer', () => {
     expect(await selectRenderer('auto', noGpu)).toBeInstanceOf(CssRenderer);
   });
 
-  it("resolves 'auto' to CSS even on a GPU device (Pixi ships later)", async () => {
+  it("resolves 'auto' to CSS even on a GPU device (WebGL2 renderer ships later)", async () => {
     expect(await selectRenderer('auto', gpu)).toBeInstanceOf(CssRenderer);
   });
 
@@ -20,15 +20,15 @@ describe('selectRenderer', () => {
   });
 
   it('walks an order array and picks the first loadable kind', async () => {
-    expect(await selectRenderer(['pixi', 'css'], gpu)).toBeInstanceOf(CssRenderer);
+    expect(await selectRenderer(['webgl2', 'css'], gpu)).toBeInstanceOf(CssRenderer);
   });
 
-  it("throws a descriptive error when 'pixi' is forced without a GPU", async () => {
-    await expect(selectRenderer('pixi', noGpu)).rejects.toThrow(/no GPU/);
+  it("throws a descriptive error when 'webgl2' is forced without WebGL2", async () => {
+    await expect(selectRenderer('webgl2', noGpu)).rejects.toThrow(/WebGL2/);
   });
 
-  it("throws when 'pixi' is forced on a GPU device but not yet shipped", async () => {
-    await expect(selectRenderer('pixi', gpu)).rejects.toThrow(/later release/);
+  it("throws when 'webgl2' is forced on a GPU device but not yet shipped", async () => {
+    await expect(selectRenderer('webgl2', gpu)).rejects.toThrow(/later release/);
   });
 
   it('returns a custom Renderer instance as-is', async () => {

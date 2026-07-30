@@ -13,7 +13,7 @@ export interface FlipPose {
  * Linear in `t` on purpose — easing belongs to the animator that produces `t`,
  * so seeking to a fixed progress (e.g. the 0/.25/.5/.75/1 visual-regression stops)
  * is deterministic. The CSS renderer consumes `angle` as a spine `rotateY`; the
- * Pixi renderer additionally bends its mesh by `curl`.
+ * WebGL2 renderer additionally bends its mesh by `curl`.
  */
 export function flipProgressToPose(t: number): FlipPose {
   const clamped = t < 0 ? 0 : t > 1 ? 1 : t;

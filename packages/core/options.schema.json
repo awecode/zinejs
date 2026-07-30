@@ -25,10 +25,10 @@
       "description": "Which renderer to use. Default 'auto' (prefer GPU, else CSS).",
       "default": "auto",
       "oneOf": [
-        { "type": "string", "enum": ["auto", "css", "pixi"] },
+        { "type": "string", "enum": ["auto", "css", "webgl2"] },
         {
           "type": "array",
-          "items": { "type": "string", "enum": ["css", "pixi"] },
+          "items": { "type": "string", "enum": ["css", "webgl2"] },
           "description": "Ordered fallback list; the first available renderer wins."
         },
         { "type": "object", "description": "A custom Renderer instance." }

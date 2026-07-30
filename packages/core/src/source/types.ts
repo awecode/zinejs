@@ -3,7 +3,7 @@ import type { PageContent } from '../renderer/types';
 /**
  * Resolves page indices to renderable rasters. `ImageSource` is the default; a
  * `PdfSource` (Phase 3) implements the same shape. Output is renderer-agnostic —
- * the same raster feeds the CSS and Pixi renderers.
+ * the same raster feeds the CSS and WebGL2 renderers.
  */
 export interface Source {
   readonly pageCount: number;

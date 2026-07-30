@@ -892,18 +892,18 @@ function validateZoomOption(zoom: unknown): void {
 function validateRendererOption(renderer: unknown): void {
   if (renderer === undefined) return;
   if (typeof renderer === 'string') {
-    if (renderer !== 'auto' && renderer !== 'css' && renderer !== 'pixi') {
+    if (renderer !== 'auto' && renderer !== 'css' && renderer !== 'webgl2') {
       throw new Error(
-        `Zine: renderer '${renderer}' is not recognized; use 'auto', 'css', 'pixi', an array of those, or a custom Renderer.`,
+        `Zine: renderer '${renderer}' is not recognized; use 'auto', 'css', 'webgl2', an array of those, or a custom Renderer.`,
       );
     }
     return;
   }
   if (Array.isArray(renderer)) {
     for (const kind of renderer) {
-      if (kind !== 'css' && kind !== 'pixi') {
+      if (kind !== 'css' && kind !== 'webgl2') {
         throw new Error(
-          `Zine: renderer order array may only contain 'css' or 'pixi'; got ${JSON.stringify(kind)}.`,
+          `Zine: renderer order array may only contain 'css' or 'webgl2'; got ${JSON.stringify(kind)}.`,
         );
       }
     }
@@ -917,6 +917,6 @@ function validateRendererOption(renderer: unknown): void {
     return;
   }
   throw new Error(
-    "Zine: renderer must be 'auto', 'css', 'pixi', an array of those, or a custom Renderer instance.",
+    "Zine: renderer must be 'auto', 'css', 'webgl2', an array of those, or a custom Renderer instance.",
   );
 }
