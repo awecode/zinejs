@@ -17,8 +17,11 @@ export function uploadTexture(
   source: TexImageSource,
 ): void {
   gl.bindTexture(gl.TEXTURE_2D, tex);
-  // Flip so the image's top row maps to the top of the page (see webglRenderer vUv).
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  // No Y flip: the vertex shader maps aUnit.y=0 to the page top and samples the
+  // source's top row there. UNPACK_FLIP_Y is honored for <canvas> sources but
+  // IGNORED for ImageBitmap, so flipping would invert PDF (canvas) pages while
+  // leaving image (ImageBitmap) pages upright. Off keeps both consistent.
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 }

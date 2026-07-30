@@ -12,7 +12,7 @@ import { createProgram } from './gl/program';
 import { createTexture, uploadTexture } from './gl/texture';
 
 // Flat program: maps a unit quad to a page rect (device px, top-left origin) with
-// zoom/pan. vUv = aUnit pairs with UNPACK_FLIP_Y so the image lands right-side up.
+// zoom/pan. aUnit.y=0 is the page top and samples the source's top row (no flip).
 const FLAT_VERT = `#version 300 es
 in vec2 aUnit;
 uniform vec2 uViewport;
