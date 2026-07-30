@@ -1,13 +1,10 @@
 import { Zine } from '@zinejs/core';
 import { PdfSource } from '@zinejs/pdf';
 
-// pdf.js needs its worker; a bundler (here Vite) resolves it to a URL.
-const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-
 const book = document.getElementById('book')!;
 
 const zine = new Zine(book, {
-  source: new PdfSource('pdf/sample.pdf', { workerSrc }),
+  source: new PdfSource('pdf/sample.pdf'),
 });
 
 // Flip by dragging a page corner (or clicking near an edge); zoom with

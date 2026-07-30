@@ -19,7 +19,7 @@ interface PdfjsModule {
 export type PdfSrc = string | ArrayBuffer | Uint8Array | PdfDocumentLike;
 
 export interface PdfSourceOptions {
-  /** URL to pdf.js's worker (pdf.worker.min.mjs). Required unless a pre-created document is passed. */
+  /** URL to pdf.js's worker. Optional: auto-resolved under bundlers; pass it for CDN / UMD / custom paths. */
   workerSrc?: string;
   /** Base render scale; each page is rasterized at `renderScale × devicePixelRatio`. Default 1. */
   renderScale?: number;
@@ -73,19 +73,29 @@ export class PdfSource implements Source {
     if (isPdfDocument(this.#src)) {
       this.#doc = this.#src;
     } else {
-      if (this.#workerSrc === undefined) {
-        throw new Error(
-          "PdfSource: `workerSrc` is required — point it at pdf.js's worker, e.g. " +
-            "workerSrc: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href. " +
-            'Not needed only when you pass a pre-created pdf.js document.',
-        );
-      }
       const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsModule;
-      pdfjs.GlobalWorkerOptions.workerSrc = this.#workerSrc;
+      pdfjs.GlobalWorkerOptions.workerSrc = this.#resolveWorkerSrc(pdfjs.GlobalWorkerOptions.workerSrc);
       const params = typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
       this.#doc = await pdfjs.getDocument(params).promise;
     }
     this.pageCount = this.#doc.numPages;
+  }
+
+  /** Precedence: an explicit `workerSrc` → an already-configured global → an auto-resolved default. */
+  #resolveWorkerSrc(configured: string): string {
+    if (this.#workerSrc) return this.#workerSrc;
+    if (configured) return configured;
+    try {
+      // Bundlers (Vite / webpack 5 / esbuild) statically rewrite this and emit the worker,
+      // so the common case needs no `workerSrc`. Non-bundler / UMD hosts pass it explicitly.
+      return new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+    } catch {
+      throw new Error(
+        "PdfSource: couldn't auto-resolve pdf.js's worker. Pass `workerSrc` explicitly — e.g. " +
+          "workerSrc: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href — " +
+          'or configure pdfjs GlobalWorkerOptions.workerSrc, or pass a pre-created pdf.js document.',
+      );
+    }
   }
 
   get(index: number): Promise<PageContent> {

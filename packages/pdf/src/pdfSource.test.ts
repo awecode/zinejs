@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PdfSource, type PdfSrc } from './pdfSource';
+
+type PdfjsGlobal = { GlobalWorkerOptions: { workerSrc: string } };
+const pdfjsMock = async () => (await import('pdfjs-dist')) as unknown as PdfjsGlobal;
 
 vi.mock('pdfjs-dist', () => {
   const page = {
@@ -15,6 +18,10 @@ vi.mock('pdfjs-dist', () => {
 });
 
 describe('PdfSource', () => {
+  beforeEach(async () => {
+    (await pdfjsMock()).GlobalWorkerOptions.workerSrc = ''; // reset the shared global between tests
+  });
+
   it('opens a URL PDF (with workerSrc) and reports its page count', async () => {
     const src = new PdfSource('doc.pdf', { workerSrc: '/pdf.worker.mjs' });
     await src.open();
@@ -36,9 +43,24 @@ describe('PdfSource', () => {
     expect(src.get(0)).toBe(src.get(0)); // same cached promise
   });
 
-  it('throws a descriptive error when workerSrc is missing for a URL', async () => {
+  it('auto-resolves the worker when none is provided', async () => {
     const src = new PdfSource('doc.pdf');
-    await expect(src.open()).rejects.toThrow(/workerSrc/);
+    await src.open();
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/pdf\.worker\.min\.mjs$/);
+    expect(src.pageCount).toBe(3);
+  });
+
+  it('prefers an explicit workerSrc over the default', async () => {
+    const src = new PdfSource('doc.pdf', { workerSrc: '/custom-worker.mjs' });
+    await src.open();
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/custom-worker.mjs');
+  });
+
+  it('respects an already-configured global workerSrc', async () => {
+    (await pdfjsMock()).GlobalWorkerOptions.workerSrc = '/preset-worker.mjs';
+    const src = new PdfSource('doc.pdf'); // no explicit option
+    await src.open();
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/preset-worker.mjs');
   });
 
   it('accepts a pre-created document without a workerSrc', async () => {

@@ -8,8 +8,7 @@ const params = new URLSearchParams(location.search);
 
 function makeSource(): Source {
   if (params.has('pdf')) {
-    const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-    return new PdfSource('pdf/sample.pdf', { workerSrc });
+    return new PdfSource('pdf/sample.pdf');
   }
   const pages = Array.from(
     { length: 20 },
