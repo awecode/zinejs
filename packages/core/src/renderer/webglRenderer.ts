@@ -100,6 +100,9 @@ const GRID_COLS = 24;
 // If a lost context is not restored within this window, give up and let the engine
 // fall back to the CSS renderer (§8.4).
 const RESTORE_TIMEOUT_MS = 4000;
+// GPU texture LRU ceiling (§9). Page textures are cached by content and evicted
+// least-recently-used beyond this, so flips/zooms don't re-upload every frame.
+const MAX_TEXTURE_CACHE_BYTES = 256 * 1024 * 1024;
 
 interface Rect {
   x: number;
@@ -135,8 +138,9 @@ export class WebglRenderer implements Renderer {
   #quadVao: WebGLVertexArrayObject | null = null;
   #gridVao: WebGLVertexArrayObject | null = null;
   #gridCount = 0;
-  #texA: WebGLTexture | null = null; // flats + leaf front (unit 0)
-  #texB: WebGLTexture | null = null; // leaf back (unit 1)
+  #texCache = new Map<TexImageSource, { tex: WebGLTexture; bytes: number }>();
+  #cacheBytes = 0;
+  #blankTex: WebGLTexture | null = null; // 1x1 transparent, for blank leaf faces
 
   #flatU: Record<string, WebGLUniformLocation | null> = {};
   #curlU: Record<string, WebGLUniformLocation | null> = {};
@@ -184,8 +188,8 @@ export class WebglRenderer implements Renderer {
     }
     const gl = this.#gl;
     if (gl !== null) {
-      if (this.#texA !== null) gl.deleteTexture(this.#texA);
-      if (this.#texB !== null) gl.deleteTexture(this.#texB);
+      for (const cached of this.#texCache.values()) gl.deleteTexture(cached.tex);
+      if (this.#blankTex !== null) gl.deleteTexture(this.#blankTex);
       if (this.#quadVao !== null) gl.deleteVertexArray(this.#quadVao);
       if (this.#gridVao !== null) gl.deleteVertexArray(this.#gridVao);
       if (this.#flat !== null) gl.deleteProgram(this.#flat);
@@ -193,6 +197,9 @@ export class WebglRenderer implements Renderer {
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
     canvas?.remove();
+    this.#texCache.clear();
+    this.#cacheBytes = 0;
+    this.#blankTex = null;
     this.#container = null;
     this.#canvas = null;
     this.#gl = null;
@@ -335,8 +342,10 @@ export class WebglRenderer implements Renderer {
     this.#gridCount = (GRID_COLS + 1) * 2;
     this.#gridVao = this.#makeVao(gl, this.#curl, new Float32Array(grid));
 
-    this.#texA = createTexture(gl);
-    this.#texB = createTexture(gl);
+    // A (re)created context has no live textures; drop the cache and remake the blank.
+    this.#texCache.clear();
+    this.#cacheBytes = 0;
+    this.#blankTex = this.#makeBlankTexture(gl);
     gl.useProgram(this.#flat);
     gl.uniform1i(this.#flatU.uTex ?? null, 0);
     gl.useProgram(this.#curl);
@@ -392,8 +401,8 @@ export class WebglRenderer implements Renderer {
 
     // Turning leaf: both faces uploaded, per-fragment facing picks front vs back.
     if (flip.front === null && flip.back === null) return;
-    this.#uploadFace(gl.TEXTURE0, this.#texA!, flip.front);
-    this.#uploadFace(gl.TEXTURE1, this.#texB!, flip.back);
+    this.#bindFace(gl.TEXTURE0, flip.front);
+    this.#bindFace(gl.TEXTURE1, flip.back);
     gl.activeTexture(gl.TEXTURE0);
 
     const leafW = flip.fill ? w : w / 2;
@@ -422,22 +431,53 @@ export class WebglRenderer implements Renderer {
 
   #drawQuad(rect: Rect, source: TexImageSource | null): void {
     const gl = this.#gl!;
-    if (source === null || this.#texA === null) return;
-    uploadTexture(gl, this.#texA, source);
+    if (source === null) return;
+    this.#bindFace(gl.TEXTURE0, source);
     gl.uniform4f(this.#flatU.uRect ?? null, rect.x, rect.y, rect.w, rect.h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  #uploadFace(unit: number, tex: WebGLTexture, source: TexImageSource | null): void {
+  /** Bind the texture for `source` (a blank 1x1 when null) to a texture unit. */
+  #bindFace(unit: number, source: TexImageSource | null): void {
     const gl = this.#gl!;
     gl.activeTexture(unit);
-    if (source !== null) {
-      uploadTexture(gl, tex, source);
-    } else {
-      // Blank face (e.g. a cover edge): a 1x1 transparent texel, no garbage sampled.
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+    gl.bindTexture(gl.TEXTURE_2D, source !== null ? this.#textureFor(source) : this.#blankTex);
+  }
+
+  /** Page texture cached by content: uploaded once, reused across frames, LRU-capped. */
+  #textureFor(source: TexImageSource): WebGLTexture {
+    const gl = this.#gl!;
+    const existing = this.#texCache.get(source);
+    if (existing !== undefined) {
+      this.#texCache.delete(source); // move to most-recently-used
+      this.#texCache.set(source, existing);
+      return existing.tex;
     }
+    const tex = createTexture(gl); // binds + uploads on the active unit set by the caller
+    uploadTexture(gl, tex, source);
+    const bytes = source.width * source.height * 4;
+    this.#texCache.set(source, { tex, bytes });
+    this.#cacheBytes += bytes;
+    this.#evictTextures();
+    return tex;
+  }
+
+  /** Drop least-recently-used page textures past the byte ceiling (keep a small floor). */
+  #evictTextures(): void {
+    const gl = this.#gl!;
+    for (const [src, cached] of this.#texCache) {
+      if (this.#cacheBytes <= MAX_TEXTURE_CACHE_BYTES || this.#texCache.size <= 4) break;
+      this.#texCache.delete(src);
+      this.#cacheBytes -= cached.bytes;
+      gl.deleteTexture(cached.tex);
+    }
+  }
+
+  #makeBlankTexture(gl: WebGL2RenderingContext): WebGLTexture {
+    const tex = createTexture(gl);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+    return tex;
   }
 
   #makeVao(gl: WebGL2RenderingContext, program: WebGLProgram, data: Float32Array): WebGLVertexArrayObject {
