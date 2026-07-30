@@ -82,9 +82,14 @@ in float vU;
 uniform sampler2D uFront;
 uniform sampler2D uBack;
 uniform float uShadow;
+uniform highp float uDir; // must match the vertex stage's default highp
 out vec4 outColor;
 void main() {
-  vec4 c = gl_FrontFacing ? texture(uFront, vUv) : texture(uBack, vec2(1.0 - vUv.x, vUv.y));
+  // A backward flip (uDir < 0) mirrors the mesh horizontally, which flips both the
+  // projected winding (gl_FrontFacing) and the page's u->x mapping; undo both here.
+  float fx = uDir > 0.0 ? vUv.x : 1.0 - vUv.x;
+  bool showFront = uDir > 0.0 ? gl_FrontFacing : !gl_FrontFacing;
+  vec4 c = showFront ? texture(uFront, vec2(fx, vUv.y)) : texture(uBack, vec2(1.0 - fx, vUv.y));
   float crease = 1.0 - smoothstep(0.0, 0.12, vU);   // dark at the spine
   float freeEdge = smoothstep(0.82, 1.0, vU);        // dark at the free edge
   float shade = 1.0 - uShadow * (0.4 * crease + 0.22 * freeEdge);
