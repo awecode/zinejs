@@ -31,8 +31,18 @@ const FLAT_FRAG = `#version 300 es
 precision mediump float;
 in vec2 vUv;
 uniform sampler2D uTex;
+uniform float uGutterSide; // +1 = spine at the right edge, -1 = at the left edge, 0 = none
 out vec4 outColor;
-void main() { outColor = texture(uTex, vUv); }`;
+void main() {
+  vec4 c = texture(uTex, vUv);
+  if (uGutterSide != 0.0) {
+    // Soft, permanent gutter shadow: darken toward the spine edge where the pages
+    // meet, so the turning leaf's spine shadow lands into it instead of vanishing.
+    float d = uGutterSide > 0.0 ? (1.0 - vUv.x) : vUv.x;
+    c.rgb *= mix(0.72, 1.0, smoothstep(0.0, 0.10, d));
+  }
+  outColor = c;
+}`;
 
 // Curl program: the turning leaf. u runs from the spine (0) to the free edge (1).
 // The page wraps around a vertical cylinder (radius shrinks with uCurl) and rotates
@@ -47,28 +57,43 @@ uniform float uCurl;  // 0..1 bend amount
 uniform float uDir;   // +1 leaf sweeps from +x side, -1 from -x side
 out vec2 vUv;
 out float vU;
+out float vLight; // surface facing: +1 toward viewer, 0 edge-on, -1 away
+const float CAM = 3.0; // perspective camera distance, in page widths (bigger = subtler)
 void main() {
   float u = aUnit.x;
   float W = uLeaf.z;
-  float bend = uCurl * 1.4;
-  float xw, zw;
+  // Cylinder wrap of the turning sheet, rotated about the spine (vertical y axis).
+  float bend = uCurl * 1.5;
+  float phi, xw, zw;
   if (bend > 0.001) {
-    float R = W / bend;      // arc length stays ~W
-    float phi = u * bend;
+    float R = W / bend;
+    phi = u * bend;
     xw = R * sin(phi);
     zw = R * (1.0 - cos(phi));
   } else {
+    phi = 0.0;
     xw = u * W;
     zw = 0.0;
   }
-  float X = xw * cos(uAngle) - zw * sin(uAngle); // rotate about spine (y axis)
+  float X = xw * cos(uAngle) - zw * sin(uAngle); // in-plane
+  float Z = xw * sin(uAngle) + zw * cos(uAngle); // depth (+ toward viewer)
   float px = uLeaf.x + uDir * X;
   float py = uLeaf.y + aUnit.y * uLeaf.w;
+  // Perspective by depth. X may bulge toward the viewer for 3D pop; Y only ever
+  // SHRINKS (persp clamped <= 1) about the page's own vertical center, so the top
+  // is never pushed past the frame (that was the hidden-top bug).
+  float D = W * CAM;
+  float persp = D / max(D - Z, 1.0);
+  float cx = uViewport.x * 0.5;
+  float cy = uLeaf.y + 0.5 * uLeaf.w;
+  px = cx + (px - cx) * persp;
+  py = cy + (py - cy) * min(persp, 1.0);
   vec2 p = vec2(px, py) * uView.x + uView.yz;
   vec2 clip = p / uViewport * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
   vUv = aUnit;
   vU = u;
+  vLight = cos(phi + uAngle);
 }`;
 
 // Per-fragment facing: whichever side of the curling sheet faces the viewer shows
@@ -77,22 +102,29 @@ const CURL_FRAG = `#version 300 es
 precision mediump float;
 in vec2 vUv;
 in float vU;
+in float vLight;
 uniform sampler2D uFront;
 uniform sampler2D uBack;
-uniform float uShadow;
 uniform highp float uDir; // must match the vertex stage's default highp
 out vec4 outColor;
 void main() {
   // A backward flip (uDir < 0) mirrors the mesh horizontally, which flips both the
   // projected winding (gl_FrontFacing) and the page's u->x mapping; undo both here.
   float fx = uDir > 0.0 ? vUv.x : 1.0 - vUv.x;
-  bool showFront = uDir > 0.0 ? gl_FrontFacing : !gl_FrontFacing;
+  // Front/back from the sheet's smooth facing (vLight), NOT gl_FrontFacing: the
+  // winding-based test flickers per-pixel at grazing angles as the curl overlaps.
+  bool showFront = vLight > 0.0;
   vec4 c = showFront ? texture(uFront, vec2(fx, vUv.y)) : texture(uBack, vec2(1.0 - fx, vUv.y));
-  float crease = 1.0 - smoothstep(0.0, 0.12, vU);   // dark at the spine
-  float freeEdge = smoothstep(0.82, 1.0, vU);        // dark at the free edge
-  float shade = 1.0 - uShadow * (0.4 * crease + 0.22 * freeEdge);
-  float sheen = uShadow * 0.12 * smoothstep(0.3, 0.55, vU) * (1.0 - smoothstep(0.55, 0.82, vU));
-  c.rgb = clamp(c.rgb * shade + sheen, 0.0, 1.0);
+
+  // Diffuse curl shading from the (smooth) facing magnitude: face-on bright, edge-on dark.
+  float diff = clamp(abs(vLight), 0.0, 1.0);
+  float lit = mix(0.72, 1.0, diff);                    // ambient floor, never crushed
+  float sheen = smoothstep(0.6, 0.95, diff) * (1.0 - diff) * 0.5; // soft crest highlight
+  // Spine crease uses the SAME curve as the static gutter shadow, so when the leaf
+  // lands the shadow is continuous instead of popping away.
+  lit *= mix(0.72, 1.0, smoothstep(0.0, 0.10, vU));
+
+  c.rgb = clamp(c.rgb * lit + sheen, 0.0, 1.0);
   outColor = c;
 }`;
 
@@ -324,10 +356,10 @@ export class WebglRenderer implements Renderer {
 
     this.#flat = createProgram(gl, FLAT_VERT, FLAT_FRAG);
     this.#curl = createProgram(gl, CURL_VERT, CURL_FRAG);
-    for (const name of ['uViewport', 'uRect', 'uView', 'uTex']) {
+    for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFront', 'uBack', 'uShadow']) {
+    for (const name of ['uViewport', 'uLeaf', 'uView', 'uAngle', 'uCurl', 'uDir', 'uFront', 'uBack']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -377,8 +409,8 @@ export class WebglRenderer implements Renderer {
     if (this.#fill) {
       this.#drawQuad({ x: 0, y: 0, w, h }, content.right ?? content.left);
     } else {
-      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left);
-      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right);
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left, 1);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right, -1);
     }
   }
 
@@ -395,8 +427,8 @@ export class WebglRenderer implements Renderer {
     if (flip.fill) {
       this.#drawQuad({ x: 0, y: 0, w, h }, flip.underFull);
     } else {
-      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, flip.underLeft);
-      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight);
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, flip.underLeft, 1);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight, -1);
     }
 
     // Turning leaf: both faces uploaded, per-fragment facing picks front vs back.
@@ -415,7 +447,6 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uAngle ?? null, pose.angle);
     gl.uniform1f(this.#curlU.uCurl ?? null, pose.curl);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
-    gl.uniform1f(this.#curlU.uShadow ?? null, pose.shadowAlpha);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.#gridCount);
   }
 
@@ -429,11 +460,12 @@ export class WebglRenderer implements Renderer {
     gl.uniform3f(this.#flatU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
   }
 
-  #drawQuad(rect: Rect, source: TexImageSource | null): void {
+  #drawQuad(rect: Rect, source: TexImageSource | null, gutterSide = 0): void {
     const gl = this.#gl!;
     if (source === null) return;
     this.#bindFace(gl.TEXTURE0, source);
     gl.uniform4f(this.#flatU.uRect ?? null, rect.x, rect.y, rect.w, rect.h);
+    gl.uniform1f(this.#flatU.uGutterSide ?? null, gutterSide);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 

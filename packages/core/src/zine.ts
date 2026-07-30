@@ -158,7 +158,7 @@ export class Zine {
     if (typeof this.#source.open !== 'function') {
       this.#buildSpreadModel();
     }
-    this.#flipDuration = options.flipDuration ?? 500;
+    this.#flipDuration = options.flipDuration ?? 800;
     this.#zoomEnabled = options.zoom?.enabled ?? true;
     this.#wheelZoom = options.zoom?.wheel ?? true;
     const dbl = options.zoom?.doubleClick;
