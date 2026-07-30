@@ -1,10 +1,18 @@
 {
   "name": "@zinejs/pdf",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "PDF content source for zinejs, powered by pdf.js.",
   "type": "module",
   "sideEffects": false,
   "license": "PolyForm-Noncommercial-1.0.0",
+  "keywords": ["flipbook", "pdf", "pdf.js", "page-flip", "viewer", "zinejs"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/awecode/zinejs.git",
+    "directory": "packages/pdf"
+  },
+  "homepage": "https://github.com/awecode/zinejs/tree/main/packages/pdf#readme",
+  "bugs": "https://github.com/awecode/zinejs/issues",
   "files": ["dist"],
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
@@ -14,18 +22,22 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm typecheck && vitest run",
-    "size": "pnpm build && size-limit"
+    "size": "pnpm build && size-limit",
+    "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
-    "@zinejs/core": "workspace:*",
+    "@zinejs/core": "workspace:^",
     "pdfjs-dist": ">=4"
   },
   "devDependencies": {
-    "@zinejs/core": "workspace:*"
+    "@zinejs/core": "workspace:^"
   },
   "size-limit": [
     {

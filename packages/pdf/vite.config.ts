@@ -17,6 +17,10 @@ const WORKER_PLACEHOLDER = '@@ZINE_PDF_WORKER_URL@@';
 function preservePdfWorkerUrl(): Plugin {
   return {
     name: 'zine:preserve-pdf-worker-url',
+    // Build only: the transform's placeholder is undone in generateBundle, which
+    // doesn't run under vitest/dev — so applying it there would leave the placeholder
+    // in the live module. Under vitest the real `new URL(...)` literal runs as-is.
+    apply: 'build',
     enforce: 'pre',
     transform(code, id) {
       if (id.includes('pdfSource') && code.includes(WORKER_URL_EXPR)) {

@@ -487,7 +487,8 @@ export class WebglRenderer implements Renderer {
     }
     const tex = createTexture(gl); // binds + uploads on the active unit set by the caller
     uploadTexture(gl, tex, source);
-    const bytes = source.width * source.height * 4;
+    const dims = source as unknown as { width: number; height: number }; // page rasters have both
+    const bytes = dims.width * dims.height * 4;
     this.#texCache.set(source, { tex, bytes });
     this.#cacheBytes += bytes;
     this.#evictTextures();
