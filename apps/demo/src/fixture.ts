@@ -21,7 +21,7 @@ const book = document.getElementById('book')!;
 const zine = new Zine(book, {
   source: makeSource(),
   direction: params.get('direction') === 'rtl' ? 'rtl' : 'ltr',
-  cover: params.has('cover'),
+  spreadMode: params.has('cover') ? 'cover' : 'double',
   startPage: Number(params.get('start') ?? 0),
 });
 

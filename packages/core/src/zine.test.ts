@@ -42,7 +42,7 @@ describe('Zine — slice 1 (construct → mount → first spread)', () => {
   it('mounts a renderer and paints the first spread', async () => {
     const el = container();
     const source = new FakeSource(4);
-    const zine = new Zine(el, { source, renderer: 'css' });
+    const zine = new Zine(el, { source, renderer: 'css', spreadMode: 'double' });
     await zine.ready;
 
     expect(el.querySelector('.zine-viewport')).not.toBeNull();
@@ -61,7 +61,7 @@ describe('Zine — slice 1 (construct → mount → first spread)', () => {
   it('opens on startPage, resolving the spread that contains it', async () => {
     const el = container();
     const source = new FakeSource(4);
-    const zine = new Zine(el, { source, renderer: 'css', startPage: 2 });
+    const zine = new Zine(el, { source, renderer: 'css', startPage: 2, spreadMode: 'double' });
     await zine.ready;
     expect(zine.getPage()).toBe(2);
     expect(source.getCalls).toContain(2);

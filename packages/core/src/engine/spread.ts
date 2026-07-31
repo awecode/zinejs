@@ -1,5 +1,14 @@
 export type Direction = 'ltr' | 'rtl';
 
+/**
+ * How pages group into spreads:
+ * - `double`: paired from the start — `[0|1] [2|3] …`
+ * - `single`: one page per spread — `[0] [1] …`
+ * - `cover`: first page alone, then paired — `[·|0] [1|2] …`
+ * - `book`: first AND last alone (front + back cover) — `[·|0] [1|2] … [N-1|·]`
+ */
+export type SpreadMode = 'double' | 'single' | 'cover' | 'book';
+
 export interface Spread {
   /** Page index shown on the left, or null for a blank side. */
   left: number | null;
@@ -9,10 +18,7 @@ export interface Spread {
 
 export interface SpreadOptions {
   direction?: Direction;
-  /** First page is a lone cover on the leading side; interior pages pair up after it. */
-  cover?: boolean;
-  /** One page per spread (narrow/portrait viewports). Takes precedence over `cover`. */
-  singlePage?: boolean;
+  mode?: SpreadMode;
 }
 
 /**
@@ -20,27 +26,30 @@ export interface SpreadOptions {
  *
  * Reading order is always preserved; `direction` only mirrors each spread's
  * left/right positions, so RTL is just an LTR layout with the sides swapped.
- * Out-of-range slots are `null` (a blank half on odd counts / the back cover).
+ * Out-of-range slots are `null` (a blank half on odd counts / a lone cover).
  */
 export function buildSpreads(pageCount: number, options: SpreadOptions = {}): Spread[] {
-  const { direction = 'ltr', cover = false, singlePage = false } = options;
+  const { direction = 'ltr', mode = 'cover' } = options;
   if (pageCount <= 0) return [];
 
   const page = (i: number): number | null => (i >= 0 && i < pageCount ? i : null);
   const spreads: Spread[] = [];
 
-  if (singlePage) {
-    for (let i = 0; i < pageCount; i++) {
-      spreads.push({ left: null, right: i });
-    }
-  } else if (cover) {
+  if (mode === 'single') {
+    for (let i = 0; i < pageCount; i++) spreads.push({ left: null, right: i });
+  } else if (mode === 'double') {
+    for (let i = 0; i < pageCount; i += 2) spreads.push({ left: page(i), right: page(i + 1) });
+  } else if (mode === 'cover') {
     spreads.push({ left: null, right: 0 });
-    for (let i = 1; i < pageCount; i += 2) {
-      spreads.push({ left: page(i), right: page(i + 1) });
-    }
+    for (let i = 1; i < pageCount; i += 2) spreads.push({ left: page(i), right: page(i + 1) });
   } else {
-    for (let i = 0; i < pageCount; i += 2) {
-      spreads.push({ left: page(i), right: page(i + 1) });
+    // book: front cover alone, interior paired, back cover alone
+    spreads.push({ left: null, right: 0 });
+    if (pageCount > 1) {
+      for (let i = 1; i <= pageCount - 2; i += 2) {
+        spreads.push({ left: page(i), right: i + 1 <= pageCount - 2 ? page(i + 1) : null });
+      }
+      spreads.push({ left: pageCount - 1, right: null });
     }
   }
 

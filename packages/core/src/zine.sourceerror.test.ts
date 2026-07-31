@@ -40,7 +40,7 @@ const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as 
 describe('Zine — source errors', () => {
   it('emits sourceError with the page index and renders that page blank', async () => {
     const renderer = new MockRenderer();
-    const zine = new Zine(el, { source: new FailingSource(4, 1), renderer }); // spread 0 = pages 0,1
+    const zine = new Zine(el, { source: new FailingSource(4, 1), renderer, spreadMode: 'double' }); // spread 0 = pages 0,1
     const errors: Array<{ index: number; error: unknown }> = [];
     zine.on('sourceError', (e) => errors.push(e));
 

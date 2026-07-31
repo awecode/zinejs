@@ -80,7 +80,7 @@ describe('Zine — slice 5 (resize + single-page mode)', () => {
 
   it('update() switches from double to single page, keeping the current page', async () => {
     const renderer = new MockRenderer(); // starts wide (800) → double
-    const zine = new Zine(el, { source: new FakeSource(4), renderer });
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, spreadMode: 'double' });
     await zine.ready;
     expect(renderer.rendered.at(-1)).toEqual({ left: 0, right: 1 });
 
@@ -92,7 +92,7 @@ describe('Zine — slice 5 (resize + single-page mode)', () => {
 
   it('a ResizeObserver notification triggers an rAF-throttled update', async () => {
     const renderer = new MockRenderer();
-    const zine = new Zine(el, { source: new FakeSource(4), renderer });
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, spreadMode: 'double' });
     await zine.ready;
     expect(roCallbacks.length).toBe(1);
 
@@ -107,7 +107,7 @@ describe('Zine — slice 5 (resize + single-page mode)', () => {
 
   it('does not re-render on resize while a flip is animating', async () => {
     const renderer = new MockRenderer();
-    const zine = new Zine(el, { source: new FakeSource(4), renderer });
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, spreadMode: 'double' });
     await zine.ready;
     const rerenders = renderer.rendered.length;
 

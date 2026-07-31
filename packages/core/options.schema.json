@@ -40,10 +40,11 @@
       "default": "ltr",
       "description": "Reading direction."
     },
-    "cover": {
-      "type": "boolean",
-      "default": false,
-      "description": "Treat the first page as a lone cover."
+    "spreadMode": {
+      "type": "string",
+      "enum": ["double", "single", "cover", "book"],
+      "default": "cover",
+      "description": "How pages group into spreads: 'double' (paired from page 0), 'single' (one per spread), 'cover' (lone first page), 'book' (lone first and last)."
     },
     "startPage": {
       "type": "integer",
@@ -54,7 +55,7 @@
     "flipDuration": {
       "type": "number",
       "minimum": 0,
-      "default": 500,
+      "default": 800,
       "description": "Flip animation duration in milliseconds."
     },
     "clickToFlip": {
@@ -100,7 +101,7 @@
       "type": "number",
       "minimum": 0,
       "default": 640,
-      "description": "Container widths (px) below this switch to one page per spread."
+      "description": "Container widths (px) below this switch to one page per spread; 0 disables the responsive fallback."
     }
   }
 }

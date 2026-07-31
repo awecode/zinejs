@@ -46,7 +46,7 @@ function key(el: HTMLElement, k: string): void {
 
 async function makeZine(startPage = 0): Promise<{ zine: Zine; el: HTMLElement }> {
   const el = container();
-  const zine = new Zine(el, { source: new FakeSource(6), renderer: new MockRenderer(), startPage });
+  const zine = new Zine(el, { source: new FakeSource(6), renderer: new MockRenderer(), startPage, spreadMode: 'double' });
   await zine.ready;
   return { zine, el };
 }

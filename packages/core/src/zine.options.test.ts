@@ -71,6 +71,12 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects an invalid spreadMode', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), spreadMode: 'triple' as any })).toThrow(
+      /spreadMode/,
+    );
+  });
+
   it('rejects a non-positive width', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), width: 0 })).toThrow(/width/);
   });

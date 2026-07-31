@@ -46,7 +46,7 @@ new Zine(document.getElementById('book'), {
 new Zine(container, {
   source,                    // ImageSource | PdfSource (required)
   direction: 'ltr',          // 'ltr' | 'rtl'
-  cover: false,              // treat the first page as a standalone cover
+  spreadMode: 'cover',       // 'double' | 'single' | 'cover' (lone first page) | 'book' (lone first & last)
   startPage: 0,
   flipDuration: 800,         // ms
   singlePageThreshold: 640,  // px: below this, show one page at a time

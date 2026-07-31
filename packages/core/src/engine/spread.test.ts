@@ -6,56 +6,71 @@ describe('buildSpreads', () => {
     expect(buildSpreads(0)).toEqual([]);
   });
 
-  it('pairs pages two-up by default', () => {
+  it('defaults to cover mode (lone first page)', () => {
     expect(buildSpreads(4)).toEqual([
-      { left: 0, right: 1 },
-      { left: 2, right: 3 },
-    ]);
-  });
-
-  it('leaves a blank half on an odd page count', () => {
-    expect(buildSpreads(5)).toEqual([
-      { left: 0, right: 1 },
-      { left: 2, right: 3 },
-      { left: 4, right: null },
-    ]);
-  });
-
-  it('shows a lone cover, then pairs the interior', () => {
-    expect(buildSpreads(5, { cover: true })).toEqual([
-      { left: null, right: 0 },
-      { left: 1, right: 2 },
-      { left: 3, right: 4 },
-    ]);
-  });
-
-  it('leaves a lone back cover when cover mode runs out on an even count', () => {
-    expect(buildSpreads(4, { cover: true })).toEqual([
       { left: null, right: 0 },
       { left: 1, right: 2 },
       { left: 3, right: null },
     ]);
   });
 
-  it('mirrors left/right for RTL while preserving reading order', () => {
-    expect(buildSpreads(4, { direction: 'rtl' })).toEqual([
-      { left: 1, right: 0 },
-      { left: 3, right: 2 },
+  it('double: pairs two-up from the start', () => {
+    expect(buildSpreads(4, { mode: 'double' })).toEqual([
+      { left: 0, right: 1 },
+      { left: 2, right: 3 },
     ]);
   });
 
-  it('emits one page per spread in single-page mode', () => {
-    expect(buildSpreads(3, { singlePage: true })).toEqual([
+  it('double: leaves a blank half on an odd count', () => {
+    expect(buildSpreads(5, { mode: 'double' })).toEqual([
+      { left: 0, right: 1 },
+      { left: 2, right: 3 },
+      { left: 4, right: null },
+    ]);
+  });
+
+  it('cover: lone first page, then paired interior', () => {
+    expect(buildSpreads(5, { mode: 'cover' })).toEqual([
+      { left: null, right: 0 },
+      { left: 1, right: 2 },
+      { left: 3, right: 4 },
+    ]);
+  });
+
+  it('book: front and back covers both alone', () => {
+    expect(buildSpreads(6, { mode: 'book' })).toEqual([
+      { left: null, right: 0 },
+      { left: 1, right: 2 },
+      { left: 3, right: 4 },
+      { left: 5, right: null },
+    ]);
+  });
+
+  it('book: forces the last page alone even when it would otherwise pair', () => {
+    expect(buildSpreads(5, { mode: 'book' })).toEqual([
+      { left: null, right: 0 },
+      { left: 1, right: 2 },
+      { left: 3, right: null },
+      { left: 4, right: null },
+    ]);
+  });
+
+  it('book: a single-page book is just a front cover', () => {
+    expect(buildSpreads(1, { mode: 'book' })).toEqual([{ left: null, right: 0 }]);
+  });
+
+  it('single: one page per spread', () => {
+    expect(buildSpreads(3, { mode: 'single' })).toEqual([
       { left: null, right: 0 },
       { left: null, right: 1 },
       { left: null, right: 2 },
     ]);
   });
 
-  it('single-page mode takes precedence over cover', () => {
-    expect(buildSpreads(2, { singlePage: true, cover: true })).toEqual([
-      { left: null, right: 0 },
-      { left: null, right: 1 },
+  it('mirrors left/right for RTL while preserving reading order', () => {
+    expect(buildSpreads(4, { mode: 'double', direction: 'rtl' })).toEqual([
+      { left: 1, right: 0 },
+      { left: 3, right: 2 },
     ]);
   });
 });

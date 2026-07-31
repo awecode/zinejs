@@ -44,7 +44,7 @@ describe('Zine — async source (open)', () => {
   it('opens the source before building spreads, then exposes its page count', async () => {
     const source = new FakeAsyncSource(6);
     const renderer = new MockRenderer();
-    const zine = new Zine(el, { source, renderer });
+    const zine = new Zine(el, { source, renderer, spreadMode: 'double' });
     expect(source.opened).toBe(false); // open() runs during init, not construction
     await zine.ready;
     expect(source.opened).toBe(true);

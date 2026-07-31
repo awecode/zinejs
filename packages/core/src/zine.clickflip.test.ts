@@ -63,7 +63,7 @@ afterEach(() => {
 async function makeZine(startPage = 0, opts: Partial<ZineOptions> = {}): Promise<{ zine: Zine; el: HTMLElement }> {
   const el = document.createElement('div');
   document.body.append(el);
-  const zine = new Zine(el, { source: new FakeSource(4), renderer: new MockRenderer(), startPage, ...opts });
+  const zine = new Zine(el, { source: new FakeSource(4), renderer: new MockRenderer(), startPage, spreadMode: 'double', ...opts });
   await zine.ready;
   return { zine, el };
 }

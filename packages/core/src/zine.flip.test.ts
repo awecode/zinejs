@@ -82,7 +82,7 @@ const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as 
 async function makeZine(pageCount = 4, startPage = 0): Promise<{ zine: Zine; renderer: MockRenderer; source: FakeSource }> {
   const source = new FakeSource(pageCount);
   const renderer = new MockRenderer();
-  const zine = new Zine(el, { source, renderer, startPage, flipDuration: 500 });
+  const zine = new Zine(el, { source, renderer, startPage, flipDuration: 500, spreadMode: 'double' });
   await zine.ready;
   return { zine, renderer, source };
 }

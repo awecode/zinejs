@@ -1,4 +1,10 @@
-import { buildSpreads, shouldSinglePage, type Direction, type Spread } from './engine/spread';
+import {
+  buildSpreads,
+  shouldSinglePage,
+  type Direction,
+  type Spread,
+  type SpreadMode,
+} from './engine/spread';
 import { Virtualizer } from './engine/virtualizer';
 import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
@@ -57,8 +63,8 @@ export interface ZineOptions {
   height?: number;
   /** Reading direction; default 'ltr'. */
   direction?: Direction;
-  /** First page is a lone cover; default false. */
-  cover?: boolean;
+  /** How pages group into spreads: 'double' | 'single' | 'cover' | 'book'. Default 'cover'. */
+  spreadMode?: SpreadMode;
   /** Page to open on; default 0. */
   startPage?: number;
   /** Flip animation duration in ms; default 500. */
@@ -91,13 +97,14 @@ export class Zine {
   #virtualizer = new Virtualizer(2);
   #machine = new FlipMachine();
   #direction: Direction;
-  #cover: boolean;
+  #spreadMode: SpreadMode;
   #clickToFlip: 'edge' | 'half' | 'off';
   #clickZoneSize: number;
   #honorDoubleClickInFlipZone: boolean;
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
   #singlePage = false;
+  #narrow = false; // responsive: container currently below singlePageThreshold
   #startPageOption: number | undefined;
   #spreads: Spread[] = [];
   #current = 0;
@@ -146,9 +153,8 @@ export class Zine {
     if (options.height !== undefined) container.style.height = `${options.height}px`;
     this.#source = options.source;
     const direction = options.direction ?? 'ltr';
-    const cover = options.cover ?? false;
     this.#direction = direction;
-    this.#cover = cover;
+    this.#spreadMode = options.spreadMode ?? 'cover';
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
@@ -733,15 +739,18 @@ export class Zine {
     void this.#renderCurrent();
   }
 
+  /** The layout to actually use: the responsive narrow fallback forces 'single'. */
+  #effectiveMode(): SpreadMode {
+    return this.#narrow || this.#spreadMode === 'single' ? 'single' : this.#spreadMode;
+  }
+
   #applySinglePage(containerWidth: number): void {
-    const single = shouldSinglePage(containerWidth, this.#singlePageThreshold);
-    if (single === this.#singlePage) return;
-    this.#singlePage = single;
-    this.#spreads = buildSpreads(this.#source.pageCount, {
-      direction: this.#direction,
-      cover: this.#cover,
-      singlePage: single,
-    });
+    const narrow = shouldSinglePage(containerWidth, this.#singlePageThreshold);
+    if (narrow === this.#narrow) return;
+    this.#narrow = narrow;
+    const mode = this.#effectiveMode();
+    this.#singlePage = mode === 'single';
+    this.#spreads = buildSpreads(this.#source.pageCount, { direction: this.#direction, mode });
     this.#current = this.#spreadIndexForPage(this.#currentPage);
   }
 
@@ -818,7 +827,9 @@ export class Zine {
         `Zine: startPage ${JSON.stringify(startPage)} is out of range for a ${pageCount}-page book (valid 0..${pageCount - 1}).`,
       );
     }
-    this.#spreads = buildSpreads(pageCount, { direction: this.#direction, cover: this.#cover });
+    const mode = this.#effectiveMode();
+    this.#singlePage = mode === 'single';
+    this.#spreads = buildSpreads(pageCount, { direction: this.#direction, mode });
     this.#currentPage = clamp(startPage ?? 0, 0, pageCount - 1);
     this.#current = this.#spreadIndexForPage(this.#currentPage);
   }
@@ -878,6 +889,13 @@ function validateOptions(container: unknown, options: unknown): void {
   const clickToFlip = o.clickToFlip;
   if (clickToFlip !== undefined && !['edge', 'half', 'off'].includes(clickToFlip as string)) {
     throw new Error(`Zine: clickToFlip must be 'edge', 'half', or 'off'; got ${JSON.stringify(clickToFlip)}.`);
+  }
+
+  const spreadMode = o.spreadMode;
+  if (spreadMode !== undefined && !['double', 'single', 'cover', 'book'].includes(spreadMode as string)) {
+    throw new Error(
+      `Zine: spreadMode must be 'double', 'single', 'cover', or 'book'; got ${JSON.stringify(spreadMode)}.`,
+    );
   }
 
   assertMin(o.width, 'width', 1);
