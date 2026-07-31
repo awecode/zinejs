@@ -614,6 +614,9 @@ export class Zine {
     const renderer = await this.#mountWithFallback(selected);
     this.#renderer = renderer;
 
+    // Re-render the current spread when a source upgrades one of its pages in place.
+    this.#source.onPageUpdate?.((index) => this.#onPageUpdate(index));
+
     // Now that we can measure, apply single-page mode if the container is narrow.
     this.#applySinglePage(renderer.measure().containerWidth);
 
@@ -774,6 +777,15 @@ export class Zine {
 
   #paintSpread(spread: Spread, content: SpreadContent): void {
     this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
+  }
+
+  /** A source upgraded a page's content (e.g. progressive PDF); repaint if it's on screen and idle. */
+  #onPageUpdate(index: number): void {
+    if (this.#machine.state !== 'idle') return; // don't disturb an in-flight flip
+    const spread = this.#spreads[this.#current];
+    if (spread && (spread.left === index || spread.right === index)) {
+      void this.#renderCurrent();
+    }
   }
 
   #observeResize(): void {

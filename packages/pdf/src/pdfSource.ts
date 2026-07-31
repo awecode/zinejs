@@ -10,9 +10,14 @@ interface PdfDocumentLike {
   getPage(pageNumber: number): Promise<PdfPageLike>;
   destroy?(): void;
 }
+interface DocParams {
+  url?: string;
+  data?: ArrayBuffer | Uint8Array;
+  disableAutoFetch?: boolean;
+}
 interface PdfjsModule {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument(src: { url: string } | { data: ArrayBuffer | Uint8Array }): { promise: Promise<PdfDocumentLike> };
+  getDocument(src: DocParams): { promise: Promise<PdfDocumentLike> };
 }
 
 /** A URL, raw bytes, or a pre-created pdf.js document. */
@@ -27,9 +32,15 @@ export interface PdfSourceOptions {
   preload?: number;
   /** Soft cap on cached page bytes; least-recently-used pages evict beyond it. Default ~256 MB. */
   maxCacheBytes?: number;
+  /** Paint a low-res page first, then swap to crisp (faster first paint). Default false. */
+  progressive?: boolean;
+  /** Ask pdf.js to fetch only the byte ranges visible pages need (range-capable servers). Default false. */
+  disableAutoFetch?: boolean;
 }
 
 const DEFAULT_MAX_CACHE_BYTES = 256 * 1024 * 1024;
+// Linear-resolution fraction for the progressive low-res first pass (~1/9 the pixels).
+const PROGRESSIVE_LOW_RATIO = 0.35;
 
 interface CacheEntry {
   promise: Promise<PageContent>;
@@ -58,8 +69,11 @@ export class PdfSource implements Source {
   #preload: number;
   #doc: PdfDocumentLike | null = null;
   #maxCacheBytes: number;
+  #progressive: boolean;
+  #disableAutoFetch: boolean;
   #cache = new Map<number, CacheEntry>();
   #cachedBytes = 0;
+  #onUpdate: ((index: number) => void) | null = null;
 
   constructor(src: PdfSrc, options: PdfSourceOptions = {}) {
     this.#src = src;
@@ -67,6 +81,13 @@ export class PdfSource implements Source {
     this.#renderScale = options.renderScale ?? 1;
     this.#preload = options.preload ?? 1;
     this.#maxCacheBytes = options.maxCacheBytes ?? DEFAULT_MAX_CACHE_BYTES;
+    this.#progressive = options.progressive ?? false;
+    this.#disableAutoFetch = options.disableAutoFetch ?? false;
+  }
+
+  /** Register a handler called when a page upgrades from its progressive low-res pass to crisp. */
+  onPageUpdate(handler: (index: number) => void): void {
+    this.#onUpdate = handler;
   }
 
   async open(): Promise<void> {
@@ -75,7 +96,9 @@ export class PdfSource implements Source {
     } else {
       const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsModule;
       pdfjs.GlobalWorkerOptions.workerSrc = this.#resolveWorkerSrc(pdfjs.GlobalWorkerOptions.workerSrc);
-      const params = typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
+      const params: DocParams =
+        typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
+      if (this.#disableAutoFetch) params.disableAutoFetch = true;
       this.#doc = await pdfjs.getDocument(params).promise;
     }
     this.pageCount = this.#doc.numPages;
@@ -130,12 +153,17 @@ export class PdfSource implements Source {
       return existing.promise;
     }
 
+    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+    const full = this.#renderScale * dpr;
+    const firstScale = this.#progressive ? full * PROGRESSIVE_LOW_RATIO : full;
+
     const entry: CacheEntry = { promise: undefined as unknown as Promise<PageContent>, bytes: 0 };
-    entry.promise = this.#rasterize(index).then(
+    entry.promise = this.#rasterize(index, firstScale).then(
       (content) => {
         entry.bytes = content.width * content.height * 4; // RGBA
         this.#cachedBytes += entry.bytes;
         this.#evictToFit(index);
+        if (this.#progressive) this.#upgrade(index, entry, full);
         return content;
       },
       (error: unknown) => {
@@ -145,6 +173,21 @@ export class PdfSource implements Source {
     );
     this.#cache.set(index, entry);
     return entry.promise;
+  }
+
+  /** Progressive: re-render at full resolution, swap it into the cache, and signal an update. */
+  #upgrade(index: number, entry: CacheEntry, fullScale: number): void {
+    void this.#rasterize(index, fullScale)
+      .then((hi) => {
+        if (this.#cache.get(index) !== entry) return; // evicted or replaced meanwhile
+        this.#cachedBytes -= entry.bytes;
+        entry.promise = Promise.resolve(hi);
+        entry.bytes = hi.width * hi.height * 4;
+        this.#cachedBytes += entry.bytes;
+        this.#evictToFit(index);
+        this.#onUpdate?.(index);
+      })
+      .catch(() => {}); // keep the low-res if the upgrade fails
   }
 
   /** Drop least-recently-used pages (front of the Map) until under the byte cap. */
@@ -157,11 +200,10 @@ export class PdfSource implements Source {
     }
   }
 
-  async #rasterize(index: number): Promise<PageContent> {
+  async #rasterize(index: number, scale: number): Promise<PageContent> {
     if (this.#doc === null) throw new Error('PdfSource: use after open() — the document is not loaded.');
     const page = await this.#doc.getPage(index + 1); // pdf.js pages are 1-indexed
-    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const viewport = page.getViewport({ scale: this.#renderScale * dpr });
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);

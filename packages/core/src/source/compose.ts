@@ -41,6 +41,7 @@ class CompositeSource implements Source {
   #resolved = new Map<number, string>(); // base-index → url (negatives resolved)
   #cache = new Map<string, Promise<ImageBitmap>>();
   open?: () => Promise<void>;
+  onPageUpdate?: (handler: (index: number) => void) => void;
 
   constructor(base: Source, options: CompositionOptions) {
     this.#base = base;
@@ -56,6 +57,13 @@ class CompositeSource implements Source {
       };
     } else {
       this.#resolvePages(); // sync base: count is known now
+    }
+
+    if (typeof base.onPageUpdate === 'function') {
+      // Forward base page updates, shifting to book indices (past the front cover).
+      this.onPageUpdate = (handler) => {
+        base.onPageUpdate!((src) => handler(src + (this.#front !== null ? 1 : 0)));
+      };
     }
   }
 

@@ -19,4 +19,10 @@ export interface Source {
   prefetch(indices: number[]): void;
   /** Release any decoded resources. */
   destroy(): void;
+  /**
+   * Optional: register a handler called when a page's content has been upgraded
+   * (e.g. a progressive PDF render swapping low-res for crisp), so the engine can
+   * re-render that page if it's on screen.
+   */
+  onPageUpdate?(handler: (index: number) => void): void;
 }

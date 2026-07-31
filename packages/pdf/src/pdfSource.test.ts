@@ -5,17 +5,19 @@ import { PdfSource, type PdfSrc } from './pdfSource';
 type PdfjsGlobal = { GlobalWorkerOptions: { workerSrc: string } };
 const pdfjsMock = async () => (await import('pdfjs-dist')) as unknown as PdfjsGlobal;
 
-vi.mock('pdfjs-dist', () => {
+const mock = vi.hoisted(() => {
   const page = {
     getViewport: () => ({ width: 120, height: 160 }),
     render: () => ({ promise: Promise.resolve() }),
   };
   const doc = { numPages: 3, getPage: async () => page, destroy: () => {} };
-  return {
-    GlobalWorkerOptions: { workerSrc: '' },
-    getDocument: () => ({ promise: Promise.resolve(doc) }),
-  };
+  return { getDocument: vi.fn(() => ({ promise: Promise.resolve(doc) })) };
 });
+
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: { workerSrc: '' },
+  getDocument: mock.getDocument,
+}));
 
 describe('PdfSource', () => {
   beforeEach(async () => {
@@ -112,5 +114,37 @@ describe('PdfSource', () => {
     await src.get(1);
     await src.get(0); // under cap → never evicted → no re-render
     expect(getPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes disableAutoFetch through to pdf.js getDocument', async () => {
+    mock.getDocument.mockClear();
+    const src = new PdfSource('doc.pdf', { workerSrc: '/w.mjs', disableAutoFetch: true });
+    await src.open();
+    expect(mock.getDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'doc.pdf', disableAutoFetch: true }),
+    );
+  });
+
+  it('progressive: paints low-res first, upgrades to crisp, and signals an update', async () => {
+    const page = {
+      getViewport: ({ scale }: { scale: number }) => ({ width: 200 * scale, height: 200 * scale }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const getPage = vi.fn(async () => page);
+    const doc = { numPages: 3, getPage, destroy: () => {} } as unknown as PdfSrc;
+    const src = new PdfSource(doc, { progressive: true, preload: 0 });
+    await src.open();
+
+    const updates: number[] = [];
+    src.onPageUpdate((i) => updates.push(i));
+
+    const low = (await src.get(0)) as HTMLCanvasElement;
+    await new Promise((r) => setTimeout(r)); // let the high-res upgrade run
+
+    expect(getPage).toHaveBeenCalledTimes(2); // low pass + high pass
+    expect(updates).toEqual([0]); // upgrade signaled
+    const hi = (await src.get(0)) as HTMLCanvasElement;
+    expect(hi).not.toBe(low);
+    expect(hi.width).toBeGreaterThan(low.width); // crisper (more pixels)
   });
 });

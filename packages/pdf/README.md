@@ -75,9 +75,11 @@ new PdfSource(await getDocument(...).promise); // a pdf.js document you created;
 ```ts
 new PdfSource(src, {
   workerSrc,          // string — override the auto-resolved worker URL (see above)
-  renderScale: 1,     // pages rasterize at renderScale × devicePixelRatio
-  preload: 1,         // adjacent pages to prefetch around a requested page
-  maxCacheBytes,      // soft cap on cached page bytes (default ~256 MB); LRU-evicts beyond it
+  renderScale: 1,      // pages rasterize at renderScale × devicePixelRatio
+  preload: 1,          // adjacent pages to prefetch around a requested page
+  maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB); LRU-evicts beyond it
+  progressive: true,   // paint a low-res page first, then swap to crisp (faster first paint)
+  disableAutoFetch: true, // fetch only the byte ranges visible pages need (range-capable servers)
 });
 ```
 
