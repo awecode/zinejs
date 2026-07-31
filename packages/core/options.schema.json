@@ -46,6 +46,19 @@
       "default": "cover",
       "description": "How pages group into spreads: 'double' (paired from page 0), 'single' (one per spread), 'cover' (lone first page), 'book' (lone first and last)."
     },
+    "frontCover": {
+      "type": "string",
+      "description": "Image URL prepended as a lone front cover (adds a page)."
+    },
+    "backCover": {
+      "type": "string",
+      "description": "Image URL appended as a lone back cover (adds a page)."
+    },
+    "pages": {
+      "type": "object",
+      "description": "Replace source pages with image URLs, keyed by 0-based source index (negative = from the end).",
+      "additionalProperties": { "type": "string" }
+    },
     "startPage": {
       "type": "integer",
       "minimum": 0,

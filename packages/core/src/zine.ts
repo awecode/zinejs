@@ -13,6 +13,7 @@ import { hitTest } from './geometry/hitTest';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { Source } from './source/types';
+import { composeSource } from './source/compose';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
@@ -65,6 +66,12 @@ export interface ZineOptions {
   direction?: Direction;
   /** How pages group into spreads: 'double' | 'single' | 'cover' | 'book'. Default 'cover'. */
   spreadMode?: SpreadMode;
+  /** Image URL prepended as a lone front cover (adds a page). */
+  frontCover?: string;
+  /** Image URL appended as a lone back cover (adds a page). */
+  backCover?: string;
+  /** Replace source pages with image URLs, keyed by 0-based source index (negative = from the end). */
+  pages?: Record<number, string>;
   /** Page to open on; default 0. */
   startPage?: number;
   /** Flip animation duration in ms; default 500. */
@@ -151,7 +158,11 @@ export class Zine {
     this.#container = container;
     if (options.width !== undefined) container.style.width = `${options.width}px`;
     if (options.height !== undefined) container.style.height = `${options.height}px`;
-    this.#source = options.source;
+    this.#source = composeSource(options.source, {
+      frontCover: options.frontCover,
+      backCover: options.backCover,
+      pages: options.pages,
+    });
     const direction = options.direction ?? 'ltr';
     this.#direction = direction;
     this.#spreadMode = options.spreadMode ?? 'cover';
@@ -896,6 +907,17 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(
       `Zine: spreadMode must be 'double', 'single', 'cover', or 'book'; got ${JSON.stringify(spreadMode)}.`,
     );
+  }
+
+  for (const key of ['frontCover', 'backCover'] as const) {
+    const value = o[key];
+    if (value !== undefined && typeof value !== 'string') {
+      throw new Error(`Zine: ${key} must be an image URL string; got ${JSON.stringify(value)}.`);
+    }
+  }
+  const pages = o.pages;
+  if (pages !== undefined && (typeof pages !== 'object' || pages === null || Array.isArray(pages))) {
+    throw new Error('Zine: pages must be an object mapping page indices to image URLs.');
   }
 
   assertMin(o.width, 'width', 1);

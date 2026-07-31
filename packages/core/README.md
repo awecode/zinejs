@@ -47,6 +47,9 @@ new Zine(container, {
   source,                    // ImageSource | PdfSource (required)
   direction: 'ltr',          // 'ltr' | 'rtl'
   spreadMode: 'cover',       // 'double' | 'single' | 'cover' (lone first page) | 'book' (lone first & last)
+  frontCover: 'front.jpg',   // optional image prepended as a lone front cover
+  backCover: 'back.jpg',     // optional image appended as a lone back cover
+  pages: { 4: 'ad.jpg' },    // optional: replace source pages with images (0-based; -1 = last)
   startPage: 0,
   flipDuration: 800,         // ms
   singlePageThreshold: 640,  // px: below this, show one page at a time

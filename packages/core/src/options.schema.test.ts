@@ -11,6 +11,9 @@ describe('options.schema.json', () => {
     expect(Object.keys(schema.properties).sort()).toEqual(
       [
         'spreadMode',
+        'frontCover',
+        'backCover',
+        'pages',
         'direction',
         'width',
         'height',
