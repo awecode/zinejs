@@ -11,6 +11,13 @@ import type {
 
 const RAD_TO_DEG = 180 / Math.PI;
 
+/** How far to shift a spread to centre a lone page, in units of a quarter container width:
+ *  -1 = only a right page (cover), +1 = only a left page (back), 0 = a full spread. */
+function shiftUnit(content: SpreadContent): number {
+  const lone = (content.left === null) !== (content.right === null);
+  return lone ? (content.right !== null ? -1 : 1) : 0;
+}
+
 /**
  * Layered gradients painted over the turning leaf to fake paper depth on the flat
  * fold: a crease shadow at the spine, a soft curve sheen, and a free-edge shade.
@@ -42,6 +49,9 @@ export class CssRenderer implements Renderer {
   #leafFront!: HTMLCanvasElement;
   #leafBack!: HTMLCanvasElement;
   #leafShadow!: HTMLDivElement;
+  // Lone-page centering, interpolated across a flip (see the WebGL renderer).
+  #fromShiftUnit = 0;
+  #toShiftUnit = 0;
 
   mount(container: HTMLElement): Promise<void> {
     const doc = container.ownerDocument;
@@ -111,6 +121,7 @@ export class CssRenderer implements Renderer {
       this.#paint(this.#pageLeft, content.left);
       this.#paint(this.#pageRight, content.right);
     }
+    this.#applyShift(options?.fill ? 0 : shiftUnit(content));
     // A fresh spread cancels any in-progress flip.
     this.#leaf.style.display = 'none';
     this.#leaf.style.transform = '';
@@ -155,6 +166,9 @@ export class CssRenderer implements Renderer {
         this.#leaf.style.transformOrigin = 'right center';
       }
     }
+    this.#fromShiftUnit = options?.fill ? 0 : shiftUnit(from);
+    this.#toShiftUnit = options?.fill ? 0 : shiftUnit(to);
+    this.#applyShift(this.#fromShiftUnit);
     this.#leaf.style.display = 'block';
     this.#leaf.style.transform = 'rotateY(0deg)';
     this.#leafShadow.style.background = foldOverlay(direction);
@@ -164,9 +178,16 @@ export class CssRenderer implements Renderer {
   setFlipProgress(t: number, direction: FlipDirection): void {
     const pose = flipProgressToPose(t);
     const deg = pose.angle * RAD_TO_DEG;
+    this.#applyShift(this.#fromShiftUnit + (this.#toShiftUnit - this.#fromShiftUnit) * t);
     this.#leaf.style.display = 'block';
     this.#leaf.style.transform = `rotateY(${direction === 'forward' ? -deg : deg}deg)`;
     this.#leafShadow.style.opacity = String(pose.shadowAlpha);
+  }
+
+  #applyShift(unit: number): void {
+    const w = this.#container?.clientWidth ?? 0;
+    const px = unit * (w / 4);
+    this.#book.style.transform = px ? `translateX(${px}px)` : '';
   }
 
   setViewTransform(scale: number, x: number, y: number): void {

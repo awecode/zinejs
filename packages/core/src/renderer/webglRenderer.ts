@@ -135,6 +135,13 @@ interface FlipState {
   fill: boolean;
 }
 
+/** How far to shift a spread to centre a lone page, in units of a quarter container width:
+ *  -1 = only a right page (cover), +1 = only a left page (back), 0 = a full spread. */
+function shiftUnit(content: SpreadContent): number {
+  const lone = (content.left === null) !== (content.right === null);
+  return lone ? (content.right !== null ? -1 : 1) : 0;
+}
+
 /**
  * GPU renderer (WebGL2, hand-written). The turning leaf is a dense grid deformed on
  * the CPU by the selected curl model (see geometry/curls) and
@@ -171,6 +178,11 @@ export class WebglRenderer implements Renderer {
   #flipT = 0;
   #curlType: CurlType = DEFAULT_CURL;
   #anchor: CurlAnchor = { y: 0.5 };
+  // A lone page (cover / book front-back) sits on one half; these center it by shifting
+  // the view a quarter-width, interpolated across a flip so the open/close doesn't jump.
+  #shiftX = 0;
+  #fromShiftUnit = 0;
+  #toShiftUnit = 0;
 
   #contextLost = false;
   #fatalFired = false;
@@ -244,6 +256,8 @@ export class WebglRenderer implements Renderer {
     this.#flipT = 0;
     if (options?.curl) this.#curlType = options.curl;
     if (options?.anchor) this.#anchor = options.anchor;
+    this.#fromShiftUnit = fill ? 0 : shiftUnit(from);
+    this.#toShiftUnit = fill ? 0 : shiftUnit(to);
     if (fill) {
       this.#flip = {
         underLeft: null,
@@ -437,13 +451,15 @@ export class WebglRenderer implements Renderer {
     const canvas = this.#canvas!;
     const w = canvas.width;
     const h = canvas.height;
-    this.#useFlat();
     const content = this.#content!;
+    this.#shiftX = this.#fill ? 0 : shiftUnit(content) * (w / 4);
+    this.#useFlat();
     if (this.#fill) {
       this.#drawQuad({ x: 0, y: 0, w, h }, content.right ?? content.left);
     } else {
-      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left, 1);
-      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right, -1);
+      // A lone page (one side null) gets no gutter shadow — it's a standalone, centered page.
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left, content.right ? 1 : 0);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right, content.left ? -1 : 0);
     }
   }
 
@@ -453,6 +469,12 @@ export class WebglRenderer implements Renderer {
     const w = canvas.width;
     const h = canvas.height;
     const flip = this.#flip!;
+
+    // Interpolate the lone-page centering across the flip so an opening cover (or a
+    // closing back page) slides between centered and spread instead of jumping.
+    this.#shiftX = flip.fill
+      ? 0
+      : (this.#fromShiftUnit + (this.#toShiftUnit - this.#fromShiftUnit) * this.#flipT) * (w / 4);
 
     // Static pages underneath (with gutter shadow).
     this.#useFlat();
@@ -481,7 +503,12 @@ export class WebglRenderer implements Renderer {
     gl.useProgram(this.#curl);
     gl.bindVertexArray(this.#curlVao);
     gl.uniform2f(this.#curlU.uViewport ?? null, w, h);
-    gl.uniform3f(this.#curlU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
+    gl.uniform3f(
+      this.#curlU.uView ?? null,
+      this.#view.scale,
+      this.#view.tx * this.#dpr + this.#shiftX,
+      this.#view.ty * this.#dpr,
+    );
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
@@ -495,7 +522,12 @@ export class WebglRenderer implements Renderer {
     gl.bindVertexArray(this.#quadVao);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(this.#flatU.uViewport ?? null, canvas.width, canvas.height);
-    gl.uniform3f(this.#flatU.uView ?? null, this.#view.scale, this.#view.tx * this.#dpr, this.#view.ty * this.#dpr);
+    gl.uniform3f(
+      this.#flatU.uView ?? null,
+      this.#view.scale,
+      this.#view.tx * this.#dpr + this.#shiftX,
+      this.#view.ty * this.#dpr,
+    );
   }
 
   #drawQuad(rect: Rect, source: TexImageSource | null, gutterSide = 0): void {
