@@ -46,6 +46,12 @@
       "default": "cover",
       "description": "How pages group into spreads: 'double' (paired from page 0), 'single' (one per spread), 'cover' (lone first page), 'book' (lone first and last)."
     },
+    "curl": {
+      "type": "string",
+      "enum": ["roll", "simple", "fold", "peel"],
+      "default": "roll",
+      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over), 'simple' (rotate-and-bend cylinder), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
+    },
     "frontCover": {
       "type": "string",
       "description": "Image URL prepended as a lone front cover (adds a page)."

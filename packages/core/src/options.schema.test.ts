@@ -23,6 +23,7 @@ describe('options.schema.json', () => {
         'clickFlipDelay',
         'zoom',
         'renderer',
+        'curl',
         'singlePageThreshold',
         'source',
         'startPage',

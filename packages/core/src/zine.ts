@@ -10,6 +10,7 @@ import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
 import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
 import { hitTest } from './geometry/hitTest';
+import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { Source } from './source/types';
@@ -58,6 +59,8 @@ export interface ZineOptions {
   source: Source;
   /** Renderer selection; default 'auto'. */
   renderer?: RendererOption;
+  /** Page-curl model for the WebGL2 renderer: 'roll' | 'simple' | 'fold' | 'peel'. Default 'roll'. */
+  curl?: CurlType;
   /** Fixed container width in px; omit to let the container/CSS drive the size. */
   width?: number;
   /** Fixed container height in px; omit to let the container/CSS drive the size. */
@@ -105,6 +108,8 @@ export class Zine {
   #machine = new FlipMachine();
   #direction: Direction;
   #spreadMode: SpreadMode;
+  #curl: CurlType;
+  #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
   #clickZoneSize: number;
   #honorDoubleClickInFlipZone: boolean;
@@ -166,6 +171,7 @@ export class Zine {
     const direction = options.direction ?? 'ltr';
     this.#direction = direction;
     this.#spreadMode = options.spreadMode ?? 'cover';
+    this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
@@ -302,6 +308,8 @@ export class Zine {
       : { left: null, right: null };
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
+      curl: this.#curl,
+      anchor: { y: this.#anchorY },
     });
     this.#animateProgress(0, 1, direction, () => this.#commit(targetIndex, toPage, toContent));
   }
@@ -373,6 +381,7 @@ export class Zine {
     if (hitTest(point, { width: containerWidth, height: containerHeight }, cornerSize) !== 'corner') {
       return; // not a corner — no drag; a tap here may still click-to-flip on release
     }
+    this.#anchorY = clamp(point.y / containerHeight, 0, 1); // fold anchors at the grabbed corner
     // Arm a potential drag; it only becomes a real flip once the pointer moves
     // (so a corner *tap* never fires a spurious flipStart). Right-side corner
     // turns the page forward in LTR; RTL mirrors it.
@@ -416,6 +425,8 @@ export class Zine {
     this.#drag.toContent = toContent;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
+      curl: this.#curl,
+      anchor: { y: this.#anchorY },
     });
     this.#renderer?.setFlipProgress(this.#drag.t, direction);
   }
@@ -485,6 +496,9 @@ export class Zine {
     if (!direction) return;
     const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
+    // Anchor the fold at the tapped height (the fold/peel curls fold from where you tap).
+    const { containerHeight } = this.#renderer!.measure();
+    this.#anchorY = clamp(this.#press.y / containerHeight, 0, 1);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {
       // No double-click competing here → flip right away.
@@ -912,6 +926,11 @@ function validateOptions(container: unknown, options: unknown): void {
   const clickToFlip = o.clickToFlip;
   if (clickToFlip !== undefined && !['edge', 'half', 'off'].includes(clickToFlip as string)) {
     throw new Error(`Zine: clickToFlip must be 'edge', 'half', or 'off'; got ${JSON.stringify(clickToFlip)}.`);
+  }
+
+  const curl = o.curl;
+  if (curl !== undefined && !CURL_TYPES.includes(curl as CurlType)) {
+    throw new Error(`Zine: curl must be one of ${CURL_TYPES.join(', ')}; got ${JSON.stringify(curl)}.`);
   }
 
   const spreadMode = o.spreadMode;

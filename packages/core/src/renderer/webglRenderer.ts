@@ -1,4 +1,11 @@
-import { createPageMesh, deformPageTurn, type PageMesh } from '../geometry/pageCurl';
+import {
+  CURLS,
+  createPageMesh,
+  DEFAULT_CURL,
+  type CurlAnchor,
+  type CurlType,
+  type PageMesh,
+} from '../geometry/curls';
 import type { Spread } from '../engine/spread';
 import type {
   FlipDirection,
@@ -43,7 +50,7 @@ void main() {
 }`;
 
 // Curl program: a thin pass-through for the CPU-deformed page mesh (positions and
-// normals come from deformPageTurn). It places the leaf, applies a top-safe depth
+// normals come from the selected curl model). It places the leaf, applies a top-safe depth
 // perspective, and lights from the true surface normal.
 const CURL_VERT = `#version 300 es
 in vec3 aPos;    // leaf-local device px: x = bent offset from spine, y 0..H, z depth
@@ -93,13 +100,16 @@ void main() {
   vec4 c = showFront ? texture(uFront, vec2(fx, vUv.y)) : texture(uBack, vec2(1.0 - fx, vUv.y));
 
   // Fold shading: the sheet darkens sharply where it curves away from the viewer, so the
-  // rolled edge reads as a deep crease with a soft highlight riding the ridge (turn.js-like).
+  // rolled edge reads as a deep crease with a soft highlight riding the ridge.
   float diff = clamp(abs(vFacing), 0.0, 1.0);
   float lit = mix(0.42, 1.0, diff);
-  float sheen = smoothstep(0.55, 0.98, diff) * (1.0 - diff) * 0.7;
   lit *= mix(0.7, 1.0, smoothstep(0.0, 0.12, vU)); // spine crease matches the gutter shadow
 
-  c.rgb = clamp(c.rgb * lit + sheen, 0.0, 1.0);
+  // Glossy specular: brightest where the surface tilts ~30 deg from facing the viewer,
+  // so a thin glossy highlight rides across the sheet as it rolls.
+  float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22;
+
+  c.rgb = clamp(c.rgb * lit + spec, 0.0, 1.0);
   outColor = c;
 }`;
 
@@ -127,7 +137,7 @@ interface FlipState {
 
 /**
  * GPU renderer (WebGL2, hand-written). The turning leaf is a dense grid deformed on
- * the CPU by deformPageTurn (flipbook-vue-style cylinder roll-and-flop) and
+ * the CPU by the selected curl model (see geometry/curls) and
  * uploaded each frame, lit from real normals; the static pages are flat quads with a
  * gutter shadow. Restores
  * GL state on context loss; signals onFatal (→ CSS fallback) when unrecoverable.
@@ -159,6 +169,8 @@ export class WebglRenderer implements Renderer {
   #fill = false;
   #flip: FlipState | null = null;
   #flipT = 0;
+  #curlType: CurlType = DEFAULT_CURL;
+  #anchor: CurlAnchor = { y: 0.5 };
 
   #contextLost = false;
   #fatalFired = false;
@@ -230,6 +242,8 @@ export class WebglRenderer implements Renderer {
   ): void {
     const fill = options?.fill ?? false;
     this.#flipT = 0;
+    if (options?.curl) this.#curlType = options.curl;
+    if (options?.anchor) this.#anchor = options.anchor;
     if (fill) {
       this.#flip = {
         underLeft: null,
@@ -451,10 +465,10 @@ export class WebglRenderer implements Renderer {
 
     if (flip.front === null && flip.back === null) return;
 
-    // Deform the leaf mesh (cylinder roll-and-flop) on the CPU and upload it, then draw.
+    // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    deformPageTurn(this.#mesh, leafW, h, this.#flipT);
+    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#posBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#mesh.positions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#normBuf);

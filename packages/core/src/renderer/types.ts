@@ -1,4 +1,5 @@
 import type { Spread } from '../engine/spread';
+import type { CurlType, CurlAnchor } from '../geometry/curls/types';
 
 /** A decoded, ready-to-paint raster for one page (produced by a content source). */
 export type PageContent = ImageBitmap | HTMLCanvasElement;
@@ -14,6 +15,10 @@ export type FlipDirection = 'forward' | 'backward';
 export interface RenderOptions {
   /** Render a lone page filling the container (single-page mode), not a half panel. */
   fill?: boolean;
+  /** Which page-curl model the WebGL2 renderer bends the leaf with (ignored by CSS). */
+  curl?: CurlType;
+  /** Corner the fold originates from for anchored curls; y in [0,1] (where the reader tapped). */
+  anchor?: CurlAnchor;
 }
 
 /** Layout metrics the engine needs for geometry and mode decisions. */
