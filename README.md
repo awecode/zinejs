@@ -107,11 +107,13 @@ The WebGL2 renderer bends the turning leaf with one of four models (`curl` optio
 | `curl` | Motion | Anchored to tap? |
 | --- | --- | --- |
 | `roll` (default) | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
-| `simple` | Rotates around the spine while bending into a cylinder — one continuous motion. | No |
+| `simple` | Plain flat page turn: a rigid spine rotation, edge-on at the midpoint, no bend. | No |
 | `fold` | Flat origami fold with a hard crease; folds from the tapped corner. | Yes |
 | `peel` | Smooth diagonal corner peel; lifts from the tapped corner. | Yes |
 
 For anchored models (`fold`, `peel`), the fold originates at the corner nearest where the reader taps/grabs.
+
+On a lone page (`single` mode, or a cover/back page), `roll` has no facing page to flop onto, so it turns with a gentle paper bend instead — glossy and shaded like the spread roll — and a touch slower. The other models are unchanged on lone pages.
 
 ## Methods
 

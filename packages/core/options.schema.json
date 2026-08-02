@@ -50,7 +50,7 @@
       "type": "string",
       "enum": ["roll", "simple", "fold", "peel"],
       "default": "roll",
-      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over), 'simple' (rotate-and-bend cylinder), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
+      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page bends and turns instead, slightly slower), 'simple' (plain flat page turn, no bend), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
     },
     "frontCover": {
       "type": "string",
