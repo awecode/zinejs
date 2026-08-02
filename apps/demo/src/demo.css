@@ -98,9 +98,11 @@ button:hover {
 }
 #book {
   position: relative;
-  width: 900px;
-  height: 560px;
-  max-width: 100%;
+  /* Width capped so height (= width / aspect) stays on-screen; aspect-ratio (fallback here,
+     set precisely by the library once pages load) drives the height. */
+  width: min(920px, 100%, calc(78vh * var(--book-ar, 1.55)));
+  aspect-ratio: var(--book-ar, 1.55);
+  margin: 0 auto;
   background: #0c0c11;
   border-radius: 6px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);

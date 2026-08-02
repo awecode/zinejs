@@ -52,6 +52,10 @@ export class CssRenderer implements Renderer {
   // Lone-page centering, interpolated across a flip (see the WebGL renderer).
   #fromShiftUnit = 0;
   #toShiftUnit = 0;
+  // Book aspect fit: the spread is letterboxed to the page aspect (see the WebGL renderer).
+  #pageAspect = 0;
+  #bookW = 0;
+  #fill = false;
 
   mount(container: HTMLElement): Promise<void> {
     const doc = container.ownerDocument;
@@ -121,7 +125,10 @@ export class CssRenderer implements Renderer {
       this.#paint(this.#pageLeft, content.left);
       this.#paint(this.#pageRight, content.right);
     }
-    this.#applyShift(options?.fill ? 0 : shiftUnit(content));
+    this.#fill = options?.fill ?? false;
+    this.#trackAspect(content);
+    this.#layoutBook();
+    this.#applyShift(this.#fill ? 0 : shiftUnit(content));
     // A fresh spread cancels any in-progress flip.
     this.#leaf.style.display = 'none';
     this.#leaf.style.transform = '';
@@ -168,6 +175,9 @@ export class CssRenderer implements Renderer {
     }
     this.#fromShiftUnit = options?.fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = options?.fill ? 0 : shiftUnit(to);
+    this.#fill = options?.fill ?? false;
+    this.#trackAspect(to);
+    this.#layoutBook();
     this.#applyShift(this.#fromShiftUnit);
     this.#leaf.style.display = 'block';
     this.#leaf.style.transform = 'rotateY(0deg)';
@@ -185,9 +195,40 @@ export class CssRenderer implements Renderer {
   }
 
   #applyShift(unit: number): void {
-    const w = this.#container?.clientWidth ?? 0;
-    const px = unit * (w / 4);
+    const px = unit * (this.#bookW / 4);
     this.#book.style.transform = px ? `translateX(${px}px)` : '';
+  }
+
+  /** Remember the page aspect (width/height) so the book can be letterboxed to it. */
+  #trackAspect(content: SpreadContent): void {
+    const p = content.left ?? content.right;
+    if (p && p.height) this.#pageAspect = p.width / p.height;
+  }
+
+  /** Letterbox the 2-page book to the page aspect, centered in the container, so pages
+   *  fill their halves without stretching; the surround is the container background. */
+  #layoutBook(): void {
+    const b = this.#bookBox();
+    this.#bookW = b.width;
+    const s = this.#book.style;
+    s.inset = 'auto';
+    s.left = `${b.x}px`;
+    s.top = `${b.y}px`;
+    s.width = `${b.width}px`;
+    s.height = `${b.height}px`;
+  }
+
+  /** The fitted book rect in container px (letterbox aware), for layout + hit-testing. */
+  #bookBox(): { x: number; y: number; width: number; height: number } {
+    const cw = this.#container?.clientWidth ?? 0;
+    const ch = this.#container?.clientHeight ?? 0;
+    if (this.#pageAspect <= 0 || cw <= 0 || ch <= 0) return { x: 0, y: 0, width: cw, height: ch };
+    const ba = (this.#fill ? 1 : 2) * this.#pageAspect;
+    let bw = cw;
+    let bh = ch;
+    if (ba > cw / ch) bh = cw / ba;
+    else bw = ch * ba;
+    return { x: (cw - bw) / 2, y: (ch - bh) / 2, width: bw, height: bh };
   }
 
   setViewTransform(scale: number, x: number, y: number): void {
@@ -198,7 +239,8 @@ export class CssRenderer implements Renderer {
     const el = this.#container;
     const w = el?.clientWidth ?? 0;
     const h = el?.clientHeight ?? 0;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h };
+    const book = this.#pageAspect > 0 ? this.#bookBox() : undefined;
+    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book };
   }
 
   #makeCanvas(doc: Document, className: string, extra: string): HTMLCanvasElement {

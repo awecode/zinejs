@@ -65,6 +65,11 @@ const controlsEl = document.getElementById('controls')!;
 const statusEl = document.getElementById('status')!;
 const debugEl = document.getElementById('debug')!;
 
+// The library sets the container's aspect-ratio to the book once pages load. We only hint
+// the sample aspect here so the CSS can cap the width to keep the height on-screen.
+const sampleAspect = (opt.spreadMode === 'single' ? 1 : 2) * (kind === 'pdf' ? 612 / 792 : 1200 / 1548);
+book.style.setProperty('--book-ar', String(sampleAspect));
+
 // ---- Controls ----------------------------------------------------------------
 function selectControl<T extends string>(
   label: string,

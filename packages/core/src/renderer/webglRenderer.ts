@@ -183,6 +183,11 @@ export class WebglRenderer implements Renderer {
   #shiftX = 0;
   #fromShiftUnit = 0;
   #toShiftUnit = 0;
+  // Book aspect fit: the 2-page spread is letterboxed to the pages' aspect, centered
+  // in the container, so pages fill their halves without stretching. 0 = aspect unknown.
+  #pageAspect = 0;
+  #bookW = 0;
+  #bookH = 0;
 
   #contextLost = false;
   #fatalFired = false;
@@ -243,7 +248,14 @@ export class WebglRenderer implements Renderer {
     this.#content = content;
     this.#fill = options?.fill ?? false;
     this.#flip = null;
+    this.#trackAspect(content);
     this.#render();
+  }
+
+  /** Remember the page aspect (width/height) so the book can be letterboxed to it. */
+  #trackAspect(content: SpreadContent): void {
+    const p = content.left ?? content.right;
+    if (p && p.height) this.#pageAspect = p.width / p.height;
   }
 
   beginFlip(
@@ -258,6 +270,7 @@ export class WebglRenderer implements Renderer {
     if (options?.anchor) this.#anchor = options.anchor;
     this.#fromShiftUnit = fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = fill ? 0 : shiftUnit(to);
+    this.#trackAspect(to);
     if (fill) {
       this.#flip = {
         underLeft: null,
@@ -306,7 +319,22 @@ export class WebglRenderer implements Renderer {
     const el = this.#container;
     const w = el?.clientWidth ?? 0;
     const h = el?.clientHeight ?? 0;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h };
+    const book = this.#pageAspect > 0 ? this.#bookBox() : undefined;
+    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book };
+  }
+
+  /** The fitted book rect in container CSS px (letterbox aware), for hit-testing/zones. */
+  #bookBox(): { x: number; y: number; width: number; height: number } {
+    const el = this.#container;
+    const cw = el?.clientWidth ?? 0;
+    const ch = el?.clientHeight ?? 0;
+    if (this.#pageAspect <= 0 || cw <= 0 || ch <= 0) return { x: 0, y: 0, width: cw, height: ch };
+    const ba = (this.#fill ? 1 : 2) * this.#pageAspect;
+    let bw = cw;
+    let bh = ch;
+    if (ba > cw / ch) bh = cw / ba;
+    else bw = ch * ba;
+    return { x: (cw - bw) / 2, y: (ch - bh) / 2, width: bw, height: bh };
   }
 
   // --- context loss / restore ---------------------------------------------------
@@ -443,14 +471,39 @@ export class WebglRenderer implements Renderer {
     if (gl === null || canvas === null || this.#contextLost || gl.isContextLost()) return;
     this.#resize();
     gl.clear(gl.COLOR_BUFFER_BIT);
+    this.#fitBook();
     if (this.#flip !== null) this.#drawFlip();
     else if (this.#content !== null) this.#drawStatic();
   }
 
-  #drawStatic(): void {
+  /** Letterbox the 2-page book to the page aspect, centered; restricts the GL viewport
+   *  so pages fill their halves without stretching (the surround stays cleared). */
+  #fitBook(): void {
+    const gl = this.#gl!;
     const canvas = this.#canvas!;
-    const w = canvas.width;
-    const h = canvas.height;
+    const cw = canvas.width;
+    const ch = canvas.height;
+    if (this.#pageAspect > 0) {
+      const bookAspect = (this.#fill ? 1 : 2) * this.#pageAspect;
+      if (bookAspect > cw / ch) {
+        this.#bookW = cw;
+        this.#bookH = Math.round(cw / bookAspect);
+      } else {
+        this.#bookH = ch;
+        this.#bookW = Math.round(ch * bookAspect);
+      }
+    } else {
+      this.#bookW = cw;
+      this.#bookH = ch;
+    }
+    const bx = Math.round((cw - this.#bookW) / 2);
+    const by = Math.round((ch - this.#bookH) / 2); // centered, so GL's bottom offset == by
+    gl.viewport(bx, by, this.#bookW, this.#bookH);
+  }
+
+  #drawStatic(): void {
+    const w = this.#bookW;
+    const h = this.#bookH;
     const content = this.#content!;
     this.#shiftX = this.#fill ? 0 : shiftUnit(content) * (w / 4);
     this.#useFlat();
@@ -465,9 +518,8 @@ export class WebglRenderer implements Renderer {
 
   #drawFlip(): void {
     const gl = this.#gl!;
-    const canvas = this.#canvas!;
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = this.#bookW;
+    const h = this.#bookH;
     const flip = this.#flip!;
 
     // Interpolate the lone-page centering across the flip so an opening cover (or a
@@ -517,11 +569,10 @@ export class WebglRenderer implements Renderer {
 
   #useFlat(): void {
     const gl = this.#gl!;
-    const canvas = this.#canvas!;
     gl.useProgram(this.#flat);
     gl.bindVertexArray(this.#quadVao);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform2f(this.#flatU.uViewport ?? null, canvas.width, canvas.height);
+    gl.uniform2f(this.#flatU.uViewport ?? null, this.#bookW, this.#bookH);
     gl.uniform3f(
       this.#flatU.uView ?? null,
       this.#view.scale,

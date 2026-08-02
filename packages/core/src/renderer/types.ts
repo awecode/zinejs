@@ -27,6 +27,9 @@ export interface LayoutMetrics {
   containerHeight: number;
   pageWidth: number;
   pageHeight: number;
+  /** The letterboxed book area (aspect-fitted, centered) in container px — the interactive
+   *  region. Omit to fall back to the full container. */
+  book?: { x: number; y: number; width: number; height: number };
 }
 
 /**

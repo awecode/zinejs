@@ -117,6 +117,7 @@ export class Zine {
   #singlePageThreshold: number;
   #singlePage = false;
   #narrow = false; // responsive: container currently below singlePageThreshold
+  #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
   #startPageOption: number | undefined;
   #spreads: Spread[] = [];
   #current = 0;
@@ -374,18 +375,19 @@ export class Zine {
       return;
     }
     const rect = this.#container.getBoundingClientRect();
-    const point = { x: clientX - rect.left, y: clientY - rect.top };
+    const b = this.#bookRect();
+    // Points are relative to the letterboxed book, so zones/corners track the page, not the bars.
+    const point = { x: clientX - rect.left - b.x, y: clientY - rect.top - b.y };
     this.#press = point; // remembered for tap classification / click-to-flip zone
-    const { containerWidth, containerHeight } = this.#renderer.measure();
-    const cornerSize = Math.min(containerWidth, containerHeight) * CORNER_FRACTION;
-    if (hitTest(point, { width: containerWidth, height: containerHeight }, cornerSize) !== 'corner') {
+    const cornerSize = Math.min(b.width, b.height) * CORNER_FRACTION;
+    if (hitTest(point, { width: b.width, height: b.height }, cornerSize) !== 'corner') {
       return; // not a corner — no drag; a tap here may still click-to-flip on release
     }
-    this.#anchorY = clamp(point.y / containerHeight, 0, 1); // fold anchors at the grabbed corner
+    this.#anchorY = clamp(point.y / b.height, 0, 1); // fold anchors at the grabbed corner
     // Arm a potential drag; it only becomes a real flip once the pointer moves
     // (so a corner *tap* never fires a spurious flipStart). Right-side corner
     // turns the page forward in LTR; RTL mirrors it.
-    const rightSide = point.x > containerWidth / 2;
+    const rightSide = point.x > b.width / 2;
     const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
     const targetIndex = this.#current + (forward ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
@@ -393,7 +395,7 @@ export class Zine {
       direction: forward ? 'forward' : 'backward',
       targetIndex,
       toPage: this.#leadPage(targetIndex),
-      width: containerWidth,
+      width: b.width,
     };
   }
 
@@ -497,8 +499,7 @@ export class Zine {
     const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
     // Anchor the fold at the tapped height (the fold/peel curls fold from where you tap).
-    const { containerHeight } = this.#renderer!.measure();
-    this.#anchorY = clamp(this.#press.y / containerHeight, 0, 1);
+    this.#anchorY = clamp(this.#press.y / this.#bookRect().height, 0, 1);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {
       // No double-click competing here → flip right away.
@@ -513,9 +514,15 @@ export class Zine {
   }
 
   /** Which way a tap at `point` (container-local) turns the page, or null for a dead zone. */
+  /** The interactive book rect (letterboxed), falling back to the full container. */
+  #bookRect(): { x: number; y: number; width: number; height: number } {
+    const m = this.#renderer!.measure();
+    return m.book ?? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
+  }
+
   #clickFlipDirection(point: { x: number; y: number }): FlipDirection | null {
     if (!this.#renderer) return null;
-    const { containerWidth } = this.#renderer.measure();
+    const containerWidth = this.#bookRect().width;
     let side: 'left' | 'right' | null;
     if (this.#clickToFlip === 'half') {
       side = point.x > containerWidth / 2 ? 'right' : 'left';
@@ -791,6 +798,19 @@ export class Zine {
 
   #paintSpread(spread: Spread, content: SpreadContent): void {
     this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
+    this.#applyContainerAspect();
+  }
+
+  /** Match the container's aspect-ratio to the book so it fits with no letterbox bars.
+   *  Non-destructive: `aspect-ratio` only drives whichever dimension the consumer leaves
+   *  auto (fit-width when they set a width), and is ignored if both are fixed. */
+  #applyContainerAspect(): void {
+    const b = this.#renderer?.measure().book;
+    if (!b || b.width <= 0 || b.height <= 0) return;
+    const ratio = (b.width / b.height).toFixed(4);
+    if (ratio === this.#lastAspect) return;
+    this.#lastAspect = ratio;
+    this.#container.style.aspectRatio = ratio;
   }
 
   /** A source upgraded a page's content (e.g. progressive PDF); repaint if it's on screen and idle. */
