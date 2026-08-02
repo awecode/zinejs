@@ -375,7 +375,7 @@ export class Zine {
       return;
     }
     const rect = this.#container.getBoundingClientRect();
-    const b = this.#bookRect();
+    const b = this.#contentRect();
     // Points are relative to the letterboxed book, so zones/corners track the page, not the bars.
     const point = { x: clientX - rect.left - b.x, y: clientY - rect.top - b.y };
     this.#press = point; // remembered for tap classification / click-to-flip zone
@@ -499,7 +499,7 @@ export class Zine {
     const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
     if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
     // Anchor the fold at the tapped height (the fold/peel curls fold from where you tap).
-    this.#anchorY = clamp(this.#press.y / this.#bookRect().height, 0, 1);
+    this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {
       // No double-click competing here → flip right away.
@@ -514,15 +514,16 @@ export class Zine {
   }
 
   /** Which way a tap at `point` (container-local) turns the page, or null for a dead zone. */
-  /** The interactive book rect (letterboxed), falling back to the full container. */
-  #bookRect(): { x: number; y: number; width: number; height: number } {
+  /** Where the current spread is actually drawn (lone pages centered), as the renderer reports
+   *  it — the region taps/drags map into. Falls back to book, then the full container. */
+  #contentRect(): { x: number; y: number; width: number; height: number } {
     const m = this.#renderer!.measure();
-    return m.book ?? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
+    return m.content ?? m.book ?? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
   }
 
   #clickFlipDirection(point: { x: number; y: number }): FlipDirection | null {
     if (!this.#renderer) return null;
-    const containerWidth = this.#bookRect().width;
+    const containerWidth = this.#contentRect().width;
     let side: 'left' | 'right' | null;
     if (this.#clickToFlip === 'half') {
       side = point.x > containerWidth / 2 ? 'right' : 'left';

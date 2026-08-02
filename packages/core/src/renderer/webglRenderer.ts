@@ -320,11 +320,13 @@ export class WebglRenderer implements Renderer {
     const el = this.#container;
     const w = el?.clientWidth ?? 0;
     const h = el?.clientHeight ?? 0;
-    const book = this.#pageAspect > 0 ? this.#bookBox() : undefined;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book };
+    const known = this.#pageAspect > 0;
+    const book = known ? this.#bookBox() : undefined;
+    const content = known ? this.#contentBox() : undefined;
+    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book, content };
   }
 
-  /** The fitted book rect in container CSS px (letterbox aware), for hit-testing/zones. */
+  /** The fitted book rect in container CSS px (letterbox aware) — a stable 2-page area. */
   #bookBox(): { x: number; y: number; width: number; height: number } {
     const el = this.#container;
     const cw = el?.clientWidth ?? 0;
@@ -336,6 +338,14 @@ export class WebglRenderer implements Renderer {
     if (ba > cw / ch) bh = cw / ba;
     else bw = ch * ba;
     return { x: (cw - bw) / 2, y: (ch - bh) / 2, width: bw, height: bh };
+  }
+
+  /** Where the current spread is actually painted: the book, or its centered half for a lone
+   *  page (mirrors the draw-time #shiftX centering). This is what the engine hit-tests against. */
+  #contentBox(): { x: number; y: number; width: number; height: number } {
+    const b = this.#bookBox();
+    const lone = !this.#fill && this.#content !== null && shiftUnit(this.#content) !== 0;
+    return lone ? { x: b.x + b.width / 4, y: b.y, width: b.width / 2, height: b.height } : b;
   }
 
   // --- context loss / restore ---------------------------------------------------

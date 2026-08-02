@@ -56,6 +56,7 @@ export class CssRenderer implements Renderer {
   #pageAspect = 0;
   #bookW = 0;
   #fill = false;
+  #contentShift = 0; // shiftUnit of the current static spread (nonzero = lone page, centered)
 
   mount(container: HTMLElement): Promise<void> {
     const doc = container.ownerDocument;
@@ -126,9 +127,10 @@ export class CssRenderer implements Renderer {
       this.#paint(this.#pageRight, content.right);
     }
     this.#fill = options?.fill ?? false;
+    this.#contentShift = this.#fill ? 0 : shiftUnit(content);
     this.#trackAspect(content);
     this.#layoutBook();
-    this.#applyShift(this.#fill ? 0 : shiftUnit(content));
+    this.#applyShift(this.#contentShift);
     // A fresh spread cancels any in-progress flip.
     this.#leaf.style.display = 'none';
     this.#leaf.style.transform = '';
@@ -218,7 +220,7 @@ export class CssRenderer implements Renderer {
     s.height = `${b.height}px`;
   }
 
-  /** The fitted book rect in container px (letterbox aware), for layout + hit-testing. */
+  /** The fitted book rect in container px (letterbox aware) — a stable 2-page area. */
   #bookBox(): { x: number; y: number; width: number; height: number } {
     const cw = this.#container?.clientWidth ?? 0;
     const ch = this.#container?.clientHeight ?? 0;
@@ -231,6 +233,13 @@ export class CssRenderer implements Renderer {
     return { x: (cw - bw) / 2, y: (ch - bh) / 2, width: bw, height: bh };
   }
 
+  /** Where the current spread is actually painted: the book, or its centered half for a lone
+   *  page (mirrors #applyShift). This is what the engine hit-tests against. */
+  #contentBox(): { x: number; y: number; width: number; height: number } {
+    const b = this.#bookBox();
+    return this.#contentShift !== 0 ? { x: b.x + b.width / 4, y: b.y, width: b.width / 2, height: b.height } : b;
+  }
+
   setViewTransform(scale: number, x: number, y: number): void {
     this.#viewport.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
   }
@@ -239,8 +248,10 @@ export class CssRenderer implements Renderer {
     const el = this.#container;
     const w = el?.clientWidth ?? 0;
     const h = el?.clientHeight ?? 0;
-    const book = this.#pageAspect > 0 ? this.#bookBox() : undefined;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book };
+    const known = this.#pageAspect > 0;
+    const book = known ? this.#bookBox() : undefined;
+    const content = known ? this.#contentBox() : undefined;
+    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book, content };
   }
 
   #makeCanvas(doc: Document, className: string, extra: string): HTMLCanvasElement {

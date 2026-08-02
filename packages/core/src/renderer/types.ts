@@ -27,9 +27,13 @@ export interface LayoutMetrics {
   containerHeight: number;
   pageWidth: number;
   pageHeight: number;
-  /** The letterboxed book area (aspect-fitted, centered) in container px — the interactive
-   *  region. Omit to fall back to the full container. */
+  /** The letterboxed book area (aspect-fitted, centered) in container px — a stable 2-page
+   *  (or 1-page in fill) region used for aspect sizing. Omit to fall back to the full container. */
   book?: { x: number; y: number; width: number; height: number };
+  /** Where the current spread is actually painted, in container px — equal to `book` for a
+   *  full spread, but the centered half for a lone page (cover / book front-back). This is the
+   *  region the engine hit-tests against so taps track the visible page. Omit to fall back. */
+  content?: { x: number; y: number; width: number; height: number };
 }
 
 /**
