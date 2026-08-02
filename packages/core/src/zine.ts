@@ -27,6 +27,9 @@ const DRAG_THRESHOLD = 6;
 
 /** Window (ms) a single click waits to rule out a double-click before flipping. */
 const DOUBLE_CLICK_MS = 250;
+// Guessed page aspect (portrait, ~between A4 and US Letter) used to reserve the container's
+// height before the first page decodes; replaced by the real aspect once content loads.
+const DEFAULT_PAGE_ASPECT = 0.72;
 
 interface DragState {
   direction: FlipDirection;
@@ -173,6 +176,9 @@ export class Zine {
     this.#direction = direction;
     this.#spreadMode = options.spreadMode ?? 'cover';
     this.#curl = options.curl ?? DEFAULT_CURL;
+    // Reserve a plausible height up front so a width-only container doesn't collapse before
+    // the first page loads; #applyContainerAspect refines it to the true book aspect after.
+    this.#applyAspect((this.#spreadMode === 'single' ? 1 : 2) * DEFAULT_PAGE_ASPECT);
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
@@ -807,10 +813,16 @@ export class Zine {
   #applyContainerAspect(): void {
     const b = this.#renderer?.measure().book;
     if (!b || b.width <= 0 || b.height <= 0) return;
-    const ratio = (b.width / b.height).toFixed(4);
-    if (ratio === this.#lastAspect) return;
-    this.#lastAspect = ratio;
-    this.#container.style.aspectRatio = ratio;
+    this.#applyAspect(b.width / b.height);
+  }
+
+  /** Write `aspect-ratio` on the container (idempotent). Non-destructive: it only drives a
+   *  dimension the consumer left auto, and is ignored when both width and height are fixed. */
+  #applyAspect(ratio: number): void {
+    const s = ratio.toFixed(4);
+    if (s === this.#lastAspect) return;
+    this.#lastAspect = s;
+    this.#container.style.aspectRatio = s;
   }
 
   /** A source upgraded a page's content (e.g. progressive PDF); repaint if it's on screen and idle. */
