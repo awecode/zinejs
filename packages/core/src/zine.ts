@@ -28,6 +28,10 @@ const DRAG_THRESHOLD = 6;
 /** Window (ms) a single click waits to rule out a double-click before flipping. */
 const DOUBLE_CLICK_MS = 250;
 
+/** The single-page roll turns with a bent flip (no spread to roll onto); it reads better a
+ *  touch slower than the spread roll, so its flip duration is scaled up by this automatically. */
+const SINGLE_PAGE_ROLL_SLOWDOWN = 1.75;
+
 interface DragState {
   direction: FlipDirection;
   targetIndex: number;
@@ -765,7 +769,9 @@ export class Zine {
   }
 
   #effectiveDuration(): number {
-    return this.#reducedMotion ? 0 : this.#flipDuration;
+    if (this.#reducedMotion) return 0;
+    const singleRoll = this.#singlePage && this.#curl === 'roll';
+    return this.#flipDuration * (singleRoll ? SINGLE_PAGE_ROLL_SLOWDOWN : 1);
   }
 
   /** Re-measure and re-render; call after the container resizes. */

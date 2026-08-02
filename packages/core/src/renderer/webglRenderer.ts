@@ -278,7 +278,9 @@ export class WebglRenderer implements Renderer {
         underRight: null,
         underFull: to.right ?? to.left,
         front: from.right ?? from.left,
-        back: to.right ?? to.left,
+        // A lone page has no facing "next" leaf on its back; show the same page mirrored
+        // (the shader flips the back UV) so it reads as the sheet's own reverse side.
+        back: from.right ?? from.left,
         dir: direction === 'forward' ? 1 : -1,
         fill: true,
       };
@@ -553,7 +555,11 @@ export class WebglRenderer implements Renderer {
     // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
+    // Some curls (roll) assume a centered spine or a neighbouring page; in single-page mode
+    // they use a fill-specific variant that reads on a lone page instead of flopping off-screen.
+    const model = CURLS[this.#curlType];
+    const deform = flip.fill && model.deformFill ? model.deformFill : model.deform;
+    deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#posBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#mesh.positions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#normBuf);
