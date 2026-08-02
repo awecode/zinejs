@@ -90,6 +90,7 @@ in float vU;
 uniform sampler2D uFront;
 uniform sampler2D uBack;
 uniform highp float uDir;
+uniform float uGloss; // 0 disables the specular highlight (e.g. the flat 'simple' curl)
 out vec4 outColor;
 void main() {
   // The turn mesh carries its own facing in the normal; the front points at the viewer
@@ -107,7 +108,7 @@ void main() {
 
   // Glossy specular: brightest where the surface tilts ~30 deg from facing the viewer,
   // so a thin glossy highlight rides across the sheet as it rolls.
-  float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22;
+  float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22 * uGloss;
 
   c.rgb = clamp(c.rgb * lit + spec, 0.0, 1.0);
   outColor = c;
@@ -380,7 +381,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack']) {
+    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -564,6 +565,7 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
+    gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlType === 'simple' ? 0 : 1); // flat curl = no shine
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
   }
 
