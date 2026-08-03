@@ -145,6 +145,9 @@ export class Zine {
   #pendingGrab: { direction: FlipDirection; targetIndex: number; toPage: number; width: number } | null = null;
   #press: { x: number; y: number } | null = null;
   #pendingClickTimer: ReturnType<typeof setTimeout> | null = null;
+  // Latest flip intent requested while one was already animating; replayed on settle so
+  // clicks/keys during a turn aren't dropped and continuous flipping keeps advancing.
+  #queuedFlip: (() => void) | null = null;
   #pan: { baseTx: number; baseTy: number } | null = null;
   #pinching = false;
   #pinchBaseScale = 1;
@@ -226,16 +229,35 @@ export class Zine {
   }
 
   flipNext(): void {
-    this.#startFlip(this.#current + 1);
+    this.#requestFlip(() => this.#startFlip(this.#current + 1));
   }
 
   flipPrev(): void {
-    this.#startFlip(this.#current - 1);
+    this.#requestFlip(() => this.#startFlip(this.#current - 1));
   }
 
   flipTo(page: number): void {
     const target = clamp(page, 0, Math.max(0, this.#source.pageCount - 1));
-    this.#startFlip(this.#spreadIndexForPage(target));
+    this.#requestFlip(() => this.#startFlip(this.#spreadIndexForPage(target)));
+  }
+
+  /** Run a flip now if idle; if one is already in flight, remember the latest intent and
+   *  replay it on settle (thunks read `#current` lazily, so a queued turn steps on from
+   *  wherever the current one lands). Only the newest request is kept. */
+  #requestFlip(run: () => void): void {
+    if (this.#machine.state === 'idle') {
+      run();
+    } else {
+      this.#queuedFlip = run;
+    }
+  }
+
+  /** After an animation settles, fire whatever flip was requested mid-turn. */
+  #drainQueuedFlip(): void {
+    const queued = this.#queuedFlip;
+    if (!queued) return;
+    this.#queuedFlip = null;
+    queued();
   }
 
   getZoom(): number {
@@ -279,6 +301,7 @@ export class Zine {
   destroy(): void {
     this.#destroyed = true;
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
+    this.#queuedFlip = null;
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
     this.#a11yCleanup?.();
@@ -360,6 +383,7 @@ export class Zine {
     this.#announce();
     this.#emitter.emit('pageChanged', { page: toPage });
     this.#emitter.emit('flipEnd', { page: toPage });
+    this.#drainQueuedFlip();
   }
 
   #leadPage(spreadIndex: number): number {
@@ -500,20 +524,22 @@ export class Zine {
     if (Math.abs(gesture.dx) > DRAG_THRESHOLD || Math.abs(gesture.dy) > DRAG_THRESHOLD) return;
     const direction = this.#clickFlipDirection(this.#press);
     if (!direction) return;
-    const targetIndex = this.#current + (direction === 'forward' ? 1 : -1);
-    if (targetIndex < 0 || targetIndex >= this.#spreads.length) return;
+    const step = direction === 'forward' ? 1 : -1;
+    if (this.#current + step < 0 || this.#current + step >= this.#spreads.length) return;
     // Anchor the fold at the tapped height (the fold/peel curls fold from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
+    // Read `#current` lazily so a tap queued mid-turn steps on from wherever the page lands.
+    const flip = (): void => this.#startFlip(this.#current + step);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {
-      // No double-click competing here → flip right away.
-      this.#startFlip(targetIndex);
+      // No double-click competing here → flip right away (or queue if mid-turn).
+      this.#requestFlip(flip);
       return;
     }
     // Wait out the window; a double-click (zoom) cancels this.
     this.#pendingClickTimer = setTimeout(() => {
       this.#pendingClickTimer = null;
-      this.#startFlip(targetIndex);
+      this.#requestFlip(flip);
     }, this.#clickFlipDelayValue);
   }
 
@@ -555,6 +581,7 @@ export class Zine {
     if (spread) this.#paintSpread(spread, this.#currentContent);
     this.#machine.send('settle');
     this.#emitter.emit('flipEnd', { page: this.#currentPage });
+    this.#drainQueuedFlip();
   }
 
   #onPinchStart(): void {
