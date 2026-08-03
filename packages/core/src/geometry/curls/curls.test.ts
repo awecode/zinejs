@@ -72,3 +72,58 @@ describe.each(['roll', 'simple'] as CurlType[])('symmetric curl lands flat: %s',
     }
   });
 });
+
+// roll's single-page (fill) variant: the lift-and-settle flip for a lone full-width sheet.
+describe("roll fill variant (lift-and-settle)", () => {
+  const fill = CURLS.roll.deformFill!;
+  const fillMesh = (t: number): PageMesh => {
+    const mesh = createPageMesh(COLS, ROWS);
+    fill(mesh, W, H, t, ANCHOR);
+    return mesh;
+  };
+
+  it('lies flat at the spine edge at t=0', () => {
+    const mesh = fillMesh(0);
+    for (let i = 0; i <= COLS; i++) {
+      const [x, , z] = vertex(mesh, i, 0);
+      expect(z).toBeCloseTo(0, 2);
+      expect(x).toBeCloseTo((i / COLS) * W, 2);
+    }
+  });
+
+  it('mirrors flat onto the far side at t=1', () => {
+    const mesh = fillMesh(1);
+    for (let i = 0; i <= COLS; i++) {
+      const [x, , z] = vertex(mesh, i, 0);
+      expect(z).toBeCloseTo(0, 1);
+      expect(x).toBeCloseTo(-((i / COLS) * W), 1);
+    }
+  });
+
+  it('keeps the chord flat through the lift, then swings it over', () => {
+    const freeEdgeX = (t: number): number => vertex(fillMesh(t), COLS, 0)[0];
+    // Phase 1 (lift): the sheet curls up in place, so the free edge stays on the near side
+    // rather than sweeping across — it has not yet crossed back over the spine (x ≥ 0).
+    expect(freeEdgeX(0.25)).toBeGreaterThan(-1);
+    // Phase 2 (settle): the chord has swung over, carrying the free edge onto the far side.
+    expect(freeEdgeX(0.75)).toBeLessThan(0);
+  });
+
+  it('lifts well off the surface mid-turn', () => {
+    const mesh = fillMesh(0.5);
+    let maxZ = 0;
+    for (let k = 2; k < mesh.positions.length; k += 3) maxZ = Math.max(maxZ, Math.abs(mesh.positions[k]!));
+    expect(maxZ).toBeGreaterThan(1);
+  });
+
+  it('produces finite, unit-length normals across the turn', () => {
+    for (const t of [0.15, 0.35, 0.5, 0.65, 0.85]) {
+      const mesh = fillMesh(t);
+      for (const v of mesh.positions) expect(Number.isNaN(v)).toBe(false);
+      for (let k = 0; k < mesh.normals.length; k += 3) {
+        const l = Math.hypot(mesh.normals[k]!, mesh.normals[k + 1]!, mesh.normals[k + 2]!);
+        expect(l).toBeCloseTo(1, 3);
+      }
+    }
+  });
+});
