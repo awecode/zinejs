@@ -130,20 +130,41 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('ignores a flip while one is already animating', async () => {
-    const { zine } = await makeZine(6); // 3 spreads, so a second flip has somewhere to go
-    const starts = vi.fn();
-    zine.on('flipStart', starts);
+  it('interrupts an in-flight fold and starts the requested flip at once', async () => {
+    const { zine } = await makeZine(6); // spreads [0,1] [2,3] [4,5]
+    const starts: string[] = [];
+    zine.on('flipStart', (p) => starts.push(`${p.from}->${p.to}`));
 
-    zine.flipNext();
-    zine.flipNext(); // busy → ignored (state locks synchronously)
-    expect(starts).toHaveBeenCalledTimes(1);
-
+    zine.flipNext(); // 0 -> 2
+    await flush(); // stage content + schedule frames; the fold is now animating
+    tick(100); // partway through (duration 500)
+    zine.flipNext(); // interrupt: land 0->2 immediately, then begin 2->4
     await flush();
     tick(500);
     await flush();
-    zine.flipNext(); // now idle again → allowed
-    expect(starts).toHaveBeenCalledTimes(2);
+
+    // Both turns took effect; the second stepped on from where the first landed.
+    expect(starts).toEqual(['0->2', '2->4']);
+    expect(zine.getPage()).toBe(4);
+  });
+
+  it('queues a flip requested before the fold begins animating, replaying it on settle', async () => {
+    const { zine } = await makeZine(6);
+    const starts: string[] = [];
+    zine.on('flipStart', (p) => starts.push(`${p.from}->${p.to}`));
+
+    zine.flipNext(); // locks state synchronously; #runFlip staging is still async
+    zine.flipNext(); // no animation to cut short yet → queued, not dropped
+    expect(starts).toEqual(['0->2']);
+
+    await flush();
+    tick(500); // first flip settles → queued flip replays
+    await flush();
+    tick(500);
+    await flush();
+
+    expect(starts).toEqual(['0->2', '2->4']);
+    expect(zine.getPage()).toBe(4);
   });
 
   it('is a no-op at the ends of the book', async () => {

@@ -148,6 +148,9 @@ export class Zine {
   // Latest flip intent requested while one was already animating; replayed on settle so
   // clicks/keys during a turn aren't dropped and continuous flipping keeps advancing.
   #queuedFlip: (() => void) | null = null;
+  // The fold animation currently on screen, so a new flip request can land it instantly
+  // (snap to its end pose + commit) and start immediately instead of waiting it out.
+  #activeAnim: { toT: number; direction: FlipDirection; onDone: () => void } | null = null;
   #pan: { baseTx: number; baseTy: number } | null = null;
   #pinching = false;
   #pinchBaseScale = 1;
@@ -241,15 +244,32 @@ export class Zine {
     this.#requestFlip(() => this.#startFlip(this.#spreadIndexForPage(target)));
   }
 
-  /** Run a flip now if idle; if one is already in flight, remember the latest intent and
-   *  replay it on settle (thunks read `#current` lazily, so a queued turn steps on from
-   *  wherever the current one lands). Only the newest request is kept. */
+  /** Run a flip now. If a fold is animating, land it instantly first so the new turn starts
+   *  immediately on this click (thunks read `#current` lazily, so it steps on from where the
+   *  interrupted turn landed). A drag in flight can't be interrupted this way, so its request
+   *  is queued and replayed on settle instead. */
   #requestFlip(run: () => void): void {
     if (this.#machine.state === 'idle') {
       run();
+    } else if (this.#activeAnim) {
+      this.#finishActiveAnim(); // lands the current turn → machine back to idle
+      run();
     } else {
-      this.#queuedFlip = run;
+      this.#queuedFlip = run; // dragging: no animation to cut short, so wait for release
     }
+  }
+
+  /** Snap the in-flight fold to its end pose and commit it now, cancelling its RAF loop. */
+  #finishActiveAnim(): void {
+    const anim = this.#activeAnim;
+    if (!anim) return;
+    this.#activeAnim = null;
+    if (this.#raf !== null) {
+      cancelAnimationFrame(this.#raf);
+      this.#raf = null;
+    }
+    this.#renderer?.setFlipProgress(anim.toT, anim.direction);
+    anim.onDone();
   }
 
   /** After an animation settles, fire whatever flip was requested mid-turn. */
@@ -301,6 +321,7 @@ export class Zine {
   destroy(): void {
     this.#destroyed = true;
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
+    this.#activeAnim = null;
     this.#queuedFlip = null;
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
@@ -356,8 +377,14 @@ export class Zine {
       onDone();
       return;
     }
+    // Remembered so a mid-turn flip request can #finishActiveAnim() to land it at once.
+    // Object identity also tags this run: if #finishActiveAnim (or a new flip) replaces it,
+    // a stale frame that still fires bails instead of re-committing or rescheduling itself.
+    const anim = { toT, direction, onDone };
+    this.#activeAnim = anim;
     const start = performance.now();
     const step = (now: number): void => {
+      if (this.#activeAnim !== anim) return; // superseded/interrupted → this frame is void
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
       const raw = Math.min(1, (now - start) / duration);
       this.#renderer?.setFlipProgress(fromT + (toT - fromT) * easeInOutCubic(raw), direction);
@@ -365,6 +392,7 @@ export class Zine {
         this.#raf = requestAnimationFrame(step);
       } else {
         this.#raf = null;
+        this.#activeAnim = null;
         onDone();
       }
     };
