@@ -48,9 +48,9 @@
     },
     "curl": {
       "type": "string",
-      "enum": ["roll", "simple", "fold", "peel"],
+      "enum": ["roll", "cone", "simple", "fold", "peel"],
       "default": "roll",
-      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'simple' (plain flat page turn, no bend), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
+      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'cone' (natural conical curl, PARC/iBooks-style, anchored at tap), 'simple' (plain flat page turn, no bend), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
     },
     "frontCover": {
       "type": "string",

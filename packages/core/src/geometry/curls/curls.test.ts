@@ -20,7 +20,7 @@ function vertex(mesh: PageMesh, i: number, j: number): [number, number, number] 
 
 describe('curl registry', () => {
   it('registers a model for every curl type', () => {
-    expect(CURL_TYPES.sort()).toEqual(['fold', 'peel', 'roll', 'simple']);
+    expect(CURL_TYPES.sort()).toEqual(['cone', 'fold', 'peel', 'roll', 'simple']);
     for (const type of CURL_TYPES) {
       expect(typeof CURLS[type].deform).toBe('function');
     }
@@ -62,7 +62,7 @@ describe.each(CURL_TYPES)('curl model: %s', (type) => {
   });
 });
 
-describe.each(['roll', 'simple'] as CurlType[])('symmetric curl lands flat: %s', (type) => {
+describe.each(['roll', 'simple', 'cone'] as CurlType[])('symmetric curl lands flat: %s', (type) => {
   it('mirrors flat onto the far side at t=1', () => {
     const mesh = deformed(type, 1);
     for (let i = 0; i <= COLS; i++) {
@@ -70,6 +70,24 @@ describe.each(['roll', 'simple'] as CurlType[])('symmetric curl lands flat: %s',
       expect(z).toBeCloseTo(0, 2);
       expect(x).toBeCloseTo(-((i / COLS) * W), 2);
     }
+  });
+});
+
+describe('cone curl', () => {
+  it('advances the anchored bottom corner ahead of the far corner', () => {
+    // Early in the turn the leading free-edge corner has smaller x (further into the flop).
+    const mesh = deformed('cone', 0.3);
+    const [xBottom] = vertex(mesh, COLS, ROWS);
+    const [xTop] = vertex(mesh, COLS, 0);
+    expect(xBottom).toBeLessThan(xTop);
+  });
+
+  it('advances the anchored top corner ahead of the far corner', () => {
+    const mesh = createPageMesh(COLS, ROWS);
+    CURLS.cone.deform(mesh, W, H, 0.3, { y: 0 });
+    const [xBottom] = vertex(mesh, COLS, ROWS);
+    const [xTop] = vertex(mesh, COLS, 0);
+    expect(xTop).toBeLessThan(xBottom);
   });
 });
 

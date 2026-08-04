@@ -8,6 +8,7 @@
  * The engine references the lightweight `./types` (union + validation list) instead.
  */
 import { deformRoll } from './roll';
+import { deformCone } from './cone';
 import { deformSimple } from './simple';
 import { deformFold } from './fold';
 import { deformPeel } from './peel';
@@ -19,6 +20,7 @@ export type { CurlAnchor, CurlDeform, CurlModel, CurlType } from './types';
 
 export const CURLS: Record<CurlType, CurlModel> = {
   roll: { deform: deformRoll, anchored: false },
+  cone: { deform: deformCone, anchored: true },
   simple: { deform: deformSimple, anchored: false },
   fold: { deform: deformFold, anchored: true },
   peel: { deform: deformPeel, anchored: true },
