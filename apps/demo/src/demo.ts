@@ -22,7 +22,7 @@ const q = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (q.has(k) ? Number(q.get(k)) : d);
 const opt = {
   spreadMode: (q.get('spreadMode') ?? 'cover') as 'double' | 'single' | 'cover' | 'book',
-  curl: (q.get('curl') ?? (renderer === 'webgl2' ? 'cone' : 'roll')) as CurlType,
+  curl: (q.get('curl') ?? (renderer === 'webgl2' ? 'flick' : 'roll')) as CurlType,
   direction: (q.get('direction') ?? 'ltr') as 'ltr' | 'rtl',
   clickToFlip: (q.get('clickToFlip') ?? 'edge') as 'edge' | 'half' | 'off',
   flipDuration: num('flipDuration', 800),
@@ -49,7 +49,7 @@ app.innerHTML = `
   <div class="wrap">
     <header>
       <h1>zinejs demo — ${current.label}</h1>
-      <div class="sub">${kind === 'pdf' ? 'PDF source (pdf.js)' : 'Image source'}, forced <code>renderer: '${renderer}'</code>${renderer === 'webgl2' ? ` · curl <code>${opt.curl}</code> (try <code>cone</code> for the natural paper turn)` : ''}. Options are reactive (they reload with a fresh book).</div>
+      <div class="sub">${kind === 'pdf' ? 'PDF source (pdf.js)' : 'Image source'}, forced <code>renderer: '${renderer}'</code>${renderer === 'webgl2' ? ` · curl <code>${opt.curl}</code> (new: <code>flick</code>)` : ''}. Options are reactive (they reload with a fresh book).</div>
       <nav>${DEMOS.map((d) => `<a href="${d.path}" class="${d === current ? 'active' : ''}">${d.label}</a>`).join('')}</nav>
     </header>
     <div class="controls" id="controls"></div>

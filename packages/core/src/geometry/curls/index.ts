@@ -9,6 +9,8 @@
  */
 import { deformRoll } from './roll';
 import { deformCone } from './cone';
+import { deformLeaf } from './leaf';
+import { deformFlick } from './flick';
 import { deformSimple } from './simple';
 import { deformFold } from './fold';
 import { deformPeel } from './peel';
@@ -21,6 +23,8 @@ export type { CurlAnchor, CurlDeform, CurlModel, CurlType } from './types';
 export const CURLS: Record<CurlType, CurlModel> = {
   roll: { deform: deformRoll, anchored: false },
   cone: { deform: deformCone, anchored: true },
+  leaf: { deform: deformLeaf, anchored: true },
+  flick: { deform: deformFlick, anchored: true },
   simple: { deform: deformSimple, anchored: false },
   fold: { deform: deformFold, anchored: true },
   peel: { deform: deformPeel, anchored: true },

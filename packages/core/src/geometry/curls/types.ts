@@ -18,8 +18,8 @@ export interface CurlModel {
   readonly anchored: boolean;
 }
 
-export type CurlType = 'roll' | 'cone' | 'simple' | 'fold' | 'peel';
+export type CurlType = 'roll' | 'cone' | 'leaf' | 'flick' | 'simple' | 'fold' | 'peel';
 
-export const CURL_TYPES: CurlType[] = ['roll', 'cone', 'simple', 'fold', 'peel'];
+export const CURL_TYPES: CurlType[] = ['roll', 'cone', 'leaf', 'flick', 'simple', 'fold', 'peel'];
 
 export const DEFAULT_CURL: CurlType = 'roll';

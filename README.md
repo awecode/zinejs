@@ -67,7 +67,7 @@ new Zine(document.getElementById('book'), {
 | --- | --- | --- | --- |
 | `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** |
 | `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. |
-| `curl` | `'roll' \| 'cone' \| 'simple' \| 'fold' \| 'peel'` | `'roll'` | Page-curl model (WebGL2 only — see [Curl models](#curl-models)). |
+| `curl` | `'roll' \| 'cone' \| 'leaf' \| 'flick' \| 'simple' \| 'fold' \| 'peel'` | `'roll'` | Page-curl model (WebGL2 only — see [Curl models](#curl-models)). |
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
@@ -102,17 +102,19 @@ new Zine(document.getElementById('book'), {
 
 ## Curl models
 
-The WebGL2 renderer bends the turning leaf with one of five models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
+The WebGL2 renderer bends the turning leaf with one of seven models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
 
 | `curl` | Motion | Anchored to tap? |
 | --- | --- | --- |
 | `roll` (default) | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
 | `cone` | Natural conical curl (PARC / iBooks-style): stiff paper wraps a breathing cone, then settles flat. | Yes |
+| `leaf` | Traveling smooth-curvature wave: flat paper bends without stretching, then leaves as a flat turned flap. | Yes |
+| `flick` | Inertial follow-through: the sheet trails the accelerating turn, swings through vertical, then overtakes and settles as it brakes. | Yes |
 | `simple` | Plain flat page turn: a rigid spine rotation, edge-on at the midpoint, no bend. | No |
 | `fold` | Flat origami fold with a hard crease; folds from the tapped corner. | Yes |
 | `peel` | Smooth diagonal corner peel; lifts from the tapped corner. | Yes |
 
-For anchored models (`cone`, `fold`, `peel`), the fold originates at the corner nearest where the reader taps/grabs.
+For anchored models (`cone`, `leaf`, `flick`, `fold`, `peel`), the fold originates at the corner nearest where the reader taps/grabs.
 
 On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes slightly longer than `flipDuration` to keep the two reading at a similar speed. The other models are unchanged on lone pages.
 
