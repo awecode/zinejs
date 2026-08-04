@@ -6,14 +6,15 @@ const WORKER_URL_EXPR = "new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.m
 const WORKER_PLACEHOLDER = '@@ZINE_PDF_WORKER_URL@@';
 
 // pdf.js requires the worker and the main library to be the SAME version, and
-// `pdfjs-dist` is a peer dependency the consumer owns — so we must NOT bundle or emit
-// a worker (that would freeze the version we built against and mismatch the consumer's,
-// throwing "API version does not match Worker version"). Instead the plugin's
+// `pdfjs-dist` is an external runtime dependency (not bundled into our package) —
+// so we must NOT emit a worker into `dist/` (that would freeze a build-time copy
+// and risk "API version does not match Worker version" against the install the
+// consumer resolves). Instead the plugin's
 // `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url)` literal has to pass
-// through our build untouched so the CONSUMER's bundler resolves and emits their own
-// worker. Vite's import.meta.url asset pass would otherwise inline the ~1.6 MB worker,
-// so we hide the expression behind a placeholder before that pass and restore it
-// verbatim into the final bundle.
+// through our build untouched so the CONSUMER's bundler resolves and emits the
+// worker from their installed `pdfjs-dist`. Vite's import.meta.url asset pass would
+// otherwise inline the ~1.6 MB worker, so we hide the expression behind a placeholder
+// before that pass and restore it verbatim into the final bundle.
 function preservePdfWorkerUrl(): Plugin {
   return {
     name: 'zine:preserve-pdf-worker-url',
@@ -39,8 +40,8 @@ function preservePdfWorkerUrl(): Plugin {
   };
 }
 
-// pdf.js is a peer dependency — keep the whole package (and its worker) out of our
-// bundle. ESM-only for now; UMD is a later slice.
+// Keep pdf.js (and its worker) out of our published bundle — the consumer's
+// install resolves it at app-build time. ESM-only for now; UMD is a later slice.
 export default defineConfig({
   plugins: [preservePdfWorkerUrl()],
   build: {

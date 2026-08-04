@@ -11,14 +11,14 @@ The sections below are a compact reference for every option, method, and event. 
 | Package | What it is |
 | --- | --- |
 | [`@zinejs/core`](packages/core) | The flipbook engine (renderer, gestures, zoom, spreads, curls). |
-| [`@zinejs/pdf`](packages/pdf) | PDF content source, powered by pdf.js (peer dependency). |
+| [`@zinejs/pdf`](packages/pdf) | PDF content source, powered by pdf.js. |
 
 ## Install
 
 ```bash
 npm install @zinejs/core
 # for PDFs, also:
-npm install @zinejs/pdf pdfjs-dist
+npm install @zinejs/pdf
 ```
 
 ## Quick start
@@ -180,7 +180,7 @@ new PdfSource('/doc.pdf', { renderScale: 1, progressive: true });
 | `progressive` | `boolean` | `false` | Paint a low-res page first, then swap to crisp (faster first paint). |
 | `disableAutoFetch` | `boolean` | `false` | Fetch only the byte ranges visible pages need (range-capable servers). |
 
-`pdfjs-dist` is a **peer dependency** — install it yourself; the plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
+`pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
 
 ## Covers and page replacement
 

@@ -51,7 +51,7 @@ importers:
         version: 6.2.108
     devDependencies:
       '@zinejs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
 packages:

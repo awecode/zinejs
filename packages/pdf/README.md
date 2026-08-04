@@ -5,10 +5,10 @@ PDF content source for [zinejs](https://github.com/), powered by [pdf.js](https:
 ## Install
 
 ```bash
-npm install @zinejs/core @zinejs/pdf pdfjs-dist
+npm install @zinejs/core @zinejs/pdf
 ```
 
-`pdfjs-dist` is a **peer dependency** — you install it, and the plugin loads it lazily so it never lands in the core bundle.
+`pdfjs-dist` is a normal dependency of `@zinejs/pdf`, so it installs with the package. The plugin still loads it lazily (dynamic `import`) so it never lands in the `@zinejs/core` bundle. If your app already depends on `pdfjs-dist`, the package manager will typically dedupe to one copy — keep major versions compatible so the worker matches the library.
 
 ## Usage
 

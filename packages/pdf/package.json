@@ -32,9 +32,11 @@
     "size": "pnpm build && size-limit",
     "prepublishOnly": "pnpm build"
   },
-  "peerDependencies": {
-    "@zinejs/core": "workspace:^",
+  "dependencies": {
     "pdfjs-dist": ">=4"
+  },
+  "peerDependencies": {
+    "@zinejs/core": "workspace:^"
   },
   "devDependencies": {
     "@zinejs/core": "workspace:^"
