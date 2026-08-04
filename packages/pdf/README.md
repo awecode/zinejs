@@ -27,28 +27,19 @@ Under a bundler that's all you need — the pdf.js worker is resolved for you.
 
 Both packages ship **UMD** builds (`dist/index.umd.js`) that share the `ZineJS` global — load **core first**, then pdf (the pdf build uses `extend: true` so it merges into `ZineJS` instead of replacing it).
 
-Modern `pdfjs-dist` is ESM-only, so expose it as `globalThis.pdfjsLib` before opening a PDF, and pass an explicit `workerSrc` (no bundler rewrites the worker URL):
+Modern `pdfjs-dist` is ESM-only, so load it in a module script first, expose
+`globalThis.pdfjsLib`, then use classic deferred `<script>` tags for the UMD
+builds (and pass an explicit `workerSrc` — no bundler rewrites the worker URL):
 
 ```html
 <script type="module">
   import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.min.mjs';
   globalThis.pdfjsLib = pdfjsLib;
+</script>
 
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js';
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.append(s);
-  });
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.js';
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.append(s);
-  });
-
+<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.js"></script>
+<script defer>
   const book = new ZineJS.Zine(document.getElementById('book'), {
     source: new ZineJS.PdfSource('document.pdf', {
       workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.worker.min.mjs',
