@@ -29,12 +29,20 @@ function preservePdfWorkerUrl(): Plugin {
       }
       return null;
     },
-    generateBundle(_options, bundle) {
+    generateBundle(options, bundle) {
       // Vite/rolldown may emit the placeholder as '…', "…", or `…` (UMD minify).
       const marker = new RegExp(`(['"\`])${WORKER_PLACEHOLDER}\\1`, 'g');
+      // ESM: restore the import.meta.url expression so the consumer's bundler
+      // can rewrite it. UMD is a classic <script> — import.meta is a SyntaxError
+      // there (and V8 may mis-report it as a private-field error), so throw into
+      // the existing catch and require an explicit workerSrc for CDN hosts.
+      const isEsm = options.format === 'es' || options.format === 'esm';
+      const replacement = isEsm
+        ? `(${WORKER_URL_EXPR})`
+        : `(() => { throw new Error('PdfSource: pass workerSrc for UMD/CDN'); })()`;
       for (const chunk of Object.values(bundle)) {
         if (chunk.type === 'chunk' && chunk.code.includes(WORKER_PLACEHOLDER)) {
-          chunk.code = chunk.code.replace(marker, `(${WORKER_URL_EXPR})`);
+          chunk.code = chunk.code.replace(marker, replacement);
         }
       }
     },
