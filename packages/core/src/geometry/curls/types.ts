@@ -14,9 +14,6 @@ export type CurlDeform = (mesh: PageMesh, W: number, H: number, t: number, ancho
 
 export interface CurlModel {
   readonly deform: CurlDeform;
-  /** Single-page (fill) variant for curls whose spread form assumes a centered spine or a
-   *  neighbouring page. Used in fill mode when present; otherwise `deform` is used as-is. */
-  readonly deformFill?: CurlDeform;
   /** True when the fold originates at a corner (`anchor.y`) rather than the whole edge. */
   readonly anchored: boolean;
 }

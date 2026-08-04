@@ -50,7 +50,7 @@
       "type": "string",
       "enum": ["roll", "simple", "fold", "peel"],
       "default": "roll",
-      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page bends and turns instead, slightly slower), 'simple' (plain flat page turn, no bend), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
+      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'simple' (plain flat page turn, no bend), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
     },
     "frontCover": {
       "type": "string",
@@ -75,7 +75,7 @@
       "type": "number",
       "minimum": 0,
       "default": 800,
-      "description": "Flip animation duration in milliseconds."
+      "description": "Flip animation duration in milliseconds. Timed for a two-page spread; a lone page sweeps the full width, so it stretches this slightly."
     },
     "clickToFlip": {
       "type": "string",

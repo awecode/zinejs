@@ -51,7 +51,7 @@ new Zine(container, {
   backCover: 'back.jpg',     // optional image appended as a lone back cover
   pages: { 4: 'ad.jpg' },    // optional: replace source pages with images (0-based; -1 = last)
   startPage: 0,
-  flipDuration: 800,         // ms
+  flipDuration: 800,         // ms (spread timing; a lone page stretches it slightly)
   singlePageThreshold: 640,  // px: below this, show one page at a time
   clickToFlip: 'edge',       // 'edge' | 'half' | 'off'
   zoom: { enabled: true, max: 4, wheel: true, doubleClick: [1, 2, 4] },

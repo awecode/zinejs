@@ -103,6 +103,24 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(zine.getPage()).toBe(2);
   });
 
+  it('eases the turn symmetrically, without loitering then lurching', async () => {
+    const { zine, renderer } = await makeZine(4); // flipDuration 500
+    zine.flipNext();
+    await flush();
+    for (let i = 0; i < 20; i++) tick(25); // 20 even frames across the turn
+    await flush();
+
+    const ts = renderer.flips.map(([t]) => t);
+    // Progress only ever moves forward, and spans the full turn.
+    for (let i = 1; i < ts.length; i++) expect(ts[i]!).toBeGreaterThanOrEqual(ts[i - 1]!);
+    expect(ts.at(-1)).toBeCloseTo(1, 5);
+    // Symmetric about the midpoint: halfway through the time is halfway through the turn.
+    expect(ts[Math.floor(ts.length / 2) - 1]).toBeCloseTo(0.5, 1);
+    // A quadratic ease has reached ~8% by 20% of the way in. A cubic sits near 3% and then has
+    // to catch up through the middle, which is what read as a lurch rather than a page turning.
+    expect(ts[Math.floor(ts.length * 0.2) - 1]!).toBeGreaterThan(0.05);
+  });
+
   it('emits flipStart then pageChanged and flipEnd', async () => {
     const { zine } = await makeZine(4);
     const events: string[] = [];

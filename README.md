@@ -71,7 +71,7 @@ new Zine(document.getElementById('book'), {
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
-| `flipDuration` | `number` (ms) | `800` | Flip animation duration. |
+| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page sweeps the full width, so it stretches this slightly. |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
 | `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). |
@@ -113,7 +113,7 @@ The WebGL2 renderer bends the turning leaf with one of four models (`curl` optio
 
 For anchored models (`fold`, `peel`), the fold originates at the corner nearest where the reader taps/grabs.
 
-On a lone page (`single` mode, or a cover/back page), `roll` has no facing page to flop onto, so it turns with a gentle paper bend instead — glossy and shaded like the spread roll — and a touch slower. The other models are unchanged on lone pages.
+On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes slightly longer than `flipDuration` to keep the two reading at a similar speed. The other models are unchanged on lone pages.
 
 ## Methods
 

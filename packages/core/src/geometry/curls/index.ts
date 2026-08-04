@@ -7,7 +7,7 @@
  * Importing this module pulls in the deform math, so only the WebGL2 renderer does.
  * The engine references the lightweight `./types` (union + validation list) instead.
  */
-import { deformRoll, deformLiftSettle } from './roll';
+import { deformRoll } from './roll';
 import { deformSimple } from './simple';
 import { deformFold } from './fold';
 import { deformPeel } from './peel';
@@ -18,7 +18,7 @@ export { CURL_TYPES, DEFAULT_CURL } from './types';
 export type { CurlAnchor, CurlDeform, CurlModel, CurlType } from './types';
 
 export const CURLS: Record<CurlType, CurlModel> = {
-  roll: { deform: deformRoll, deformFill: deformLiftSettle, anchored: false },
+  roll: { deform: deformRoll, anchored: false },
   simple: { deform: deformSimple, anchored: false },
   fold: { deform: deformFold, anchored: true },
   peel: { deform: deformPeel, anchored: true },

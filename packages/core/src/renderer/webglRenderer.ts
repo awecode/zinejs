@@ -68,7 +68,10 @@ void main() {
   float bookX = uOriginX + uDir * aPos.x;
   float bookY = aPos.y;
   float Z = aPos.z;
-  float D = uLeafW * 3.0;
+  // Eye distance, in leaf widths. Keeps the perspective resolution-independent. 5.3 puts the
+  // roll's deepest point ~14% larger than flat; stronger than that (a nearer eye) balloons the
+  // turning sheet and reads more like a fisheye than a page lifting.
+  float D = uLeafW * 5.3;
   float persp = D / max(D - Z, 1.0);
   float cx = uViewport.x * 0.5;
   float cy = uViewport.y * 0.5;
@@ -91,6 +94,7 @@ uniform sampler2D uFront;
 uniform sampler2D uBack;
 uniform highp float uDir;
 uniform float uGloss; // 0 disables the specular highlight (e.g. the flat 'simple' curl)
+uniform float uAlpha; // leaf opacity; a lone page dissolves into the page landing beneath it
 out vec4 outColor;
 void main() {
   // The turn mesh carries its own facing in the normal; the front points at the viewer
@@ -111,11 +115,18 @@ void main() {
   float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22 * uGloss;
 
   c.rgb = clamp(c.rgb * lit + spec, 0.0, 1.0);
-  outColor = c;
+  // Premultiplied alpha (blendFunc ONE, ONE_MINUS_SRC_ALPHA): scale colour as well as alpha,
+  // or fading would brighten the sheet additively instead of dissolving it.
+  outColor = vec4(c.rgb * uAlpha, c.a * uAlpha);
 }`;
 
 const GRID_COLS = 28;
 const GRID_ROWS = 36;
+/** Progress at which a lone page starts dissolving. A full-width leaf has no facing half to
+ *  flop onto, so instead of landing on empty space it fades into the page arriving beneath it
+ *  over the rest of the turn. By this point the sheet has unrolled flat, so it never overlaps
+ *  itself while translucent (which would double-blend into visible dense patches). */
+const FILL_FADE_START = 0.7;
 const RESTORE_TIMEOUT_MS = 4000;
 const MAX_TEXTURE_CACHE_BYTES = 256 * 1024 * 1024;
 
@@ -393,7 +404,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss']) {
+    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss', 'uAlpha']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -555,11 +566,7 @@ export class WebglRenderer implements Renderer {
     // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    // Some curls (roll) assume a centered spine or a neighbouring page; in single-page mode
-    // they use a fill-specific variant that reads on a lone page instead of flopping off-screen.
-    const model = CURLS[this.#curlType];
-    const deform = flip.fill && model.deformFill ? model.deformFill : model.deform;
-    deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
+    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#posBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#mesh.positions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#normBuf);
@@ -582,7 +589,15 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
     gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlType === 'simple' ? 0 : 1); // flat curl = no shine
+    gl.uniform1f(this.#curlU.uAlpha ?? null, flip.fill ? this.#fillFade() : 1);
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
+  }
+
+  /** Leaf opacity for a lone page: solid until {@link FILL_FADE_START}, then dissolving to 0 as
+   *  it lands, so the turn resolves into the destination page rather than onto blank space. */
+  #fillFade(): number {
+    const over = (this.#flipT - FILL_FADE_START) / (1 - FILL_FADE_START);
+    return over <= 0 ? 1 : over >= 1 ? 0 : 1 - over;
   }
 
   #useFlat(): void {

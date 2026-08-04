@@ -28,9 +28,10 @@ const DRAG_THRESHOLD = 6;
 /** Window (ms) a single click waits to rule out a double-click before flipping. */
 const DOUBLE_CLICK_MS = 250;
 
-/** The single-page roll turns with a bent flip (no spread to roll onto); it reads better a
- *  touch slower than the spread roll, so its flip duration is scaled up by this automatically. */
-const SINGLE_PAGE_ROLL_SLOWDOWN = 1.75;
+/** A lone page fills the container, so it sweeps the full width where a spread leaf only covers
+ *  its half. `flipDuration` is the spread timing; lone pages stretch it by this so twice the
+ *  travel still reads at a comparable speed instead of whipping across. */
+const LONE_PAGE_FLIP_SCALE = 1.25;
 
 interface DragState {
   direction: FlipDirection;
@@ -387,7 +388,7 @@ export class Zine {
       if (this.#activeAnim !== anim) return; // superseded/interrupted → this frame is void
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
       const raw = Math.min(1, (now - start) / duration);
-      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * easeInOutCubic(raw), direction);
+      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * easeInOutQuad(raw), direction);
       if (raw < 1) {
         this.#raf = requestAnimationFrame(step);
       } else {
@@ -825,8 +826,7 @@ export class Zine {
 
   #effectiveDuration(): number {
     if (this.#reducedMotion) return 0;
-    const singleRoll = this.#singlePage && this.#curl === 'roll';
-    return this.#flipDuration * (singleRoll ? SINGLE_PAGE_ROLL_SLOWDOWN : 1);
+    return this.#flipDuration * (this.#singlePage ? LONE_PAGE_FLIP_SCALE : 1);
   }
 
   /** Re-measure and re-render; call after the container resizes. */
@@ -958,8 +958,11 @@ function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+/** Quadratic ease-in-out. Deliberately gentler than a cubic: a cubic leaves the page nearly
+ *  motionless for the first quarter of the turn and then spikes through the middle at roughly
+ *  double the peak speed, which reads as a lurch rather than a sheet of paper being turned. */
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
 function typeName(v: unknown): string {
