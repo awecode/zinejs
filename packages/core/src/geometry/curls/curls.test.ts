@@ -26,7 +26,7 @@ function maxAbsZ(mesh: PageMesh): number {
 
 describe('curl registry', () => {
   it('registers a model for every curl type', () => {
-    expect(CURL_TYPES.sort()).toEqual(['cone', 'flick', 'leaf', 'roll', 'simple']);
+    expect(CURL_TYPES.sort()).toEqual(['cone', 'flick', 'leaf', 'roll', 'silk', 'simple']);
     for (const type of CURL_TYPES) {
       expect(typeof CURLS[type].deform).toBe('function');
     }
@@ -66,7 +66,7 @@ describe.each(CURL_TYPES)('curl model: %s', (type) => {
   });
 });
 
-describe.each(['roll', 'simple', 'cone', 'leaf', 'flick'] as CurlType[])('symmetric curl lands flat: %s', (type) => {
+describe.each(['roll', 'simple', 'cone', 'leaf', 'flick', 'silk'] as CurlType[])('symmetric curl lands flat: %s', (type) => {
   it('mirrors flat onto the far side at t=1', () => {
     const mesh = deformed(type, 1);
     for (let i = 0; i <= COLS; i++) {
@@ -236,6 +236,121 @@ describe('flick curl', () => {
     const [xBottom] = vertex(mesh, COLS, ROWS);
     const [xTop] = vertex(mesh, COLS, 0);
     expect(xBottom).toBeGreaterThan(xTop);
+  });
+});
+
+describe('silk curl', () => {
+  /** Segment tangent angles along a row (atan2 of successive edges). */
+  function rowTangents(mesh: PageMesh, row: number): number[] {
+    const out: number[] = [];
+    for (let i = 1; i <= COLS; i++) {
+      const a = vertex(mesh, i - 1, row);
+      const b = vertex(mesh, i, row);
+      out.push(Math.atan2(b[2] - a[2], b[0] - a[0]));
+    }
+    return out;
+  }
+
+  it('forms an S-curve mid-turn (tangent deviations change sign)', () => {
+    // Unlike flick (straight sheet at t=0.5) and leaf (single-sign bend zone),
+    // silk's sin(2πu) mode makes the tangent oscillate about the spine angle.
+    const mesh = deformed('silk', 0.5);
+    const mid = Math.floor(ROWS / 2);
+    const tangents = rowTangents(mesh, mid);
+    const rho = Math.PI / 2;
+    let sawPos = false;
+    let sawNeg = false;
+    for (const th of tangents) {
+      let d = th - rho;
+      // unwrap into (−π, π]
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d <= -Math.PI) d += 2 * Math.PI;
+      if (d > 0.04) sawPos = true;
+      if (d < -0.04) sawNeg = true;
+    }
+    expect(sawPos).toBe(true);
+    expect(sawNeg).toBe(true);
+  });
+
+  it('is not a straight cantilever at mid-turn (unlike flick)', () => {
+    const silk = deformed('silk', 0.5);
+    const flick = deformed('flick', 0.5);
+    const mid = Math.floor(ROWS / 2);
+    // flick is edge-on and straight: every vertex sits near x=0.
+    for (let i = 0; i <= COLS; i++) {
+      const [xF] = vertex(flick, i, mid);
+      expect(Math.abs(xF)).toBeLessThan(1);
+    }
+    // silk's S pushes material off the spine plane — free edge leaves x=0.
+    const [xSilk] = vertex(silk, COLS, mid);
+    expect(Math.abs(xSilk)).toBeGreaterThan(5);
+  });
+
+  it('has no large flat untouched region mid-turn (unlike leaf)', () => {
+    // leaf keeps a strip of front-facing paper at z≈0 ahead of its wave.
+    // silk is spine-driven: the whole strip is rotating, so z rises across the row.
+    const silk = deformed('silk', 0.5);
+    const leaf = deformed('leaf', 0.5);
+    const mid = Math.floor(ROWS / 2);
+    let silkFlat = 0;
+    let leafFlat = 0;
+    for (let i = 0; i <= COLS; i++) {
+      if (Math.abs(vertex(silk, i, mid)[2]!) < 1e-3) silkFlat++;
+      if (Math.abs(vertex(leaf, i, mid)[2]!) < 1e-3) leafFlat++;
+    }
+    expect(leafFlat).toBeGreaterThan(2);
+    expect(silkFlat).toBeLessThanOrEqual(2);
+  });
+
+  it('preserves row length (isometric strip)', () => {
+    for (const t of [0.2, 0.4, 0.6, 0.8]) {
+      const mesh = deformed('silk', t);
+      const mid = Math.floor(ROWS / 2);
+      let length = 0;
+      for (let i = 1; i <= COLS; i++) {
+        const a = vertex(mesh, i - 1, mid);
+        const b = vertex(mesh, i, mid);
+        length += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      }
+      expect(length).toBeGreaterThan(W * 0.999);
+      expect(length).toBeLessThanOrEqual(W * 1.001);
+    }
+  });
+
+  it('lets the grabbed bottom corner lead the opposite corner', () => {
+    const mesh = deformed('silk', 0.3);
+    const [xBottom] = vertex(mesh, COLS, ROWS);
+    const [xTop] = vertex(mesh, COLS, 0);
+    expect(xBottom).toBeLessThan(xTop);
+  });
+
+  it('mirrors the corner lead for a top-corner grab', () => {
+    const mesh = createPageMesh(COLS, ROWS);
+    CURLS.silk.deform(mesh, W, H, 0.3, { y: 0 });
+    const [xBottom] = vertex(mesh, COLS, ROWS);
+    const [xTop] = vertex(mesh, COLS, 0);
+    expect(xTop).toBeLessThan(xBottom);
+  });
+
+  it('delays the flop on a full-width fill leaf', () => {
+    const spread = createPageMesh(COLS, ROWS);
+    const fill = createPageMesh(COLS, ROWS);
+    CURLS.silk.deform(spread, W, H, 0.45, { y: 1 });
+    CURLS.silk.deform(fill, W, H, 0.45, { y: 1, fill: true });
+    // Delayed ρ keeps the free edge further forward (larger x) on fill.
+    const [xSpread] = vertex(spread, COLS, ROWS);
+    const [xFill] = vertex(fill, COLS, ROWS);
+    expect(xFill).toBeGreaterThan(xSpread + 1);
+  });
+
+  it('lands flat on a fill leaf at t=1', () => {
+    const mesh = createPageMesh(COLS, ROWS);
+    CURLS.silk.deform(mesh, W, H, 1, { y: 1, fill: true });
+    for (let i = 0; i <= COLS; i++) {
+      const [x, , z] = vertex(mesh, i, 0);
+      expect(z).toBeCloseTo(0, 2);
+      expect(x).toBeCloseTo(-((i / COLS) * W), 2);
+    }
   });
 });
 

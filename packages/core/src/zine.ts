@@ -64,7 +64,7 @@ export interface ZineOptions {
   source: Source;
   /** Renderer selection; default 'auto'. */
   renderer?: RendererOption;
-  /** Page-curl model for the WebGL2 renderer: 'roll' | 'cone' | 'leaf' | 'flick' | 'simple'. Default 'cone'. */
+  /** Page-curl model for the WebGL2 renderer: 'roll' | 'cone' | 'leaf' | 'flick' | 'silk' | 'simple'. Default 'cone'. */
   curl?: CurlType;
   /** Fixed container width in px; omit to let the container/CSS drive the size. */
   width?: number;

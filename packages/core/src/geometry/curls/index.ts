@@ -2,7 +2,7 @@
  * Page-curl registry. Each model turns a 0→1 flip progress into a bent page mesh; the
  * WebGL2 renderer picks one by the `curl` option. `anchored` models fold from a corner
  * given by `anchor.y` (0 = top, 1 = bottom — where the reader tapped); the others roll
- * the whole free edge and ignore it.
+ * or rotate the whole free edge and ignore it.
  *
  * Importing this module pulls in the deform math, so only the WebGL2 renderer does.
  * The engine references the lightweight `./types` (union + validation list) instead.
@@ -11,6 +11,7 @@ import { deformRoll } from './roll';
 import { deformCone } from './cone';
 import { deformLeaf } from './leaf';
 import { deformFlick } from './flick';
+import { deformSilk } from './silk';
 import { deformSimple } from './simple';
 import type { CurlModel, CurlType } from './types';
 
@@ -23,5 +24,6 @@ export const CURLS: Record<CurlType, CurlModel> = {
   cone: { deform: deformCone, anchored: true },
   leaf: { deform: deformLeaf, anchored: true },
   flick: { deform: deformFlick, anchored: true },
+  silk: { deform: deformSilk, anchored: true },
   simple: { deform: deformSimple, anchored: false },
 };
