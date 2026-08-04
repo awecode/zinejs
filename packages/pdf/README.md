@@ -25,7 +25,7 @@ Under a bundler that's all you need — the pdf.js worker is resolved for you.
 
 ### CDN / no bundler
 
-Both packages ship **UMD** builds (`dist/index.umd.cjs`) that share the `ZineJS` global — load **core first**, then pdf (the pdf build uses `extend: true` so it merges into `ZineJS` instead of replacing it).
+Both packages ship **UMD** builds (`dist/index.umd.js`) that share the `ZineJS` global — load **core first**, then pdf (the pdf build uses `extend: true` so it merges into `ZineJS` instead of replacing it).
 
 Modern `pdfjs-dist` is ESM-only, so expose it as `globalThis.pdfjsLib` before opening a PDF, and pass an explicit `workerSrc` (no bundler rewrites the worker URL):
 
@@ -36,14 +36,14 @@ Modern `pdfjs-dist` is ESM-only, so expose it as `globalThis.pdfjsLib` before op
 
   await new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.cjs';
+    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js';
     s.onload = resolve;
     s.onerror = reject;
     document.head.append(s);
   });
   await new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.cjs';
+    s.src = 'https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.js';
     s.onload = resolve;
     s.onerror = reject;
     document.head.append(s);
@@ -60,7 +60,7 @@ Modern `pdfjs-dist` is ESM-only, so expose it as `globalThis.pdfjsLib` before op
 Image-only books can skip pdf.js and use a plain classic script:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.cjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
 <script>
   new ZineJS.Zine(document.getElementById('book'), {
     source: new ZineJS.ImageSource(['page-01.png', 'page-02.png']),

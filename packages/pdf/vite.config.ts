@@ -52,7 +52,7 @@ export default defineConfig({
       // `extend: true` merges into an existing ZineJS rather than replacing it.
       name: 'ZineJS',
       formats: ['es', 'umd'],
-      fileName: (format) => (format === 'es' ? 'index.js' : 'index.umd.cjs'),
+      fileName: (format) => (format === 'es' ? 'index.js' : 'index.umd.js'),
     },
     sourcemap: true,
     rollupOptions: {

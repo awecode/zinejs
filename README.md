@@ -21,7 +21,7 @@ npm install @zinejs/core
 npm install @zinejs/pdf
 ```
 
-Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.umd.cjs`). Core exposes the `ZineJS` global; the PDF package **extends** the same global (load core first). See [`@zinejs/pdf`](packages/pdf) for a full CDN example with pdf.js + `workerSrc`.
+Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.umd.js`). Core exposes the `ZineJS` global; the PDF package **extends** the same global (load core first). See [`@zinejs/pdf`](packages/pdf) for a full CDN example with pdf.js + `workerSrc`.
 
 ## Quick start
 

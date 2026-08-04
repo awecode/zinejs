@@ -6,7 +6,7 @@ export default defineConfig({
             entry: 'src/index.ts',
             name: 'ZineJS',
             formats: ['es', 'umd'],
-            fileName: (format) => (format === 'es' ? 'index.js' : 'index.umd.cjs'),
+            fileName: (format) => (format === 'es' ? 'index.js' : 'index.umd.js'),
         },
         sourcemap: true,
     },

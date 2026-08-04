@@ -10,7 +10,7 @@ Framework-agnostic flipbook engine: turn images or PDFs into a page-flipping boo
 npm install @zinejs/core
 ```
 
-Also ships a **UMD** build at `dist/index.umd.cjs` (global `ZineJS`) for CDN / `<script>` hosts. The ESM build code-splits the CSS and WebGL2 renderers; the UMD build inlines both so a single script is enough.
+Also ships a **UMD** build at `dist/index.umd.js` (global `ZineJS`) for CDN / `<script>` hosts. The ESM build code-splits the CSS and WebGL2 renderers; the UMD build inlines both so a single script is enough.
 
 ## Image book
 
