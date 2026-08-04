@@ -47,6 +47,7 @@ new Zine(container, {
   source,                    // ImageSource | PdfSource (required)
   direction: 'ltr',          // 'ltr' | 'rtl'
   spreadMode: 'cover',       // 'double' | 'single' | 'cover' (lone first page) | 'book' (lone first & last)
+  curl: 'cone',              // WebGL2 only: 'cone' | 'roll' | 'leaf' | 'flick' | 'simple'
   frontCover: 'front.jpg',   // optional image prepended as a lone front cover
   backCover: 'back.jpg',     // optional image appended as a lone back cover
   pages: { 4: 'ad.jpg' },    // optional: replace source pages with images (0-based; -1 = last)
@@ -59,6 +60,7 @@ new Zine(container, {
 });
 ```
 
+See the [root README](../../README.md#curl-models) for what each curl model does.
 ## Methods & events
 
 ```js
