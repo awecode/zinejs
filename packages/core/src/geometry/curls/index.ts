@@ -12,8 +12,6 @@ import { deformCone } from './cone';
 import { deformLeaf } from './leaf';
 import { deformFlick } from './flick';
 import { deformSimple } from './simple';
-import { deformFold } from './fold';
-import { deformPeel } from './peel';
 import type { CurlModel, CurlType } from './types';
 
 export { createPageMesh, computeNormals, type PageMesh } from './mesh';
@@ -26,6 +24,4 @@ export const CURLS: Record<CurlType, CurlModel> = {
   leaf: { deform: deformLeaf, anchored: true },
   flick: { deform: deformFlick, anchored: true },
   simple: { deform: deformSimple, anchored: false },
-  fold: { deform: deformFold, anchored: true },
-  peel: { deform: deformPeel, anchored: true },
 };

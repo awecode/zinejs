@@ -64,7 +64,7 @@ export interface ZineOptions {
   source: Source;
   /** Renderer selection; default 'auto'. */
   renderer?: RendererOption;
-  /** Page-curl model for the WebGL2 renderer: 'roll' | 'cone' | 'leaf' | 'flick' | 'simple' | 'fold' | 'peel'. Default 'roll'. */
+  /** Page-curl model for the WebGL2 renderer: 'roll' | 'cone' | 'leaf' | 'flick' | 'simple'. Default 'cone'. */
   curl?: CurlType;
   /** Fixed container width in px; omit to let the container/CSS drive the size. */
   width?: number;
@@ -555,7 +555,7 @@ export class Zine {
     if (!direction) return;
     const step = direction === 'forward' ? 1 : -1;
     if (this.#current + step < 0 || this.#current + step >= this.#spreads.length) return;
-    // Anchor the fold at the tapped height (cone/leaf/flick/fold/peel curl from where you tap).
+    // Anchor the fold at the tapped height (cone/leaf/flick curl from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
     // Read `#current` lazily so a tap queued mid-turn steps on from wherever the page lands.
     const flip = (): void => this.#startFlip(this.#current + step);

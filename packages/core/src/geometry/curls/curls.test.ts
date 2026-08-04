@@ -26,7 +26,7 @@ function maxAbsZ(mesh: PageMesh): number {
 
 describe('curl registry', () => {
   it('registers a model for every curl type', () => {
-    expect(CURL_TYPES.sort()).toEqual(['cone', 'flick', 'fold', 'leaf', 'peel', 'roll', 'simple']);
+    expect(CURL_TYPES.sort()).toEqual(['cone', 'flick', 'leaf', 'roll', 'simple']);
     for (const type of CURL_TYPES) {
       expect(typeof CURLS[type].deform).toBe('function');
     }
