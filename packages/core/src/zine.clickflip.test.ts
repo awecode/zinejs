@@ -127,6 +127,59 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
   });
 });
 
+// A book narrower than its container is letterboxed, so container x and book x differ.
+// Everything that hit-tests a pointer has to subtract that offset or the zones drift.
+class LetterboxedRenderer extends MockRenderer {
+  override measure(): LayoutMetrics {
+    // 800px container holding a 600px-wide book → 100px bars on each side.
+    return {
+      containerWidth: 800,
+      containerHeight: 600,
+      pageWidth: 300,
+      pageHeight: 600,
+      book: { x: 100, y: 0, width: 600, height: 600 },
+      content: { x: 100, y: 0, width: 600, height: 600 },
+    };
+  }
+}
+
+describe('Zine — click zones on a letterboxed book', () => {
+  const letterboxed = { renderer: new LetterboxedRenderer() } as Partial<ZineOptions>;
+
+  it('zooms on a double-click in the dead zone near a letterbox bar', async () => {
+    const { zine, el } = await makeZine(0, letterboxed);
+    // x=110 is 10px into the book: inside the left bar's shadow, but the book's own
+    // left edge zone ends at 100+64=164, so this IS a flip zone → must not zoom.
+    doubleClick(el, 110, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+
+    // x=700 sits on the book's right edge (100+600); the dead zone runs 164..636 in
+    // container px, so 700 is an edge zone too → still no zoom.
+    doubleClick(el, 700, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('does not zoom in the center, and does zoom outside the flip zones', async () => {
+    const { zine, el } = await makeZine(0, letterboxed);
+    // Dead center of the book (100 + 300 = 400) is a dead zone → zoom is allowed.
+    doubleClick(el, 400, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('treats the far right of the book as a flip zone, not a zoom', async () => {
+    const { zine, el } = await makeZine(0, letterboxed);
+    // 690 is 590px into the 600px-wide book — deep inside the right edge zone.
+    // Measured against the *container* width (800) it would look like the dead
+    // zone, which is exactly the bug: the double-click would zoom instead of flip.
+    doubleClick(el, 690, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+});
+
 describe('Zine — click to flip (half mode: delayed, double-click zoom on)', () => {
   it('flips from the right half after the delay', async () => {
     const { zine, el } = await makeZine(0, { clickToFlip: 'half' });

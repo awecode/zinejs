@@ -662,12 +662,14 @@ export class Zine {
   #bindDoubleClickZoom(): void {
     const onDoubleClick = (event: MouseEvent): void => {
       const levels = this.#doubleClickLevels;
-      if (!this.#zoomEnabled || levels === null) return;
+      if (!this.#zoomEnabled || levels === null || !this.#renderer) return;
       // At scale 1 a double-click inside a flip zone belongs to click-to-flip, not zoom,
       // unless we're honoring double-click zoom there.
       if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
         const rect = this.#container.getBoundingClientRect();
-        const local = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const b = this.#contentRect();
+        // Book-local, like the tap path: the zones track the page, not the letterbox bars.
+        const local = { x: event.clientX - rect.left - b.x, y: event.clientY - rect.top - b.y };
         if (this.#clickFlipDirection(local) !== null) return; // in a flip zone → leave it to click-to-flip
       }
       // A double-click means the single-click flip we may have queued was really a zoom.
