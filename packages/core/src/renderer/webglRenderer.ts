@@ -124,9 +124,11 @@ const GRID_COLS = 28;
 const GRID_ROWS = 36;
 /** Progress at which a lone page starts dissolving. A full-width leaf has no facing half to
  *  flop onto, so instead of landing on empty space it fades into the page arriving beneath it
- *  over the rest of the turn. By this point the sheet has unrolled flat, so it never overlaps
- *  itself while translucent (which would double-blend into visible dense patches). */
-const FILL_FADE_START = 0.7;
+ *  over the rest of the turn. Roll is already flat by mid-turn; curling models stay bent
+ *  longer, so they dissolve later. The fade itself eases so the leaf settles rather than
+ *  vanishing while still swinging. */
+const FILL_FADE_START_ROLL = 0.7;
+const FILL_FADE_START_CURL = 0.8;
 const RESTORE_TIMEOUT_MS = 4000;
 const MAX_TEXTURE_CACHE_BYTES = 256 * 1024 * 1024;
 
@@ -566,7 +568,10 @@ export class WebglRenderer implements Renderer {
     // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
+    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, {
+      y: this.#anchor.y,
+      fill: flip.fill,
+    });
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#posBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#mesh.positions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#normBuf);
@@ -593,11 +598,19 @@ export class WebglRenderer implements Renderer {
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
   }
 
-  /** Leaf opacity for a lone page: solid until {@link FILL_FADE_START}, then dissolving to 0 as
-   *  it lands, so the turn resolves into the destination page rather than onto blank space. */
+  /** Leaf opacity for a lone page: solid until the curl-appropriate fade start, then
+   *  dissolving to 0 as it lands, so the turn resolves into the destination page rather
+   *  than onto blank space. The fade eases so opacity hangs longer then finishes cleanly. */
   #fillFade(): number {
-    const over = (this.#flipT - FILL_FADE_START) / (1 - FILL_FADE_START);
-    return over <= 0 ? 1 : over >= 1 ? 0 : 1 - over;
+    const start =
+      this.#curlType === 'roll' || this.#curlType === 'simple'
+        ? FILL_FADE_START_ROLL
+        : FILL_FADE_START_CURL;
+    const over = (this.#flipT - start) / (1 - start);
+    if (over <= 0) return 1;
+    if (over >= 1) return 0;
+    // Ease-out the remaining opacity: stay readable through most of the window, then settle.
+    return Math.pow(1 - over, 1.5);
   }
 
   #useFlat(): void {

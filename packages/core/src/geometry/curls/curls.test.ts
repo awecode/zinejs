@@ -93,6 +93,36 @@ describe('cone curl', () => {
     const [xTop] = vertex(mesh, COLS, 0);
     expect(xTop).toBeLessThan(xBottom);
   });
+
+  it('keeps more of the sheet over the page mid-turn on a full-width fill leaf', () => {
+    // Fill delays the spine flop, so at mid-turn the free edge has advanced less than
+    // the spread (non-fill) cone — the peel develops over the page before swinging off.
+    const spread = createPageMesh(COLS, ROWS);
+    const fill = createPageMesh(COLS, ROWS);
+    CURLS.cone.deform(spread, W, H, 0.5, { y: 1 });
+    CURLS.cone.deform(fill, W, H, 0.5, { y: 1, fill: true });
+    const [xSpread] = vertex(spread, COLS, ROWS);
+    const [xFill] = vertex(fill, COLS, ROWS);
+    expect(xFill).toBeGreaterThan(xSpread + 2);
+  });
+
+  it('lands flat on a fill leaf at t=1', () => {
+    const mesh = createPageMesh(COLS, ROWS);
+    CURLS.cone.deform(mesh, W, H, 1, { y: 1, fill: true });
+    for (let i = 0; i <= COLS; i++) {
+      const [x, , z] = vertex(mesh, i, 0);
+      expect(z).toBeCloseTo(0, 2);
+      expect(x).toBeCloseTo(-((i / COLS) * W), 2);
+    }
+  });
+
+  it('still lets the grabbed corner lead on a fill leaf', () => {
+    const mesh = createPageMesh(COLS, ROWS);
+    CURLS.cone.deform(mesh, W, H, 0.35, { y: 1, fill: true });
+    const [xBottom] = vertex(mesh, COLS, ROWS);
+    const [xTop] = vertex(mesh, COLS, 0);
+    expect(xBottom).toBeLessThan(xTop);
+  });
 });
 
 describe('leaf curl', () => {

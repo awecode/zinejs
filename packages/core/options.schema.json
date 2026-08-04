@@ -75,7 +75,7 @@
       "type": "number",
       "minimum": 0,
       "default": 800,
-      "description": "Flip animation duration in milliseconds. Timed for a two-page spread; a lone page sweeps the full width, so it stretches this slightly."
+      "description": "Flip animation duration in milliseconds. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing half to land on)."
     },
     "clickToFlip": {
       "type": "string",

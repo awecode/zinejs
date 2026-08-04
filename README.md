@@ -71,7 +71,7 @@ new Zine(document.getElementById('book'), {
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
-| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page sweeps the full width, so it stretches this slightly. |
+| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
 | `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). |
@@ -114,7 +114,7 @@ The WebGL2 renderer bends the turning leaf with one of five models (`curl` optio
 
 For anchored models (`cone`, `leaf`, `flick`), the fold originates at the corner nearest where the reader taps/grabs.
 
-On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes slightly longer than `flipDuration` to keep the two reading at a similar speed. The other models are unchanged on lone pages.
+On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes longer than `flipDuration` and eases out harder — there is no facing landing to watch, only the peel and fade. `cone` also softens and slightly delays its flop on full-width lone pages so the peel stays over the sheet; the other models are otherwise unchanged.
 
 ## Methods
 

@@ -8,6 +8,12 @@ import type { PageMesh } from './mesh';
 /** Where a corner-anchored curl folds from: y in [0,1], 0 = top edge, 1 = bottom edge. */
 export interface CurlAnchor {
   y: number;
+  /**
+   * Full-width lone page (single-page mode). The leaf hinges at the container edge and
+   * has no facing half to land on — deforms may soften and delay the flop so the curl
+   * reads naturally before the renderer dissolves the sheet.
+   */
+  fill?: boolean;
 }
 
 export type CurlDeform = (mesh: PageMesh, W: number, H: number, t: number, anchor: CurlAnchor) => void;

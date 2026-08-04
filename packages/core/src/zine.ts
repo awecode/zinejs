@@ -29,9 +29,9 @@ const DRAG_THRESHOLD = 6;
 const DOUBLE_CLICK_MS = 250;
 
 /** A lone page fills the container, so it sweeps the full width where a spread leaf only covers
- *  its half. `flipDuration` is the spread timing; lone pages stretch it by this so twice the
- *  travel still reads at a comparable speed instead of whipping across. */
-const LONE_PAGE_FLIP_SCALE = 1.25;
+ *  its half — and it dissolves instead of landing on a facing page. Stretch duration so the
+ *  peel and fade read at a comparable pace to a spread turn rather than whipping away. */
+const LONE_PAGE_FLIP_SCALE = 1.55;
 
 interface DragState {
   direction: FlipDirection;
@@ -387,8 +387,10 @@ export class Zine {
     const step = (now: number): void => {
       if (this.#activeAnim !== anim) return; // superseded/interrupted → this frame is void
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
+      // Lone pages ease out harder — no facing half to land on, only a dissolve.
       const raw = Math.min(1, (now - start) / duration);
-      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * easeInOutQuad(raw), direction);
+      const eased = this.#singlePage ? easeInOutLone(raw) : easeInOutQuad(raw);
+      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * eased, direction);
       if (raw < 1) {
         this.#raf = requestAnimationFrame(step);
       } else {
@@ -963,6 +965,14 @@ function clamp(value: number, min: number, max: number): number {
  *  double the peak speed, which reads as a lurch rather than a sheet of paper being turned. */
 function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/** Lone-page turn: same gentle start as the spread ease, then a longer decelerating finish.
+ *  Without a facing half the landing is a dissolve — front-loading a bit of progress and
+ *  stretching the tail keeps that fade from reading as a whip. */
+function easeInOutLone(t: number): number {
+  const x = easeInOutQuad(t);
+  return 1 - Math.pow(1 - x, 1.3);
 }
 
 function typeName(v: unknown): string {
