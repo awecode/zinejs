@@ -22,6 +22,9 @@ vi.mock('pdfjs-dist', () => ({
 describe('PdfSource', () => {
   beforeEach(async () => {
     (await pdfjsMock()).GlobalWorkerOptions.workerSrc = ''; // reset the shared global between tests
+    mock.getDocument.mockClear();
+    // CDN path prefers this global — keep it off unless a test sets it.
+    delete (globalThis as { pdfjsLib?: unknown }).pdfjsLib;
   });
 
   it('opens a URL PDF (with workerSrc) and reports its page count', async () => {
@@ -63,6 +66,33 @@ describe('PdfSource', () => {
     const src = new PdfSource('doc.pdf'); // no explicit option
     await src.open();
     expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/preset-worker.mjs');
+  });
+
+  it('uses globalThis.pdfjsLib when present (CDN / UMD host)', async () => {
+    const g = globalThis as typeof globalThis & { pdfjsLib?: unknown };
+    const prev = g.pdfjsLib;
+    const page = {
+      getViewport: () => ({ width: 80, height: 100 }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const doc = { numPages: 2, getPage: async () => page, destroy: () => {} };
+    g.pdfjsLib = {
+      GlobalWorkerOptions: { workerSrc: '/from-global-worker.mjs' },
+      getDocument: vi.fn(() => ({ promise: Promise.resolve(doc) })),
+    };
+    try {
+      const src = new PdfSource('cdn.pdf');
+      await src.open();
+      expect(src.pageCount).toBe(2);
+      expect((g.pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc).toBe(
+        '/from-global-worker.mjs',
+      );
+      // Prefer the global: the module mock's getDocument must not have been used for this open.
+      expect(mock.getDocument).not.toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete g.pdfjsLib;
+      else g.pdfjsLib = prev;
+    }
   });
 
   it('accepts a pre-created document without a workerSrc', async () => {

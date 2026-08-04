@@ -30,7 +30,8 @@ function preservePdfWorkerUrl(): Plugin {
       return null;
     },
     generateBundle(_options, bundle) {
-      const marker = new RegExp(`(['"])${WORKER_PLACEHOLDER}\\1`, 'g');
+      // Vite/rolldown may emit the placeholder as '…', "…", or `…` (UMD minify).
+      const marker = new RegExp(`(['"\`])${WORKER_PLACEHOLDER}\\1`, 'g');
       for (const chunk of Object.values(bundle)) {
         if (chunk.type === 'chunk' && chunk.code.includes(WORKER_PLACEHOLDER)) {
           chunk.code = chunk.code.replace(marker, `(${WORKER_URL_EXPR})`);
@@ -41,18 +42,29 @@ function preservePdfWorkerUrl(): Plugin {
 }
 
 // Keep pdf.js (and its worker) out of our published bundle — the consumer's
-// install resolves it at app-build time. ESM-only for now; UMD is a later slice.
+// install resolves it at app-build time (ESM) or via a global (UMD / CDN).
 export default defineConfig({
   plugins: [preservePdfWorkerUrl()],
   build: {
     lib: {
       entry: 'src/index.ts',
-      formats: ['es'],
-      fileName: () => 'index.js',
+      // Same global as @zinejs/core so CDN scripts can do ZineJS.PdfSource.
+      // `extend: true` merges into an existing ZineJS rather than replacing it.
+      name: 'ZineJS',
+      formats: ['es', 'umd'],
+      fileName: (format) => (format === 'es' ? 'index.js' : 'index.umd.cjs'),
     },
     sourcemap: true,
     rollupOptions: {
       external: (id) => id === 'pdfjs-dist' || id.startsWith('pdfjs-dist/'),
+      output: {
+        // UMD: expect pdf.js from a prior <script> as `pdfjsLib` (pdf.js's UMD name).
+        // ESM still uses the dynamic import; loadPdfjs() also accepts the global.
+        globals: {
+          'pdfjs-dist': 'pdfjsLib',
+        },
+        extend: true,
+      },
     },
   },
 });

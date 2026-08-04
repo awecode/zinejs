@@ -57,9 +57,20 @@ function isPdfDocument(src: PdfSrc): src is PdfDocumentLike {
 }
 
 /**
- * Renders PDF pages to canvases for zinejs. pdf.js is a peer dependency, loaded
- * lazily so it never lands in the core bundle. Async — pass it to `new Zine`,
- * which calls `open()` (learning the page count) before building spreads.
+ * Load pdf.js. CDN / UMD hosts typically expose `globalThis.pdfjsLib` from a
+ * `<script>` of pdf.js; bundlers have no global and resolve the dynamic import.
+ */
+async function loadPdfjs(): Promise<PdfjsModule> {
+  const g = globalThis as typeof globalThis & { pdfjsLib?: PdfjsModule };
+  if (g.pdfjsLib) return g.pdfjsLib;
+  return (await import('pdfjs-dist')) as unknown as PdfjsModule;
+}
+
+/**
+ * Renders PDF pages to canvases for zinejs. pdf.js is a dependency of this
+ * package, loaded lazily so it never lands in the core bundle. Async — pass it
+ * to `new Zine`, which calls `open()` (learning the page count) before building
+ * spreads.
  */
 export class PdfSource implements Source {
   pageCount = 0;
@@ -94,7 +105,7 @@ export class PdfSource implements Source {
     if (isPdfDocument(this.#src)) {
       this.#doc = this.#src;
     } else {
-      const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsModule;
+      const pdfjs = await loadPdfjs();
       pdfjs.GlobalWorkerOptions.workerSrc = this.#resolveWorkerSrc(pdfjs.GlobalWorkerOptions.workerSrc);
       const params: DocParams =
         typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
