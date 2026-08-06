@@ -431,10 +431,8 @@ export class Zine {
       this.#pan = { baseTx: this.#tx, baseTy: this.#ty };
       return;
     }
-    const rect = this.#container.getBoundingClientRect();
     const b = this.#contentRect();
-    // Points are relative to the letterboxed book, so zones/corners track the page, not the bars.
-    const point = { x: clientX - rect.left - b.x, y: clientY - rect.top - b.y };
+    const point = this.#toBookPoint(clientX, clientY);
     this.#press = point; // remembered for tap classification / click-to-flip zone
     const cornerSize = Math.min(b.width, b.height) * CORNER_FRACTION;
     if (hitTest(point, { width: b.width, height: b.height }, cornerSize) !== 'corner') {
@@ -572,7 +570,6 @@ export class Zine {
     }, this.#clickFlipDelayValue);
   }
 
-  /** Which way a tap at `point` (container-local) turns the page, or null for a dead zone. */
   /** Where the current spread is actually drawn (lone pages centered), as the renderer reports
    *  it — the region taps/drags map into. Falls back to book, then the full container. */
   #contentRect(): { x: number; y: number; width: number; height: number } {
@@ -580,15 +577,26 @@ export class Zine {
     return m.content ?? m.book ?? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
   }
 
+  /** A viewport point in book-local px: relative to the drawn page, not the container. The two
+   *  differ whenever the book is letterboxed, so every hit test against a zone or corner has to
+   *  come through here — measuring from the container edge puts the zones off by the bar width. */
+  #toBookPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.#container.getBoundingClientRect();
+    const b = this.#contentRect();
+    return { x: clientX - rect.left - b.x, y: clientY - rect.top - b.y };
+  }
+
+  /** Which way a tap at `point` (book-local, via {@link #toBookPoint}) turns the page, or null
+   *  for a dead zone. */
   #clickFlipDirection(point: { x: number; y: number }): FlipDirection | null {
     if (!this.#renderer) return null;
-    const containerWidth = this.#contentRect().width;
+    const bookWidth = this.#contentRect().width;
     let side: 'left' | 'right' | null;
     if (this.#clickToFlip === 'half') {
-      side = point.x > containerWidth / 2 ? 'right' : 'left';
+      side = point.x > bookWidth / 2 ? 'right' : 'left';
     } else if (point.x <= this.#clickZoneSize) {
       side = 'left';
-    } else if (point.x >= containerWidth - this.#clickZoneSize) {
+    } else if (point.x >= bookWidth - this.#clickZoneSize) {
       side = 'right';
     } else {
       side = null; // center dead zone in 'edge' mode
@@ -666,10 +674,7 @@ export class Zine {
       // At scale 1 a double-click inside a flip zone belongs to click-to-flip, not zoom,
       // unless we're honoring double-click zoom there.
       if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
-        const rect = this.#container.getBoundingClientRect();
-        const b = this.#contentRect();
-        // Book-local, like the tap path: the zones track the page, not the letterbox bars.
-        const local = { x: event.clientX - rect.left - b.x, y: event.clientY - rect.top - b.y };
+        const local = this.#toBookPoint(event.clientX, event.clientY);
         if (this.#clickFlipDirection(local) !== null) return; // in a flip zone → leave it to click-to-flip
       }
       // A double-click means the single-click flip we may have queued was really a zoom.
