@@ -1,6 +1,7 @@
 import './demo.css';
 import { Zine, ImageSource, CURL_TYPES, type CurlType, type Source } from '@zinejs/core';
 import { PdfSource } from '@zinejs/pdf';
+import { installClickDebug } from './clickDebug';
 
 // One harness drives all four demo pages; the kind + renderer come from the URL path.
 type Kind = 'image' | 'pdf';
@@ -170,6 +171,12 @@ const zine = new Zine(book, {
   singlePageThreshold: opt.singlePageThreshold,
   zoom: { max: opt.zoomMax },
 });
+
+// Click/double-click diagnostics, on unless ?clickdebug=0. Explains in the console why a
+// double-click did or did not zoom (browser never paired the clicks vs. landed in a flip zone).
+if (q.get('clickdebug') !== '0') {
+  installClickDebug(book, zine, { clickToFlip: opt.clickToFlip });
+}
 
 zine.on('pageChanged', updateStatus);
 zine.on('zoomChanged', updateStatus);
