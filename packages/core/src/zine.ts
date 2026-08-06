@@ -152,6 +152,8 @@ export class Zine {
   // The fold animation currently on screen, so a new flip request can land it instantly
   // (snap to its end pose + commit) and start immediately instead of waiting it out.
   #activeAnim: { toT: number; direction: FlipDirection; onDone: () => void } | null = null;
+  // Bumped per flip so an async #runFlip that resumes after being superseded can bail.
+  #flipGeneration = 0;
   #pan: { baseTx: number; baseTy: number } | null = null;
   #pinching = false;
   #pinchBaseScale = 1;
@@ -233,11 +235,18 @@ export class Zine {
   }
 
   flipNext(): void {
-    this.#requestFlip(() => this.#startFlip(this.#current + 1));
+    this.#stepFlip(1);
   }
 
   flipPrev(): void {
-    this.#requestFlip(() => this.#startFlip(this.#current - 1));
+    this.#stepFlip(-1);
+  }
+
+  /** Turn one spread in `step`'s direction, counted from wherever the book lands. Interrupting
+   *  commits the running turn first, so this steps on from there — repeat taps keep advancing,
+   *  and a reversal goes to the neighbour of the spread that just landed. */
+  #stepFlip(step: 1 | -1): void {
+    this.#requestFlip(() => this.#startFlip(this.#current + step));
   }
 
   flipTo(page: number): void {
@@ -253,6 +262,11 @@ export class Zine {
     if (this.#machine.state === 'idle') {
       run();
     } else if (this.#activeAnim) {
+      // This request supersedes anything still waiting: landing the current turn commits it,
+      // and that commit drains the queue. Without clearing it first, an older tap would fire
+      // from inside the commit and take the book somewhere the reader has since changed their
+      // mind about — a reversal would be undone by the forward tap it was meant to replace.
+      this.#queuedFlip = null;
       this.#finishActiveAnim(); // lands the current turn → machine back to idle
       run();
     } else {
@@ -348,14 +362,27 @@ export class Zine {
     // State is already locked (send('flip') above), so re-entrant flips are rejected
     // even though staging the destination content below is async.
     this.#emitter.emit('flipStart', { from: this.#currentPage, to: toPage });
-    void this.#runFlip(targetIndex, direction, toPage);
+    // Claimed here, synchronously, so this flip owns the run before #runFlip's first await.
+    // Bumping inside #runFlip instead let a superseded flip's continuation claim the newest
+    // generation and cancel the flip that replaced it.
+    void this.#runFlip(targetIndex, direction, toPage, ++this.#flipGeneration);
   }
 
-  async #runFlip(targetIndex: number, direction: FlipDirection, toPage: number): Promise<void> {
+  async #runFlip(
+    targetIndex: number,
+    direction: FlipDirection,
+    toPage: number,
+    generation: number,
+  ): Promise<void> {
+    // Staging the destination is async, so this can resume after a later flip has already
+    // superseded it (interrupting mid-turn does exactly that). Without this check the stale
+    // continuation would begin animating its own, now-abandoned target and commit it, undoing
+    // the turn the reader actually asked for.
     const toSpread = this.#spreads[targetIndex];
     const toContent: SpreadContent = toSpread
       ? await this.#resolveContent(toSpread)
       : { left: null, right: null };
+    if (generation !== this.#flipGeneration) return;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
       curl: this.#curl,
@@ -425,7 +452,7 @@ export class Zine {
   }
 
   #onDragStart(clientX: number, clientY: number): void {
-    if (this.#pinching || !this.#renderer || this.#machine.state !== 'idle') return;
+    if (this.#pinching || !this.#renderer) return;
     this.#clearPendingClickFlip(); // a new press cancels a click-flip still waiting out its window
     // Zoomed in → a drag pans; at scale 1 → a corner drag flips (§9 mode switch).
     if (this.#scale > 1) {
@@ -435,7 +462,16 @@ export class Zine {
     }
     const b = this.#contentRect();
     const point = this.#toBookPoint(clientX, clientY);
+    // Recorded before the busy check below: a tap landing mid-flip is still a real tap, and
+    // on release it decides which way to turn. Leaving the previous press in place made that
+    // release repeat the last flip's direction instead of honouring the side just tapped.
     this.#press = point; // remembered for tap classification / click-to-flip zone
+    // Only the drag machinery needs an idle book — a fold is already on screen, so there is
+    // nothing to grab. The tap itself is handled on release, which queues or interrupts.
+    if (this.#machine.state !== 'idle') {
+      this.#pendingGrab = null;
+      return;
+    }
     const cornerSize = Math.min(b.width, b.height) * CORNER_FRACTION;
     if (hitTest(point, { width: b.width, height: b.height }, cornerSize) !== 'corner') {
       return; // not a corner — no drag; a tap here may still click-to-flip on release
@@ -557,7 +593,9 @@ export class Zine {
     if (this.#current + step < 0 || this.#current + step >= this.#spreads.length) return;
     // Anchor the fold at the tapped height (cone/leaf/flick curl from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
-    // Read `#current` lazily so a tap queued mid-turn steps on from wherever the page lands.
+    // Read `#current` lazily: interrupting commits the running turn first, so this steps on
+    // from wherever the book actually landed — one spread back from there is the neighbour
+    // the reader is looking at, not the spread they tapped on two turns ago.
     const flip = (): void => this.#startFlip(this.#current + step);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {

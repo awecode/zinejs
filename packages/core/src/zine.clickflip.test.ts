@@ -98,6 +98,50 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
+  it('a tap on the opposite edge mid-flip turns back, not the same way again', async () => {
+    // 8 pages → spreads [0,1] [2,3] [4,5] [6,7]; start in the middle so both ways are open.
+    const { zine, el } = await makeZine(2, { source: new FakeSource(8) });
+    expect(zine.getPage()).toBe(2);
+
+    tap(el, 790, 300); // right edge → forward
+    tap(el, 10, 300); // left edge while that flip is still in flight → must go backward
+    await settleInstant();
+    await settleInstant();
+
+    // Forward then back lands where it started. Reading a stale press instead would turn
+    // forward twice and end on page 6.
+    expect(zine.getPage()).toBe(2);
+  });
+
+  it('a reversing tap mid-flip turns back from where the book landed', async () => {
+    const { zine, el } = await makeZine(4, { source: new FakeSource(12) });
+    expect(zine.getPage()).toBe(4); // spread 2
+
+    tap(el, 790, 300); // forward: spread 2 → 3
+    await flush(); // let the fold actually start animating, so the next tap interrupts it
+    tap(el, 10, 300); // reverse
+    await settleInstant();
+    await settleInstant();
+
+    // Interrupting lands the forward turn on spread 3, and the reversal steps back from
+    // there to spread 2 — the neighbour of what is now on screen. What must never happen is
+    // the reversal moving the book *forward* again.
+    expect(zine.getPage()).toBe(4); // spread 2
+  });
+
+  it('flipPrev during a flipNext moves back, never further forward', async () => {
+    const { zine } = await makeZine(4, { source: new FakeSource(12) });
+    expect(zine.getPage()).toBe(4); // spread 2
+
+    zine.flipNext(); // → spread 3
+    await flush();
+    zine.flipPrev(); // reverse, from spread 3 → spread 2
+    await settleInstant();
+    await settleInstant();
+
+    expect(zine.getPage()).toBe(4); // spread 2, not 6
+  });
+
   it('does nothing when the tap would go past the ends', async () => {
     const { zine, el } = await makeZine(0);
     tap(el, 10, 300); // left edge at the first spread
