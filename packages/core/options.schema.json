@@ -139,8 +139,8 @@
             },
             "docked": {
               "type": "boolean",
-              "default": false,
-              "description": "Place the toolbar in normal flow instead of floating over the book."
+              "default": true,
+              "description": "Sit outside the book in normal flow; false floats the toolbar over it."
             },
             "items": {
               "type": "array",

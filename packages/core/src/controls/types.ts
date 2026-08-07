@@ -47,11 +47,17 @@ export interface ControlDef {
 export type ControlItem = string | ControlDef | (Partial<ControlDef> & { id: string });
 
 export interface ControlsOptions {
-  /** Which edge the toolbar sits on; default 'bottom'. */
+  /** Which edge of the book the toolbar sits on; default 'bottom'. */
   position?: ControlsPosition;
   /**
-   * Float over the book (default) or sit outside it. Floating keeps the book's own size intact,
-   * which matters because the container's measured box drives layout and hit-testing.
+   * Sit outside the book (default) or float over it.
+   *
+   * Docked is the default because a bar over the page hides content. It also keeps the book's
+   * own box untouched — the container's measured size drives layout, hit-testing and the
+   * aspect-ratio the library writes — so the toolbar goes in as a sibling of the container
+   * rather than a child of it, and its clicks never reach the book's gesture handlers at all.
+   *
+   * Set `false` to overlay the toolbar on the book instead.
    */
   docked?: boolean;
   /** The toolbar layout. Omit for the default set; pass an array to replace it outright. */

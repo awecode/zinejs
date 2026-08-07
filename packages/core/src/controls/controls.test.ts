@@ -73,8 +73,13 @@ async function mount(opts: Partial<ZineOptions> = {}): Promise<{ zine: Zine; el:
   return { zine, el };
 }
 
+/** The toolbar is a sibling of the container when docked, a child when floating — search from
+ *  whichever ancestor holds both. */
+const scope = (el: HTMLElement): HTMLElement => (el.parentElement ?? el) as HTMLElement;
+const toolbar = (el: HTMLElement): HTMLElement | null =>
+  scope(el).querySelector('.zine-controls');
 const buttons = (el: HTMLElement): HTMLButtonElement[] => [
-  ...el.querySelectorAll<HTMLButtonElement>('.zine-controls-bar .zine-controls-btn'),
+  ...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-bar .zine-controls-btn'),
 ];
 const byLabel = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
   buttons(el).find((b) => b.getAttribute('aria-label') === label);
@@ -104,22 +109,60 @@ describe('controls registry', () => {
 describe('controls toolbar', () => {
   it('renders by default and tears down with the book', async () => {
     const { zine, el } = await mount();
-    expect(el.querySelector('.zine-controls')).not.toBeNull();
+    expect(toolbar(el)).not.toBeNull();
     zine.destroy();
-    expect(el.querySelector('.zine-controls')).toBeNull();
+    expect(toolbar(el)).toBeNull();
   });
 
   it('renders nothing when controls are off', async () => {
     const { el } = await mount({ controls: false });
+    expect(toolbar(el)).toBeNull();
+  });
+
+  it('docks outside the book by default, leaving the container free of toolbar DOM', async () => {
+    // The renderer measures the container to size the book, so a docked bar must not live in it.
+    const { el } = await mount();
     expect(el.querySelector('.zine-controls')).toBeNull();
+    const root = toolbar(el)!;
+    expect(root.classList.contains('zine-controls-docked')).toBe(true);
+    expect(root.parentElement?.classList.contains('zine-controls-wrap')).toBe(true);
+    expect(el.parentElement).toBe(root.parentElement); // siblings in the wrapper
+  });
+
+  it('restores the original DOM shape on destroy', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const el = document.createElement('div');
+    host.append(el);
+    const zine = new Zine(el, { source: new FakeSource(8), renderer: new MockRenderer() });
+    await zine.ready;
+    await flush();
+    expect(el.parentElement).not.toBe(host); // wrapped
+    zine.destroy();
+    expect(el.parentElement).toBe(host); // unwrapped again
+    expect(host.querySelector('.zine-controls-wrap')).toBeNull();
+  });
+
+  it('floats inside the container when docked is false', async () => {
+    const { el } = await mount({ controls: { docked: false } });
+    const root = el.querySelector('.zine-controls')!;
+    expect(root.classList.contains('zine-controls-floating')).toBe(true);
+    expect(root.parentElement).toBe(el); // a child of the book, overlaying it
   });
 
   it('honours a custom layout and position', async () => {
     const { el } = await mount({ controls: { position: 'top', items: ['next'] } });
-    const root = el.querySelector('.zine-controls')!;
+    const root = toolbar(el)!;
     expect(root.classList.contains('zine-controls-top')).toBe(true);
     expect(buttons(el)).toHaveLength(1);
     expect(buttons(el)[0]?.getAttribute('aria-label')).toBe('Next page');
+  });
+
+  it('puts a top-positioned bar before the book, a bottom one after', async () => {
+    const top = await mount({ controls: { position: 'top' } });
+    expect(toolbar(top.el)!.nextElementSibling).toBe(top.el);
+    const bottom = await mount({ controls: { position: 'bottom' } });
+    expect(toolbar(bottom.el)!.previousElementSibling).toBe(bottom.el);
   });
 
   it('flips the page when next is pressed', async () => {
@@ -138,10 +181,10 @@ describe('controls toolbar', () => {
     expect(byLabel(el, 'Previous page')!.disabled).toBe(false);
   });
 
-  it('does not let a control press reach the book as a page tap', async () => {
-    // Gestures are bound on the container and never check event.target, so without the
-    // toolbar's own stopPropagation a button press would also register as a tap-to-flip.
-    const { el } = await mount();
+  it('does not let a floating control press reach the book as a page tap', async () => {
+    // Only floating mode puts the toolbar inside the container. Gestures are bound there and
+    // never check event.target, so without stopPropagation a button press would also flip.
+    const { el } = await mount({ controls: { docked: false } });
     const seen: string[] = [];
     for (const type of ['pointerdown', 'pointerup', 'click']) {
       el.addEventListener(type, () => seen.push(type));
@@ -153,8 +196,10 @@ describe('controls toolbar', () => {
     expect(seen).toEqual([]);
   });
 
-  it('keeps arrow keys inside the toolbar rather than flipping the page', async () => {
-    const { el } = await mount();
+  it('keeps arrow keys in a floating toolbar from flipping the page', async () => {
+    // The container is tabindex=0 with a keydown handler, so an un-stopped ArrowRight from a
+    // focused button would both move toolbar focus and turn the page.
+    const { el } = await mount({ controls: { docked: false } });
     const seen: string[] = [];
     el.addEventListener('keydown', (e) => seen.push((e as KeyboardEvent).key));
     byLabel(el, 'Next page')!.dispatchEvent(
@@ -165,7 +210,7 @@ describe('controls toolbar', () => {
 
   it('shows the current page and jumps on submit', async () => {
     const { zine, el } = await mount();
-    const input = el.querySelector<HTMLInputElement>('.zine-controls-page input')!;
+    const input = scope(el).querySelector<HTMLInputElement>('.zine-controls-page input')!;
     expect(input.value).toBe('1');
     input.value = '5';
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -177,20 +222,18 @@ describe('controls toolbar', () => {
     const { el } = await mount();
     const menu = byLabel(el, 'More')!;
     menu.click();
-    expect(el.querySelector('.zine-controls-menu')).not.toBeNull();
+    expect(scope(el).querySelector('.zine-controls-menu')).not.toBeNull();
     expect(menu.getAttribute('aria-expanded')).toBe('true');
     menu.click();
-    expect(el.querySelector('.zine-controls-menu')).toBeNull();
+    expect(scope(el).querySelector('.zine-controls-menu')).toBeNull();
     expect(menu.hasAttribute('aria-expanded')).toBe(false);
   });
 
   it('closes an open submenu on Escape', async () => {
     const { el } = await mount();
     byLabel(el, 'More')!.click();
-    el.querySelector('.zine-controls')!.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
-    );
-    expect(el.querySelector('.zine-controls-menu')).toBeNull();
+    toolbar(el)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(scope(el).querySelector('.zine-controls-menu')).toBeNull();
   });
 
   it('hides search on a book whose source has no text', async () => {
@@ -205,7 +248,7 @@ describe('controls toolbar', () => {
 
   it('marks up the toolbar as a labelled toolbar landmark', async () => {
     const { el } = await mount();
-    const root = el.querySelector('.zine-controls')!;
+    const root = toolbar(el)!;
     expect(root.getAttribute('role')).toBe('toolbar');
     expect(root.getAttribute('aria-label')).toBeTruthy();
   });

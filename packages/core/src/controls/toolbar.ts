@@ -2,7 +2,13 @@ import { createIcon, ICONS } from './icons';
 import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
 import { registerBuiltins } from './builtins';
 import { ensureStyles } from './styles';
-import type { ControlContext, ControlDef, ControlItem, ControlsOptions } from './types';
+import type {
+  ControlContext,
+  ControlDef,
+  ControlItem,
+  ControlsOptions,
+  ControlsPosition,
+} from './types';
 import type { Zine } from '../zine';
 
 /**
@@ -26,6 +32,8 @@ export class Toolbar {
   #popover: Popover | null = null;
   #unsubscribe: (() => void)[] = [];
   #pageInput: HTMLInputElement | null = null;
+  /** The flex wrapper docked mode inserts around the container; unwound on destroy. */
+  #wrap: HTMLElement | null = null;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -34,13 +42,18 @@ export class Toolbar {
     ensureStyles(doc);
 
     const position = options.position ?? 'bottom';
+    const docked = options.docked ?? true;
     this.#root = doc.createElement('div');
-    this.#root.className = `zine-controls zine-controls-${position}${
-      options.className ? ` ${options.className}` : ''
-    }`;
+    this.#root.className = [
+      'zine-controls',
+      `zine-controls-${position}`,
+      docked ? 'zine-controls-docked' : 'zine-controls-floating',
+      options.className,
+    ]
+      .filter(Boolean)
+      .join(' ');
     this.#root.setAttribute('role', 'toolbar');
     this.#root.setAttribute('aria-label', 'Flipbook controls');
-    if (options.docked) this.#root.style.position = 'static';
 
     this.#bar = doc.createElement('div');
     this.#bar.className = 'zine-controls-bar';
@@ -52,7 +65,7 @@ export class Toolbar {
     for (const event of SWALLOWED) {
       this.#root.addEventListener(event, (e) => this.#isolate(e));
     }
-    container.appendChild(this.#root);
+    this.#place(container, position, docked);
 
     const refresh = (): void => this.#refresh();
     this.#unsubscribe.push(zine.on('pageChanged', refresh));
@@ -63,6 +76,39 @@ export class Toolbar {
     };
     doc.addEventListener('pointerdown', onDocPointer, true);
     this.#unsubscribe.push(() => doc.removeEventListener('pointerdown', onDocPointer, true));
+  }
+
+  /**
+   * Put the toolbar in the page.
+   *
+   * Floating is simple: a child of the container, absolutely positioned over the book.
+   *
+   * Docked has to sit *outside* the container, because the container's measured box is what the
+   * renderer sizes the book from and what pointer hit-testing maps into — a bar inside it would
+   * shrink the book and skew every tap. So the container is wrapped in a flex column (or row),
+   * with the toolbar as its sibling. The wrapper inherits the container's own layout box so the
+   * arrangement the consumer's CSS set up is preserved.
+   */
+  #place(container: HTMLElement, position: ControlsPosition, docked: boolean): void {
+    if (!docked) {
+      container.appendChild(this.#root);
+      return;
+    }
+    const parent = container.parentNode;
+    if (!parent) {
+      // Not in a document yet: fall back to overlaying rather than losing the toolbar.
+      this.#root.classList.replace('zine-controls-docked', 'zine-controls-floating');
+      container.appendChild(this.#root);
+      return;
+    }
+    const wrap = this.#doc.createElement('div');
+    wrap.className = `zine-controls-wrap zine-controls-wrap-${position}`;
+    parent.insertBefore(wrap, container);
+    wrap.appendChild(container);
+    // 'top'/'left' put the bar first; flex-direction (set in CSS) handles the axis.
+    if (position === 'top' || position === 'left') wrap.insertBefore(this.#root, container);
+    else wrap.appendChild(this.#root);
+    this.#wrap = wrap;
   }
 
   /** Build the layout. Separate from construction so instance-bound widgets (the page field, the
@@ -77,6 +123,13 @@ export class Toolbar {
     this.#unsubscribe = [];
     this.#closePopover();
     this.#root.remove();
+    // Put the container back where it was, so destroy() leaves the DOM as it found it.
+    const wrap = this.#wrap;
+    if (wrap?.parentNode) {
+      wrap.parentNode.insertBefore(wrap.firstChild!, wrap);
+      wrap.remove();
+    }
+    this.#wrap = null;
   }
 
   /** Keep toolbar interaction from reaching the book's own gesture/zoom/keyboard handlers. */

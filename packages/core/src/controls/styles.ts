@@ -9,20 +9,38 @@
 const STYLE_ID = 'zine-controls-style';
 
 export const CSS = `
+/* Docked mode wraps the book so the bar can sit beside it without shrinking the container,
+   whose measured box the renderer and hit-testing both depend on.
+   The wrapper deliberately does not stretch or grow its children: the container keeps whatever
+   width, aspect-ratio and auto-margins the consumer's own CSS gave it. */
+.zine-controls-wrap { display: flex; }
+/* Stacked: children keep their own width (so a percentage or auto-margin still resolves against
+   the wrapper) and take only the height they ask for. */
+.zine-controls-wrap-top,
+.zine-controls-wrap-bottom { flex-direction: column; align-items: stretch; }
+/* Side by side: the bar is only as wide as its buttons, and both are vertically centred. */
+.zine-controls-wrap-left,
+.zine-controls-wrap-right { flex-direction: row; align-items: center; }
+.zine-controls-wrap > * { flex: 0 0 auto; min-width: 0; }
+
 .zine-controls {
-  position: absolute;
+  position: relative;
   display: flex;
   gap: 4px;
   padding: 6px;
   z-index: 2;
-  /* Transparent to the book except on the buttons themselves, so gaps stay draggable. */
-  pointer-events: none;
   box-sizing: border-box;
   font: 500 13px/1.2 system-ui, sans-serif;
   color: var(--zine-controls-fg, #f4f4f5);
   touch-action: auto;
   -webkit-user-select: none;
   user-select: none;
+}
+.zine-controls-docked { flex: 0 0 auto; justify-content: center; align-items: center; }
+.zine-controls-floating {
+  position: absolute;
+  /* Transparent to the book except on the buttons themselves, so gaps stay draggable. */
+  pointer-events: none;
 }
 .zine-controls-bar {
   display: flex;
@@ -32,13 +50,19 @@ export const CSS = `
   border-radius: 10px;
   pointer-events: auto;
   background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(8px);
 }
-.zine-controls-bottom { inset: auto 0 0 0; justify-content: center; }
-.zine-controls-top    { inset: 0 0 auto 0; justify-content: center; }
-.zine-controls-left   { inset: 0 auto 0 0; align-items: center; }
-.zine-controls-right  { inset: 0 0 0 auto; align-items: center; }
+/* Floating: lifted off the page it covers. Docked: flat, with an outline so it reads as a
+   control strip rather than a shadow hanging in empty space. */
+.zine-controls-floating .zine-controls-bar { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28); }
+.zine-controls-docked .zine-controls-bar {
+  border: 1px solid var(--zine-controls-hover, rgba(255, 255, 255, 0.14));
+}
+.zine-controls-floating.zine-controls-bottom { inset: auto 0 0 0; justify-content: center; }
+.zine-controls-floating.zine-controls-top    { inset: 0 0 auto 0; justify-content: center; }
+.zine-controls-floating.zine-controls-left   { inset: 0 auto 0 0; align-items: center; }
+.zine-controls-floating.zine-controls-right  { inset: 0 0 0 auto; align-items: center; }
+/* A bar on a vertical edge stacks its buttons, docked or floating. */
 .zine-controls-left .zine-controls-bar,
 .zine-controls-right .zine-controls-bar { flex-direction: column; }
 

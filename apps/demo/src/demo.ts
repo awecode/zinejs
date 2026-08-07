@@ -30,6 +30,7 @@ const opt = {
   zoomMax: num('zoom', 4),
   singlePageThreshold: num('spt', 640),
   controls: (q.get('controls') ?? 'bottom') as 'bottom' | 'top' | 'left' | 'right' | 'off',
+  controlsDock: (q.get('dock') ?? 'docked') as 'docked' | 'floating',
 };
 
 const imageUrls = Array.from(
@@ -139,6 +140,7 @@ controlsEl.append(
   selectControl('direction', 'direction', ['ltr', 'rtl'] as const, opt.direction),
   selectControl('clickToFlip', 'clickToFlip', ['edge', 'half', 'off'] as const, opt.clickToFlip),
   selectControl('controls', 'controls', ['bottom', 'top', 'left', 'right', 'off'] as const, opt.controls),
+  selectControl('controls dock', 'dock', ['docked', 'floating'] as const, opt.controlsDock),
   rangeControl('flipDuration', 'flipDuration', 0, 2000, 50, opt.flipDuration, 'ms'),
   rangeControl('zoom max', 'zoom', 1, 8, 0.5, opt.zoomMax, '×'),
   rangeControl('singlePageThreshold', 'spt', 0, 1200, 20, opt.singlePageThreshold, 'px'),
@@ -172,7 +174,10 @@ const zine = new Zine(book, {
   flipDuration: opt.flipDuration,
   singlePageThreshold: opt.singlePageThreshold,
   zoom: { max: opt.zoomMax },
-  controls: opt.controls === 'off' ? false : { position: opt.controls },
+  controls:
+    opt.controls === 'off'
+      ? false
+      : { position: opt.controls, docked: opt.controlsDock === 'docked' },
 });
 
 // Click/double-click diagnostics, on unless ?clickdebug=0. Explains in the console why a

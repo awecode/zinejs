@@ -105,11 +105,12 @@ new Zine(document.getElementById('book'), {
 
 ## Controls
 
-A toolbar is rendered over the book by default. It floats above the page.
+A toolbar is rendered below the book by default, in normal flow so it never covers a page.
 
 ```js
-new Zine(el, { source, controls: false });                   // no toolbar
-new Zine(el, { source, controls: { position: 'top' } });     // move it
+new Zine(el, { source, controls: false });                    // no toolbar
+new Zine(el, { source, controls: { position: 'top' } });      // move it
+new Zine(el, { source, controls: { docked: false } });        // float it over the book
 new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the buttons
 ```
 
@@ -117,10 +118,15 @@ new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the b
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge the toolbar sits on. |
-| `docked` | `boolean` | `false` | Place it in normal flow instead of floating over the book. |
+| `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge of the book the toolbar sits on. |
+| `docked` | `boolean` | `true` | Sit outside the book. `false` floats the toolbar over it. |
 | `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
 | `className` | `string` | — | Extra class on the toolbar root, for styling. |
+
+A docked toolbar is placed as a **sibling** of your container, inside a flex wrapper the library
+adds around it — the container's own size is left alone, since the renderer measures it to size
+the book. `destroy()` unwraps it again. A floating toolbar is a child of the container instead,
+absolutely positioned, and lets clicks through everywhere except the buttons themselves.
 
 ### Built-in controls
 
