@@ -27,6 +27,7 @@ describe('options.schema.json', () => {
         'singlePageThreshold',
         'source',
         'startPage',
+        'controls',
       ].sort(),
     );
   });
@@ -35,5 +36,6 @@ describe('options.schema.json', () => {
     expect(schema.properties.flipDuration?.default).toBe(800);
     expect(schema.properties.singlePageThreshold?.default).toBe(640);
     expect(schema.properties.direction?.default).toBe('ltr');
+    expect(schema.properties.controls?.default).toBe(true);
   });
 });

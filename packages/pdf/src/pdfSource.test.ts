@@ -178,3 +178,67 @@ describe('PdfSource', () => {
     expect(hi.width).toBeGreaterThan(low.width); // crisper (more pixels)
   });
 });
+
+describe('PdfSource — getText', () => {
+  const textDoc = () => {
+    const page = {
+      getViewport: () => ({ width: 120, height: 160 }),
+      render: () => ({ promise: Promise.resolve() }),
+      getTextContent: vi.fn(async () => ({
+        items: [
+          { str: 'Invoice', hasEOL: false },
+          { str: ' total', hasEOL: true },
+          { type: 'beginMarkedContent', id: 'm1' }, // no `str` — must be skipped
+          { str: 'due', hasEOL: false },
+        ],
+      })),
+    };
+    const getPage = vi.fn(async () => page);
+    return { page, getPage, doc: { numPages: 5, getPage, destroy: () => {} } as unknown as PdfSrc };
+  };
+
+  it('joins text runs, honouring line ends and skipping marked content', async () => {
+    const { doc } = textDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    expect(await src.getText(0)).toBe('Invoice total\ndue');
+  });
+
+  it('asks pdf.js for the 1-indexed page', async () => {
+    const { getPage, doc } = textDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    await src.getText(0);
+    expect(getPage).toHaveBeenCalledWith(1);
+  });
+
+  it('extracts each page only once', async () => {
+    const { page, doc } = textDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    await src.getText(2);
+    await src.getText(2);
+    expect(page.getTextContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('is empty for a page with no text layer rather than throwing', async () => {
+    const page = {
+      getViewport: () => ({ width: 120, height: 160 }),
+      render: () => ({ promise: Promise.resolve() }),
+    }; // a scan: no getTextContent at all
+    const doc = { numPages: 2, getPage: async () => page, destroy: () => {} } as unknown as PdfSrc;
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    expect(await src.getText(0)).toBe('');
+  });
+
+  it('drops cached text on destroy', async () => {
+    const { page, doc } = textDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    await src.getText(0);
+    src.destroy();
+    expect(await src.getText(0)).toBe(''); // no document → resolves empty, not a rejection
+    expect(page.getTextContent).toHaveBeenCalledTimes(1);
+  });
+});
