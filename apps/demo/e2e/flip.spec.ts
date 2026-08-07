@@ -6,7 +6,7 @@ import { bookRect } from './helpers';
 test('Next button flips to the next spread', async ({ page }) => {
   await page.goto('/fixture.html');
   await expect(page.locator('#page')).toHaveText('page 1 / 20');
-  await page.getByRole('button', { name: 'Next' }).click();
+  await page.locator('#next').click();
   await expect(page.locator('#page')).toHaveText('page 3 / 20');
 });
 

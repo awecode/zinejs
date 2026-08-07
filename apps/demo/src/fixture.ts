@@ -23,6 +23,9 @@ const zine = new Zine(book, {
   direction: params.get('direction') === 'rtl' ? 'rtl' : 'ltr',
   spreadMode: params.has('cover') ? 'cover' : 'double',
   startPage: Number(params.get('start') ?? 0),
+  // The gesture specs click and drag raw coordinates across the book, so the toolbar is off
+  // unless a test asks for it (`?controls=1`) and would otherwise sit under those hit points.
+  controls: params.has('controls'),
 });
 
 const pageLabel = document.getElementById('page')!;

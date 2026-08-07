@@ -29,6 +29,7 @@ const opt = {
   flipDuration: num('flipDuration', 800),
   zoomMax: num('zoom', 4),
   singlePageThreshold: num('spt', 640),
+  controls: (q.get('controls') ?? 'bottom') as 'bottom' | 'top' | 'left' | 'right' | 'off',
 };
 
 const imageUrls = Array.from(
@@ -137,19 +138,20 @@ if (renderer === 'webgl2') {
 controlsEl.append(
   selectControl('direction', 'direction', ['ltr', 'rtl'] as const, opt.direction),
   selectControl('clickToFlip', 'clickToFlip', ['edge', 'half', 'off'] as const, opt.clickToFlip),
+  selectControl('controls', 'controls', ['bottom', 'top', 'left', 'right', 'off'] as const, opt.controls),
   rangeControl('flipDuration', 'flipDuration', 0, 2000, 50, opt.flipDuration, 'ms'),
   rangeControl('zoom max', 'zoom', 1, 8, 0.5, opt.zoomMax, '×'),
   rangeControl('singlePageThreshold', 'spt', 0, 1200, 20, opt.singlePageThreshold, 'px'),
 );
 
+// Paging and zoom now come from the built-in toolbar over the book, so the demo only keeps the
+// actions that toolbar has no equivalent for.
 const actions = document.createElement('div');
 actions.className = 'control';
 actions.innerHTML = '<span>controls</span>';
 const row = document.createElement('div');
 row.className = 'actions';
 row.append(
-  button('‹ Prev', () => zine.flipPrev()),
-  button('Next ›', () => zine.flipNext()),
   button('Zoom 2×', () => zine.setZoom(2)),
   button('Reset zoom', () => zine.resetZoom()),
 );
@@ -170,6 +172,7 @@ const zine = new Zine(book, {
   flipDuration: opt.flipDuration,
   singlePageThreshold: opt.singlePageThreshold,
   zoom: { max: opt.zoomMax },
+  controls: opt.controls === 'off' ? false : { position: opt.controls },
 });
 
 // Click/double-click diagnostics, on unless ?clickdebug=0. Explains in the console why a
