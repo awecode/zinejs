@@ -4,6 +4,8 @@ import type { PageContent, Source } from '@zinejs/core';
 interface PdfPageLike {
   getViewport(opts: { scale: number }): { width: number; height: number };
   render(opts: { canvasContext: unknown; viewport: unknown }): { promise: Promise<void> };
+  /** Optional: absent on scanned PDFs with no text layer, and on hand-rolled document stubs. */
+  getTextContent?(): Promise<{ items: { str?: string; hasEOL?: boolean }[] }>;
 }
 interface PdfDocumentLike {
   numPages: number;
@@ -85,6 +87,9 @@ export class PdfSource implements Source {
   #cache = new Map<number, CacheEntry>();
   #cachedBytes = 0;
   #onUpdate: ((index: number) => void) | null = null;
+  /** Extracted page text, kept apart from #cache: text is scale-independent and negligible next
+   *  to a raster, so it has no place in the byte budget that evicts bitmaps. */
+  #textCache = new Map<number, Promise<string>>();
 
   constructor(src: PdfSrc, options: PdfSourceOptions = {}) {
     this.#src = src;
@@ -148,9 +153,39 @@ export class PdfSource implements Source {
     }
   }
 
+  /**
+   * The page's text, for search. Empty for a page with no text layer (a scan, or a pdf.js build
+   * without text extraction) — callers treat that as "nothing to match" rather than an error.
+   */
+  getText(index: number): Promise<string> {
+    const cached = this.#textCache.get(index);
+    if (cached) return cached;
+    const pending = this.#extractText(index).catch(() => '');
+    this.#textCache.set(index, pending);
+    return pending;
+  }
+
+  async #extractText(index: number): Promise<string> {
+    if (this.#doc === null) {
+      throw new Error('PdfSource: use after open() — the document is not loaded.');
+    }
+    const page = await this.#doc.getPage(index + 1); // pdf.js pages are 1-indexed
+    if (typeof page.getTextContent !== 'function') return '';
+    const content = await page.getTextContent();
+    let text = '';
+    for (const item of content.items) {
+      if (typeof item.str !== 'string') continue; // marked-content entries carry no text
+      text += item.str;
+      // pdf.js splits a visual line into runs; only hasEOL ends one.
+      text += item.hasEOL ? '\n' : '';
+    }
+    return text;
+  }
+
   destroy(): void {
     this.#doc?.destroy?.();
     this.#cache.clear();
+    this.#textCache.clear();
     this.#cachedBytes = 0;
     this.#doc = null;
   }

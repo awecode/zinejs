@@ -15,6 +15,7 @@ import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { Source } from './source/types';
 import { composeSource } from './source/compose';
+import type { ControlsOptions } from './controls/types';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
@@ -32,6 +33,25 @@ const DOUBLE_CLICK_MS = 250;
  *  its half — and it dissolves instead of landing on a facing page. Stretch duration so the
  *  peel and fade read at a comparable pace to a spread turn rather than whipping away. */
 const LONE_PAGE_FLIP_SCALE = 1.55;
+
+/** Characters of surrounding text shown on either side of a search match. */
+const EXCERPT_PAD = 32;
+
+/** One page that matched a {@link Zine.search} query. */
+export interface SearchHit {
+  /** Zero-based page index; pass straight to `flipTo`. */
+  page: number;
+  /** The match with a little text either side, ellipsised where it was cut. */
+  excerpt: string;
+}
+
+/** Pull a readable snippet around a match, collapsing the whitespace PDFs are full of. */
+function excerptAround(text: string, at: number, length: number): string {
+  const start = Math.max(0, at - EXCERPT_PAD);
+  const end = Math.min(text.length, at + length + EXCERPT_PAD);
+  const slice = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${slice}${end < text.length ? '…' : ''}`;
+}
 
 interface DragState {
   direction: FlipDirection;
@@ -97,6 +117,11 @@ export interface ZineOptions {
   zoom?: ZoomOptions;
   /** Container widths below this (px) switch to one page per spread; default 640. */
   singlePageThreshold?: number;
+  /**
+   * The built-in toolbar. Shown by default; pass `false` to render none, or an object to choose
+   * its position and which controls appear.
+   */
+  controls?: boolean | ControlsOptions;
 }
 
 /**
@@ -163,6 +188,8 @@ export class Zine {
   #unbindWheel: (() => void) | null = null;
   #unbindDblClick: (() => void) | null = null;
   #a11yCleanup: (() => void) | null = null;
+  #controlsOption: boolean | ControlsOptions;
+  #controlsCleanup: (() => void) | null = null;
   #ready: Promise<void>;
 
   /** Stable seek API: drive the fold to a fixed progress without animating (visual regression). */
@@ -189,6 +216,7 @@ export class Zine {
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
+    this.#controlsOption = options.controls ?? true;
     this.#startPageOption = options.startPage;
     // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
     // throw immediately from `new Zine`. Async sources (an `open()`) defer to #init.
@@ -232,6 +260,59 @@ export class Zine {
 
   getPage(): number {
     return this.#currentPage;
+  }
+
+  /** The element this flipbook was mounted into. */
+  get container(): HTMLElement {
+    return this.#container;
+  }
+
+  /** Whether there is a spread after the current one (false on the last). */
+  canFlipNext(): boolean {
+    return this.#current + 1 < this.#spreads.length;
+  }
+
+  /** Whether there is a spread before the current one (false on the first). */
+  canFlipPrev(): boolean {
+    return this.#current > 0;
+  }
+
+  /** The ceiling `setZoom` clamps to. */
+  getMaxZoom(): number {
+    return this.#maxZoom;
+  }
+
+  /** Whether this book's source can produce text — false for image books. */
+  canSearch(): boolean {
+    return typeof this.#source.getText === 'function';
+  }
+
+  /**
+   * Find `query` in the book's text, case-insensitively.
+   *
+   * Pages are read on demand and cached by the source, so the first search over a long document
+   * costs one text extraction per page and later ones are cheap. Returns at most one hit per
+   * page, in page order. Always empty when {@link canSearch} is false.
+   */
+  async search(query: string, options: { limit?: number } = {}): Promise<SearchHit[]> {
+    const getText = this.#source.getText;
+    const needle = query.trim().toLowerCase();
+    if (typeof getText !== 'function' || needle === '') return [];
+    const limit = options.limit ?? 50;
+    const hits: SearchHit[] = [];
+    for (let page = 0; page < this.#source.pageCount && hits.length < limit; page++) {
+      let text: string;
+      try {
+        text = await getText.call(this.#source, page);
+      } catch (error) {
+        this.#emitter.emit('sourceError', { index: page, error });
+        continue;
+      }
+      const at = text.toLowerCase().indexOf(needle);
+      if (at < 0) continue;
+      hits.push({ page, excerpt: excerptAround(text, at, needle.length) });
+    }
+    return hits;
   }
 
   flipNext(): void {
@@ -340,6 +421,7 @@ export class Zine {
     this.#queuedFlip = null;
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
+    this.#controlsCleanup?.();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
     this.#unbindDblClick?.();
@@ -769,6 +851,7 @@ export class Zine {
     this.#observeResize();
     this.#prefetchWindow();
     this.#announce();
+    await this.#mountControls();
     this.#emitter.emit('ready');
   }
 
@@ -815,6 +898,28 @@ export class Zine {
     query.addEventListener?.('change', (e) => {
       this.#reducedMotion = e.matches;
     });
+  }
+
+  /**
+   * Build the toolbar, if it is wanted and the container is real DOM.
+   *
+   * The chunk is fetched lazily so a book with `controls: false` never downloads it. Failure is
+   * swallowed on purpose: a toolbar that cannot load should cost the reader a toolbar, not the
+   * whole flipbook — `#init` has no error handling of its own, so a throw here would reject
+   * `ready`.
+   */
+  async #mountControls(): Promise<void> {
+    if (this.#controlsOption === false || this.#destroyed) return;
+    const container = this.#container;
+    if (!container.ownerDocument || typeof container.appendChild !== 'function') return;
+    try {
+      const { mountControls } = await import('./controls/controls');
+      if (this.#destroyed) return; // destroyed while the chunk was in flight
+      const options = this.#controlsOption === true ? {} : this.#controlsOption;
+      this.#controlsCleanup = mountControls(this, container, options);
+    } catch {
+      // No toolbar; the book itself is unaffected.
+    }
   }
 
   /** Wire keyboard nav + an aria-live page announcer. Skips non-DOM containers. */
@@ -1071,6 +1176,19 @@ function validateOptions(container: unknown, options: unknown): void {
   const curl = o.curl;
   if (curl !== undefined && !CURL_TYPES.includes(curl as CurlType)) {
     throw new Error(`Zine: curl must be one of ${CURL_TYPES.join(', ')}; got ${JSON.stringify(curl)}.`);
+  }
+
+  const controls = o.controls;
+  if (controls !== undefined && typeof controls !== 'boolean' && (typeof controls !== 'object' || controls === null)) {
+    throw new Error(
+      `Zine: controls must be a boolean or an options object; got ${typeName(controls)}.`,
+    );
+  }
+  const position = (controls as { position?: unknown } | undefined)?.position;
+  if (position !== undefined && !['top', 'bottom', 'left', 'right'].includes(position as string)) {
+    throw new Error(
+      `Zine: controls.position must be 'top', 'bottom', 'left', or 'right'; got ${JSON.stringify(position)}.`,
+    );
   }
 
   const spreadMode = o.spreadMode;

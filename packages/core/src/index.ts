@@ -1,5 +1,16 @@
 export { Zine } from './zine';
-export type { ZineOptions, ZoomOptions } from './zine';
+export type { ZineOptions, ZoomOptions, SearchHit } from './zine';
+
+// Just the registry mechanism — the toolbar, its icons and the built-in definitions all live in
+// the lazily-loaded chunk, so registering a custom control costs nothing up front.
+export { defineControl, getControl, DEFAULT_ITEMS } from './controls/registry';
+export type {
+  ControlContext,
+  ControlDef,
+  ControlItem,
+  ControlsOptions,
+  ControlsPosition,
+} from './controls/types';
 
 export { ImageSource } from './source/imageSource';
 export type { ImageSourceOptions, ImageFit } from './source/imageSource';

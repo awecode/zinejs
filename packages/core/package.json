@@ -1,6 +1,6 @@
 {
   "name": "@zinejs/core",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Framework-agnostic flipbook engine with CSS and WebGL2 renderers and no dependencies.",
   "type": "module",
   "sideEffects": false,
@@ -52,6 +52,12 @@
       "name": "WebGL2 renderer chunk (lazy, gzip)",
       "path": "dist/webglRenderer-*.js",
       "limit": "12 kB",
+      "gzip": true
+    },
+    {
+      "name": "controls chunk (lazy, gzip)",
+      "path": "dist/controls-*.js",
+      "limit": "8 kB",
       "gzip": true
     }
   ]

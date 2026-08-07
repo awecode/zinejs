@@ -25,4 +25,9 @@ export interface Source {
    * re-render that page if it's on screen.
    */
   onPageUpdate?(handler: (index: number) => void): void;
+  /**
+   * Optional: the page's plain text, for search. Sources backed by images can't have any and
+   * simply omit this — `Zine.canSearch()` reports whether a book is searchable at all.
+   */
+  getText?(index: number): Promise<string>;
 }

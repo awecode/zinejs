@@ -109,3 +109,38 @@ describe('composeSource', () => {
     expect(await s.get(3)).toEqual(img('last.jpg')); // base page 3 replaced (negative index)
   });
 });
+
+describe('composeSource — getText', () => {
+  class TextBase extends FakeBase {
+    readonly textCalls: number[] = [];
+    async getText(index: number): Promise<string> {
+      this.textCalls.push(index);
+      return `text ${index}`;
+    }
+  }
+
+  it('is absent when the base has no text', () => {
+    const s = composeSource(new FakeBase(4), { frontCover: 'front.jpg' });
+    expect(s.getText).toBeUndefined();
+  });
+
+  it('shifts book indices back to base indices past the front cover', async () => {
+    const base = new TextBase(4);
+    const s = composeSource(base, { frontCover: 'front.jpg' });
+    expect(await s.getText!(1)).toBe('text 0'); // book page 1 is base page 0
+    expect(base.textCalls).toEqual([0]);
+  });
+
+  it('returns nothing for covers and replaced pages, which are images', async () => {
+    const base = new TextBase(4);
+    const s = composeSource(base, {
+      frontCover: 'front.jpg',
+      backCover: 'back.jpg',
+      pages: { 1: 'ad.jpg' },
+    });
+    expect(await s.getText!(0)).toBe(''); // front cover
+    expect(await s.getText!(s.pageCount - 1)).toBe(''); // back cover
+    expect(await s.getText!(2)).toBe(''); // base page 1, replaced by an image
+    expect(base.textCalls).toEqual([]); // the base was never consulted
+  });
+});

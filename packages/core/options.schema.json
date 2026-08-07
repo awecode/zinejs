@@ -121,6 +121,39 @@
       "minimum": 0,
       "default": 640,
       "description": "Container widths (px) below this switch to one page per spread; 0 disables the responsive fallback."
+    },
+    "controls": {
+      "default": true,
+      "description": "Built-in toolbar. true for the default set, false for none, or an object to configure it.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["top", "bottom", "left", "right"],
+              "default": "bottom",
+              "description": "Which edge of the book the toolbar sits on."
+            },
+            "docked": {
+              "type": "boolean",
+              "default": false,
+              "description": "Place the toolbar in normal flow instead of floating over the book."
+            },
+            "items": {
+              "type": "array",
+              "description": "Toolbar layout: control ids, '|' separators, or inline control definitions. Omit for the default set.",
+              "items": { "type": ["string", "object"] }
+            },
+            "className": {
+              "type": "string",
+              "description": "Extra class on the toolbar root, for styling."
+            }
+          }
+        }
+      ]
     }
   }
 }

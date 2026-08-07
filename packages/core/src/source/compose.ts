@@ -42,6 +42,7 @@ class CompositeSource implements Source {
   #cache = new Map<string, Promise<ImageBitmap>>();
   open?: () => Promise<void>;
   onPageUpdate?: (handler: (index: number) => void) => void;
+  getText?: (index: number) => Promise<string>;
 
   constructor(base: Source, options: CompositionOptions) {
     this.#base = base;
@@ -63,6 +64,19 @@ class CompositeSource implements Source {
       // Forward base page updates, shifting to book indices (past the front cover).
       this.onPageUpdate = (handler) => {
         base.onPageUpdate!((src) => handler(src + (this.#front !== null ? 1 : 0)));
+      };
+    }
+
+    if (typeof base.getText === 'function') {
+      // Mirrors get(): covers and replaced pages are images, so they have no text of their own —
+      // returning the base page's text there would describe content the reader cannot see.
+      this.getText = async (index) => {
+        const frontOffset = this.#front !== null ? 1 : 0;
+        if (this.#front !== null && index === 0) return '';
+        if (this.#back !== null && index === this.pageCount - 1) return '';
+        const src = index - frontOffset;
+        if (this.#resolved.has(src)) return '';
+        return base.getText!(src);
       };
     }
   }

@@ -1,0 +1,335 @@
+import { createIcon, ICONS } from './icons';
+import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
+import { registerBuiltins } from './builtins';
+import { ensureStyles } from './styles';
+import type { ControlContext, ControlDef, ControlItem, ControlsOptions } from './types';
+import type { Zine } from '../zine';
+
+/**
+ * Events the container listens to for flipping, zooming and dragging. The gesture layer binds
+ * these on the container and never checks `event.target`, so anything the toolbar handles has to
+ * be stopped here or a button press would also register as a page tap.
+ */
+const SWALLOWED = ['pointerdown', 'pointerup', 'pointermove', 'click', 'dblclick', 'wheel', 'keydown'];
+
+interface Popover {
+  el: HTMLElement;
+  trigger: HTMLElement;
+}
+
+export class Toolbar {
+  #zine: Zine;
+  #doc: Document;
+  #root: HTMLElement;
+  #bar: HTMLElement;
+  #buttons: { el: HTMLButtonElement; def: ControlDef }[] = [];
+  #popover: Popover | null = null;
+  #unsubscribe: (() => void)[] = [];
+  #pageInput: HTMLInputElement | null = null;
+
+  constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
+    this.#zine = zine;
+    const doc = container.ownerDocument!;
+    this.#doc = doc;
+    ensureStyles(doc);
+
+    const position = options.position ?? 'bottom';
+    this.#root = doc.createElement('div');
+    this.#root.className = `zine-controls zine-controls-${position}${
+      options.className ? ` ${options.className}` : ''
+    }`;
+    this.#root.setAttribute('role', 'toolbar');
+    this.#root.setAttribute('aria-label', 'Flipbook controls');
+    if (options.docked) this.#root.style.position = 'static';
+
+    this.#bar = doc.createElement('div');
+    this.#bar.className = 'zine-controls-bar';
+    this.#root.appendChild(this.#bar);
+
+    // Toolbar keys are handled first, then every listed event is stopped so none of it reaches
+    // the book's gesture, zoom or keyboard handlers on the container.
+    this.#root.addEventListener('keydown', (e) => this.#onKeyDown(e as KeyboardEvent));
+    for (const event of SWALLOWED) {
+      this.#root.addEventListener(event, (e) => this.#isolate(e));
+    }
+    container.appendChild(this.#root);
+
+    const refresh = (): void => this.#refresh();
+    this.#unsubscribe.push(zine.on('pageChanged', refresh));
+    this.#unsubscribe.push(zine.on('zoomChanged', refresh));
+    this.#unsubscribe.push(zine.on('flipEnd', refresh));
+    const onDocPointer = (e: Event): void => {
+      if (this.#popover && !this.#popover.el.contains(e.target as Node)) this.#closePopover();
+    };
+    doc.addEventListener('pointerdown', onDocPointer, true);
+    this.#unsubscribe.push(() => doc.removeEventListener('pointerdown', onDocPointer, true));
+  }
+
+  /** Build the layout. Separate from construction so instance-bound widgets (the page field, the
+   *  search panel) can be registered against this toolbar first. */
+  mount(options: ControlsOptions): void {
+    this.#build(options.items ?? DEFAULT_ITEMS);
+    this.#refresh();
+  }
+
+  destroy(): void {
+    for (const off of this.#unsubscribe) off();
+    this.#unsubscribe = [];
+    this.#closePopover();
+    this.#root.remove();
+  }
+
+  /** Keep toolbar interaction from reaching the book's own gesture/zoom/keyboard handlers. */
+  #isolate(event: Event): void {
+    event.stopPropagation();
+  }
+
+  #context(close: () => void = () => this.#closePopover()): ControlContext {
+    return { zine: this.#zine, close };
+  }
+
+  #build(items: readonly ControlItem[]): void {
+    for (const item of items) {
+      if (item === '|') {
+        const sep = this.#doc.createElement('div');
+        sep.className = 'zine-controls-sep';
+        this.#bar.appendChild(sep);
+        continue;
+      }
+      const def = resolveControl(item);
+      const el = def.render
+        ? def.render(this.#context())
+        : this.#button(def, 'zine-controls-btn');
+      this.#bar.appendChild(el);
+    }
+  }
+
+  /** A control button. Bar buttons are icon-only with the title as tooltip; menu items and any
+   *  control without an icon also carry a visible label. */
+  #button(def: ControlDef, className: string, withLabel = false): HTMLButtonElement {
+    const btn = this.#doc.createElement('button');
+    btn.type = 'button';
+    btn.className = className;
+    btn.title = def.title;
+    btn.setAttribute('aria-label', def.title);
+    if (def.icon) btn.appendChild(createIcon(this.#doc, def.icon));
+    if (withLabel || !def.icon) {
+      const label = this.#doc.createElement('span');
+      label.textContent = def.title;
+      btn.appendChild(label);
+    }
+    btn.addEventListener('click', () => this.#activate(def, btn));
+    this.#buttons.push({ el: btn, def });
+    return btn;
+  }
+
+  #activate(def: ControlDef, trigger: HTMLButtonElement): void {
+    if (def.isDisabled?.(this.#context())) return;
+    // Controls that own a panel toggle it; a second press on the same trigger closes.
+    if (def.children || def.id === 'search') {
+      if (this.#popover?.trigger === trigger) {
+        this.#closePopover();
+        return;
+      }
+      if (def.children) this.#openMenu(def, trigger);
+      else this.openSearch(trigger);
+      return;
+    }
+    def.action?.(this.#context());
+    this.#refresh();
+  }
+
+  #openMenu(def: ControlDef, trigger: HTMLButtonElement): void {
+    this.#closePopover();
+    const menu = this.#doc.createElement('div');
+    menu.className = 'zine-controls-menu';
+    menu.setAttribute('role', 'menu');
+    const ctx = this.#context();
+    for (const child of def.children ?? []) {
+      if (child === '|') continue;
+      const childDef = resolveControl(child);
+      if (childDef.isVisible && !childDef.isVisible(ctx)) continue;
+      const item = this.#button(childDef, 'zine-controls-btn', true);
+      item.setAttribute('role', 'menuitem');
+      menu.appendChild(item);
+    }
+    this.#showPopover(menu, trigger);
+    menu.querySelector('button')?.focus();
+  }
+
+  #showPopover(el: HTMLElement, trigger: HTMLElement): void {
+    this.#root.appendChild(el);
+    this.#popover = { el, trigger };
+    trigger.setAttribute('aria-expanded', 'true');
+    this.#placePopover(el, trigger);
+  }
+
+  /** Anchor a popover to its trigger, flipped to stay inside the book. */
+  #placePopover(el: HTMLElement, trigger: HTMLElement): void {
+    const root = this.#root.getBoundingClientRect();
+    const anchor = trigger.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    if (!root.width || !box.width) return; // not laid out (e.g. jsdom): leave to CSS
+    let left = anchor.left - root.left + anchor.width / 2 - box.width / 2;
+    left = Math.max(4, Math.min(left, root.width - box.width - 4));
+    el.style.left = `${left}px`;
+    // Prefer opening away from the edge the toolbar sits on.
+    const below = anchor.bottom - root.top + 6;
+    const above = anchor.top - root.top - box.height - 6;
+    el.style.top = `${above >= 0 ? above : below}px`;
+  }
+
+  #closePopover(): void {
+    if (!this.#popover) return;
+    const { el, trigger } = this.#popover;
+    this.#popover = null;
+    trigger.removeAttribute('aria-expanded');
+    // Drop buttons that belonged to the popover so #refresh stops touching detached nodes.
+    this.#buttons = this.#buttons.filter((b) => !el.contains(b.el));
+    el.remove();
+    if (this.#doc.activeElement && el.contains(this.#doc.activeElement)) trigger.focus();
+  }
+
+  /** Arrow keys move between controls; Escape dismisses an open popover. */
+  #onKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.#popover) {
+      const { trigger } = this.#popover;
+      this.#closePopover();
+      trigger.focus();
+      event.preventDefault();
+      return;
+    }
+    const focusables = [...this.#root.querySelectorAll<HTMLElement>('button, input')];
+    const at = focusables.indexOf(this.#doc.activeElement as HTMLElement);
+    if (at < 0) return;
+    // Let the page-number field use its own arrows for text editing.
+    if (this.#doc.activeElement instanceof HTMLInputElement) return;
+    const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+    if (step === 0) return;
+    const next = focusables[(at + step + focusables.length) % focusables.length];
+    next?.focus();
+    event.preventDefault();
+  }
+
+  /** Re-read every control's state after the book changes. */
+  #refresh(): void {
+    const ctx = this.#context();
+    for (const { el, def } of this.#buttons) {
+      if (def.isVisible) el.style.display = def.isVisible(ctx) ? '' : 'none';
+      el.disabled = def.isDisabled?.(ctx) ?? false;
+      if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
+    }
+    if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {
+      this.#pageInput.value = String(this.#zine.getPage() + 1);
+    }
+  }
+
+  /** Registered lazily by {@link registerWidgets} so the widget can reach this instance. */
+  makePageInput(): HTMLElement {
+    const wrap = this.#doc.createElement('div');
+    wrap.className = 'zine-controls-page';
+    const input = this.#doc.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(this.#zine.getPageCount());
+    input.value = String(this.#zine.getPage() + 1);
+    input.setAttribute('aria-label', 'Page number');
+    const total = this.#doc.createElement('span');
+    total.textContent = `/ ${this.#zine.getPageCount()}`;
+
+    const commit = (): void => {
+      const n = Number(input.value);
+      if (Number.isFinite(n)) this.#zine.flipTo(Math.round(n) - 1);
+      input.value = String(this.#zine.getPage() + 1);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        commit();
+        input.blur();
+      }
+    });
+    input.addEventListener('blur', commit);
+    wrap.append(input, total);
+    this.#pageInput = input;
+    return wrap;
+  }
+
+  /** Open the search panel: a query field over a list of hits. */
+  openSearch(trigger: HTMLElement): void {
+    this.#closePopover();
+    const panel = this.#doc.createElement('div');
+    panel.className = 'zine-controls-search';
+    const input = this.#doc.createElement('input');
+    input.type = 'search';
+    input.placeholder = 'Search…';
+    input.setAttribute('aria-label', 'Search the document');
+    const hits = this.#doc.createElement('div');
+    hits.className = 'zine-controls-hits';
+    panel.append(input, hits);
+    this.#showPopover(panel, trigger);
+    input.focus();
+
+    let run = 0;
+    const search = async (): Promise<void> => {
+      const query = input.value.trim();
+      const mine = ++run;
+      if (query.length < 2) {
+        hits.replaceChildren();
+        return;
+      }
+      const note = this.#doc.createElement('div');
+      note.className = 'zine-controls-note';
+      note.textContent = 'Searching…';
+      hits.replaceChildren(note);
+      const results = await this.#zine.search(query);
+      if (mine !== run) return; // a newer query has overtaken this one
+      if (results.length === 0) {
+        note.textContent = 'No matches';
+        return;
+      }
+      hits.replaceChildren(
+        ...results.map((hit) => {
+          const btn = this.#doc.createElement('button');
+          btn.type = 'button';
+          btn.className = 'zine-controls-hit';
+          const label = this.#doc.createElement('span');
+          label.textContent = `Page ${hit.page + 1}`;
+          const excerpt = this.#doc.createElement('small');
+          excerpt.textContent = hit.excerpt;
+          btn.append(label, excerpt);
+          btn.addEventListener('click', () => {
+            this.#zine.flipTo(hit.page);
+            this.#closePopover();
+          });
+          return btn;
+        }),
+      );
+    };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    input.addEventListener('input', () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void search(), 180);
+    });
+    this.#unsubscribe.push(() => timer && clearTimeout(timer));
+  }
+}
+
+/**
+ * Controls that need the toolbar itself (a DOM widget, or a panel to open) are registered per
+ * instance, since the registry is module-level and shared.
+ */
+export function registerWidgets(toolbar: Toolbar): void {
+  registerBuiltins();
+  defineControl({
+    id: 'pageInput',
+    title: 'Page',
+    render: () => toolbar.makePageInput(),
+  });
+  defineControl({
+    id: 'search',
+    title: 'Search',
+    icon: ICONS.search,
+    isVisible: (ctx) => ctx.zine.canSearch(),
+    // The panel is opened by the toolbar, which knows the trigger to anchor it to.
+  });
+}
