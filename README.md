@@ -130,13 +130,15 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 
 ### Built-in controls
 
-`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `share`,
-`fullscreen`, `menu`. A `'|'` in `items` draws a separator.
+`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `download`,
+`share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
 
-The default layout is `['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', '|', 'search', 'menu']`.
+The default layout is `['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', '|', 'search', 'menu']`,
+and `menu` (the `⋮` overflow) holds `['download', 'share', 'fullscreen']`.
 
-`search` hides itself unless the source can produce text — see [Search](#search). `fullscreen`
-hides itself where the Fullscreen API is unavailable.
+Controls hide themselves when they cannot work: `search` unless the source can produce text (see
+[Search](#search)), `download` unless there is an original file to save (see
+[Download](#download)), and `fullscreen` where the Fullscreen API is unavailable.
 
 ### Custom controls
 
@@ -205,6 +207,21 @@ extraction per page and later ones are cheap. Pages replaced by an image (`pages
 
 To make a custom source searchable, implement the optional `getText(index): Promise<string>`.
 
+## Download
+
+`zine.download()` saves the original document. It works for a `PdfSource` created from a URL or
+from raw bytes; a PDF opened from a pdf.js document you created yourself has no file of its own,
+and an image book is not a single file at all — both resolve `false`.
+
+```js
+if (zine.canDownload()) await zine.download();
+```
+
+The `download` control in the `⋮` menu calls this, and hides itself when `canDownload()` is false.
+To make a custom source downloadable, implement the optional
+`getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
+when `url` came from `URL.createObjectURL` so it is released after the save.
+
 ## Curl models
 
 The WebGL2 renderer bends the turning leaf with one of six models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
@@ -238,6 +255,8 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |
 | `canSearch()` | `boolean` | Whether this book's source can produce text. |
 | `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
+| `canDownload()` | `boolean` | Whether the original document can be saved. |
+| `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
 | `container` (getter) | `HTMLElement` | The element the flipbook was mounted into. |
 | `setZoom(scale, center?)` | `void` | Zoom to `scale`, keeping container-local `center` `{x, y}` fixed. |
 | `resetZoom()` | `void` | Zoom back to `1`. |

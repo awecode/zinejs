@@ -1,4 +1,4 @@
-import type { PageContent, Source } from '@zinejs/core';
+import type { DownloadInfo, PageContent, Source } from '@zinejs/core';
 
 /** Minimal shapes of the pdf.js API we rely on (avoids a hard type dependency). */
 interface PdfPageLike {
@@ -56,6 +56,18 @@ function isPdfDocument(src: PdfSrc): src is PdfDocumentLike {
     'numPages' in src &&
     typeof (src as PdfDocumentLike).getPage === 'function'
   );
+}
+
+/** Last path segment of a URL, for naming a download. Falls back when the URL has no filename
+ *  (a directory, a data: URI, or something unparseable). */
+function filenameFromUrl(url: string): string {
+  try {
+    const path = new URL(url, 'http://x').pathname;
+    const last = path.split('/').filter(Boolean).pop();
+    return last && /\.[a-z0-9]+$/i.test(last) ? decodeURIComponent(last) : 'document.pdf';
+  } catch {
+    return 'document.pdf';
+  }
 }
 
 /**
@@ -163,6 +175,24 @@ export class PdfSource implements Source {
     const pending = this.#extractText(index).catch(() => '');
     this.#textCache.set(index, pending);
     return pending;
+  }
+
+  /**
+   * The original PDF, for a download control.
+   *
+   * Null when the source was handed a pre-opened pdf.js document: the bytes belong to whoever
+   * created it, and re-fetching them is not this class's call to make.
+   */
+  async getDownload(): Promise<DownloadInfo | null> {
+    const src = this.#src;
+    if (typeof src === 'string') {
+      return { url: src, filename: filenameFromUrl(src) };
+    }
+    if (src instanceof ArrayBuffer || ArrayBuffer.isView(src)) {
+      const blob = new Blob([src as BlobPart], { type: 'application/pdf' });
+      return { url: URL.createObjectURL(blob), filename: 'document.pdf', revoke: true };
+    }
+    return null;
   }
 
   async #extractText(index: number): Promise<string> {

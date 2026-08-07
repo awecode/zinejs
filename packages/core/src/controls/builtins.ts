@@ -81,9 +81,22 @@ export function registerBuiltins(): void {
   });
 
   defineControl({
+    id: 'download',
+    title: 'Download PDF',
+    icon: ICONS.download,
+    // Hidden for image books and for PDFs opened from a caller-owned pdf.js document, which
+    // have no file of their own to save.
+    isVisible: (ctx) => ctx.zine.canDownload(),
+    action: (ctx) => {
+      void ctx.zine.download();
+      ctx.close();
+    },
+  });
+
+  defineControl({
     id: 'menu',
     title: 'More',
     icon: ICONS.menu,
-    children: ['share', 'fullscreen'],
+    children: ['download', 'share', 'fullscreen'],
   });
 }

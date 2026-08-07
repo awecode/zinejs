@@ -65,8 +65,9 @@ new Zine(container, {
 
 ## Controls
 
-A toolbar (paging, page number, zoom, search, share, fullscreen) is rendered over the book by
-default. Turn it off with `controls: false`, move it with `controls: { position: 'top' }`, or
+A toolbar (paging, page number, zoom, search, and a `⋮` menu with download, share and fullscreen)
+is rendered below the book by default. Turn it off with `controls: false`, move it with
+`controls: { position: 'top' }`, float it over the book with `controls: { docked: false }`, or
 choose the buttons with `controls: { items: [...] }`. Register your own with `defineControl`.
 
 The toolbar and its icons load as a separate chunk, so a book with `controls: false` never

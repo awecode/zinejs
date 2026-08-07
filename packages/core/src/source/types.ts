@@ -30,4 +30,20 @@ export interface Source {
    * simply omit this — `Zine.canSearch()` reports whether a book is searchable at all.
    */
   getText?(index: number): Promise<string>;
+  /**
+   * Optional: the original document, for a download control. Return null when there is nothing
+   * to hand over — a source built from a pre-opened document has no bytes of its own, and an
+   * image book is not a single file at all.
+   */
+  getDownload?(): Promise<DownloadInfo | null>;
+}
+
+/** A downloadable original document. */
+export interface DownloadInfo {
+  /** Where to fetch it, or a blob/object URL the caller can link to directly. */
+  url: string;
+  /** Suggested file name, used for the download attribute. */
+  filename: string;
+  /** True when `url` was created with `URL.createObjectURL` and must be revoked after use. */
+  revoke?: boolean;
 }

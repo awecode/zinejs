@@ -32,6 +32,8 @@ export const ICONS: Record<string, string> = {
   /** minimize */
   exitFullscreen:
     '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
+  /** download */
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   /** x */
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };

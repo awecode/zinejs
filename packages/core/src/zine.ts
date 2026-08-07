@@ -287,6 +287,34 @@ export class Zine {
     return typeof this.#source.getText === 'function';
   }
 
+  /** Whether the original document can be downloaded — true for a PDF from a URL or bytes. */
+  canDownload(): boolean {
+    return typeof this.#source.getDownload === 'function';
+  }
+
+  /**
+   * Save the original document. Resolves to false when the source has nothing to hand over
+   * (an image book, or a PDF opened from a caller-owned pdf.js document).
+   */
+  async download(): Promise<boolean> {
+    const getDownload = this.#source.getDownload;
+    if (typeof getDownload !== 'function') return false;
+    const info = await getDownload.call(this.#source);
+    if (!info) return false;
+    const doc = this.#container.ownerDocument;
+    if (!doc) return false;
+    const link = doc.createElement('a');
+    link.href = info.url;
+    link.download = info.filename;
+    link.rel = 'noopener';
+    doc.body.appendChild(link);
+    link.click();
+    link.remove();
+    // An object URL is ours to clean up; give the click a tick to start first.
+    if (info.revoke) setTimeout(() => URL.revokeObjectURL(info.url), 10_000);
+    return true;
+  }
+
   /**
    * Find `query` in the book's text, case-insensitively.
    *

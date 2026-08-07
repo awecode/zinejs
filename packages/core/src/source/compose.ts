@@ -1,5 +1,5 @@
 import type { PageContent } from '../renderer/types';
-import type { Source } from './types';
+import type { DownloadInfo, Source } from './types';
 
 export interface CompositionOptions {
   /** Image URL prepended as a lone front cover (adds a page). */
@@ -43,6 +43,7 @@ class CompositeSource implements Source {
   open?: () => Promise<void>;
   onPageUpdate?: (handler: (index: number) => void) => void;
   getText?: (index: number) => Promise<string>;
+  getDownload?: () => Promise<DownloadInfo | null>;
 
   constructor(base: Source, options: CompositionOptions) {
     this.#base = base;
@@ -78,6 +79,12 @@ class CompositeSource implements Source {
         if (this.#resolved.has(src)) return '';
         return base.getText!(src);
       };
+    }
+
+    if (typeof base.getDownload === 'function') {
+      // Covers and replacements change what is displayed, not the original document, so the
+      // download is the base source's file either way.
+      this.getDownload = () => base.getDownload!();
     }
   }
 

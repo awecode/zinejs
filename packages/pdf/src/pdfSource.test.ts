@@ -242,3 +242,28 @@ describe('PdfSource — getText', () => {
     expect(page.getTextContent).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PdfSource — getDownload', () => {
+  it('offers the source URL for download, named from its last path segment', async () => {
+    const src = new PdfSource('/docs/brochure-2024.pdf');
+    expect(await src.getDownload()).toEqual({
+      url: '/docs/brochure-2024.pdf',
+      filename: 'brochure-2024.pdf',
+    });
+  });
+
+  it('wraps raw bytes in a revocable object URL', async () => {
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:fake' });
+    try {
+      const info = await new PdfSource(new ArrayBuffer(8)).getDownload();
+      expect(info).toEqual({ url: 'blob:fake', filename: 'document.pdf', revoke: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('declines for a caller-owned document, whose bytes are not ours to hand out', async () => {
+    const doc = { numPages: 2, getPage: async () => ({}), destroy: () => {} } as unknown as PdfSrc;
+    expect(await new PdfSource(doc).getDownload()).toBeNull();
+  });
+});

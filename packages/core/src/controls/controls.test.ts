@@ -35,6 +35,13 @@ class TextSource extends FakeSource {
   }
 }
 
+/** A source with an original file behind it, like a PDF loaded from a URL. */
+class DownloadableSource extends FakeSource {
+  async getDownload(): Promise<{ url: string; filename: string }> {
+    return { url: '/brochure.pdf', filename: 'brochure.pdf' };
+  }
+}
+
 class MockRenderer implements Renderer {
   mount(): Promise<void> {
     return Promise.resolve();
@@ -236,6 +243,40 @@ describe('controls toolbar', () => {
     expect(scope(el).querySelector('.zine-controls-menu')).toBeNull();
   });
 
+  it('offers Download PDF in the menu when the source has a file', async () => {
+    const { el } = await mount({ source: new DownloadableSource(8) });
+    byLabel(el, 'More')!.click();
+    const items = [...scope(el).querySelectorAll('.zine-controls-menu button')];
+    expect(items.map((b) => b.getAttribute('aria-label'))).toContain('Download PDF');
+  });
+
+  it('leaves Download PDF out for a book with no original file', async () => {
+    const { el } = await mount(); // plain image book
+    byLabel(el, 'More')!.click();
+    const items = [...scope(el).querySelectorAll('.zine-controls-menu button')];
+    expect(items.map((b) => b.getAttribute('aria-label'))).not.toContain('Download PDF');
+  });
+
+  it('saves the file when Download PDF is chosen', async () => {
+    const { el } = await mount({ source: new DownloadableSource(8) });
+    const clicked: { href: string; download: string }[] = [];
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicked.push({ href: this.getAttribute('href') ?? '', download: this.download });
+    };
+    try {
+      byLabel(el, 'More')!.click();
+      const item = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => b.getAttribute('aria-label') === 'Download PDF',
+      )!;
+      item.click();
+      await flush();
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+    expect(clicked).toEqual([{ href: '/brochure.pdf', download: 'brochure.pdf' }]);
+  });
+
   it('hides search on a book whose source has no text', async () => {
     const { el } = await mount();
     expect(byLabel(el, 'Search')?.style.display).toBe('none');
@@ -288,5 +329,29 @@ describe('Zine.search', () => {
     expect(await zine.search('   ')).toEqual([]);
     const plain = await mount();
     expect(await plain.zine.search('alpha')).toEqual([]);
+  });
+});
+
+describe('Zine.download', () => {
+  it('reports whether the book has an original file', async () => {
+    expect((await mount()).zine.canDownload()).toBe(false);
+    expect((await mount({ source: new DownloadableSource(4) })).zine.canDownload()).toBe(true);
+  });
+
+  it('resolves false for a book with nothing to save', async () => {
+    const { zine } = await mount();
+    expect(await zine.download()).toBe(false);
+  });
+
+  it('resolves false when the source declines to hand over a file', async () => {
+    // A PDF built from a caller-owned pdf.js document: getDownload exists but yields null.
+    class NoFile extends FakeSource {
+      async getDownload(): Promise<null> {
+        return null;
+      }
+    }
+    const { zine } = await mount({ source: new NoFile(4) });
+    expect(zine.canDownload()).toBe(true);
+    expect(await zine.download()).toBe(false);
   });
 });
