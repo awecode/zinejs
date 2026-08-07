@@ -146,9 +146,10 @@ export class Zine {
   #pendingGrab: { direction: FlipDirection; targetIndex: number; toPage: number; width: number } | null = null;
   #press: { x: number; y: number } | null = null;
   #pendingClickTimer: ReturnType<typeof setTimeout> | null = null;
-  // Latest flip intent requested while one was already animating; replayed on settle so
-  // clicks/keys during a turn aren't dropped and continuous flipping keeps advancing.
-  #queuedFlip: (() => void) | null = null;
+  // Flip intents that arrived while one was already in flight and could not start yet, oldest
+  // first. Replayed in order as each turn settles, so a burst of clicks or keypresses all
+  // count and none of them land out of sequence.
+  #pendingFlips: (() => void)[] = [];
   // The fold animation currently on screen, so a new flip request can land it instantly
   // (snap to its end pose + commit) and start immediately instead of waiting it out.
   #activeAnim: { toT: number; direction: FlipDirection; onDone: () => void } | null = null;
@@ -254,24 +255,35 @@ export class Zine {
     this.#requestFlip(() => this.#startFlip(this.#spreadIndexForPage(target)));
   }
 
-  /** Run a flip now. If a fold is animating, land it instantly first so the new turn starts
-   *  immediately on this click (thunks read `#current` lazily, so it steps on from where the
-   *  interrupted turn landed). A drag in flight can't be interrupted this way, so its request
-   *  is queued and replayed on settle instead. */
+  /**
+   * Run a flip, respecting whatever is already in progress.
+   *
+   * Every request is one discrete step from wherever the book ends up, whichever way it goes,
+   * and none of them are dropped. Two taps forward and one back is three instructions and nets
+   * one spread forward, however fast they arrive: a fold on screen is landed so the next turn
+   * can start on top of it, and anything that cannot start yet waits its turn in order.
+   *
+   * Waiting happens when the flip holding the machine has no fold to cut short — it is still
+   * staging its content asynchronously — or when the reader's finger is down mid-drag.
+   */
   #requestFlip(run: () => void): void {
-    if (this.#machine.state === 'idle') {
+    const idle = (): boolean => this.#machine.state === 'idle';
+    if (idle()) {
       run();
-    } else if (this.#activeAnim) {
-      // This request supersedes anything still waiting: landing the current turn commits it,
-      // and that commit drains the queue. Without clearing it first, an older tap would fire
-      // from inside the commit and take the book somewhere the reader has since changed their
-      // mind about — a reversal would be undone by the forward tap it was meant to replace.
-      this.#queuedFlip = null;
-      this.#finishActiveAnim(); // lands the current turn → machine back to idle
-      run();
-    } else {
-      this.#queuedFlip = run; // dragging: no animation to cut short, so wait for release
+      return;
     }
+    if (this.#activeAnim) {
+      this.#finishActiveAnim(); // lands the current turn → machine back to idle
+      // That commit drains one waiting request, which may have taken the machine straight
+      // back. If so this one waits its turn behind it rather than landing out of order.
+      if (idle()) {
+        run();
+        return;
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[q] QUEUED. state=', this.#machine.state, 'anim=', !!this.#activeAnim, 'depth=', this.#pendingFlips.length + 1, 'current=', this.#current);
+    this.#pendingFlips.push(run);
   }
 
   /** Snap the in-flight fold to its end pose and commit it now, cancelling its RAF loop. */
@@ -287,12 +299,13 @@ export class Zine {
     anim.onDone();
   }
 
-  /** After an animation settles, fire whatever flip was requested mid-turn. */
+  /** After a turn settles, start the oldest flip that was requested while it ran. Just the one:
+   *  it takes the machine again, and the rest follow as it in turn settles. */
   #drainQueuedFlip(): void {
-    const queued = this.#queuedFlip;
-    if (!queued) return;
-    this.#queuedFlip = null;
-    queued();
+    const next = this.#pendingFlips.shift();
+    // eslint-disable-next-line no-console
+    console.log('[q] DRAIN. had=', next ? 'yes' : 'no', 'remaining=', this.#pendingFlips.length, 'current=', this.#current, 'state=', this.#machine.state);
+    if (next) next();
   }
 
   getZoom(): number {
@@ -337,7 +350,7 @@ export class Zine {
     this.#destroyed = true;
     if (this.#raf !== null) cancelAnimationFrame(this.#raf);
     this.#activeAnim = null;
-    this.#queuedFlip = null;
+    this.#pendingFlips.length = 0;
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
     this.#a11yCleanup?.();
@@ -590,7 +603,12 @@ export class Zine {
     const direction = this.#clickFlipDirection(this.#press);
     if (!direction) return;
     const step = direction === 'forward' ? 1 : -1;
-    if (this.#current + step < 0 || this.#current + step >= this.#spreads.length) return;
+    // Deliberately not range-checked here. A tap made mid-turn is resolved once that turn
+    // lands, and the step can be legal from there even when it is not from the spread on
+    // screen: turning forward off spread 0 and immediately tapping back looks out of bounds
+    // at tap time, yet the book is about to be on spread 1 where going back is fine. Rejecting
+    // early silently swallowed that tap. #startFlip does the real bounds check at the point it
+    // actually matters, with the spread the flip will run from.
     // Anchor the fold at the tapped height (cone/leaf/flick curl from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
     // Read `#current` lazily: interrupting commits the running turn first, so this steps on

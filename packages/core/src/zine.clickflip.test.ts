@@ -17,6 +17,27 @@ class FakeSource implements Source {
   destroy(): void {}
 }
 
+/**
+ * A source whose pages take a real turn of the event loop to resolve, like decoding an image
+ * or rasterising a PDF page does. `FakeSource` resolves within one microtask, which hides the
+ * gap `#runFlip` awaits between starting a flip and animating it — the window in which a
+ * second tap can supersede the first.
+ */
+class SlowSource implements Source {
+  readonly pageCount: number;
+  #delay: number;
+  constructor(pageCount: number, delay = 5) {
+    this.pageCount = pageCount;
+    this.#delay = delay;
+  }
+  async get(): Promise<PageContent> {
+    await new Promise((r) => setTimeout(r, this.#delay));
+    return { width: 1, height: 1 } as unknown as PageContent;
+  }
+  prefetch(): void {}
+  destroy(): void {}
+}
+
 class MockRenderer implements Renderer {
   mount(): Promise<void> {
     return Promise.resolve();
@@ -101,32 +122,80 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
   it('a tap on the opposite edge mid-flip turns back, not the same way again', async () => {
     // 8 pages → spreads [0,1] [2,3] [4,5] [6,7]; start in the middle so both ways are open.
     const { zine, el } = await makeZine(2, { source: new FakeSource(8) });
-    expect(zine.getPage()).toBe(2);
+    expect(zine.getPage()).toBe(2); // spread 1
 
     tap(el, 790, 300); // right edge → forward
-    tap(el, 10, 300); // left edge while that flip is still in flight → must go backward
+    tap(el, 10, 300); // left edge, immediately after
     await settleInstant();
     await settleInstant();
 
-    // Forward then back lands where it started. Reading a stale press instead would turn
-    // forward twice and end on page 6.
-    expect(zine.getPage()).toBe(2);
+    // Forward one then back one returns to the spread it started on. The failure this guards
+    // against is the second tap repeating the first and running the book forward to page 6.
+    expect(zine.getPage()).toBe(2); // spread 1, where it began
   });
 
-  it('a reversing tap mid-flip turns back from where the book landed', async () => {
+  it('a reversing tap mid-flip lands the turn in flight, then steps back from there', async () => {
     const { zine, el } = await makeZine(4, { source: new FakeSource(12) });
     expect(zine.getPage()).toBe(4); // spread 2
 
     tap(el, 790, 300); // forward: spread 2 → 3
     await flush(); // let the fold actually start animating, so the next tap interrupts it
-    tap(el, 10, 300); // reverse
+    tap(el, 10, 300); // reverse before it lands
     await settleInstant();
     await settleInstant();
 
-    // Interrupting lands the forward turn on spread 3, and the reversal steps back from
-    // there to spread 2 — the neighbour of what is now on screen. What must never happen is
-    // the reversal moving the book *forward* again.
+    // Every tap counts: the forward turn is landed (spread 3), then the reversal steps back
+    // from there to spread 2. Throwing the in-flight turn away instead would silently lose a
+    // page the reader had already asked for.
+    expect(zine.getPage()).toBe(4); // spread 2, back where it started
+  });
+
+  it('two forward taps then one back nets one spread forward', async () => {
+    // The reader's own arithmetic: from spread 0, right, right, left → spread 1. Each tap is
+    // a discrete instruction and all three have to land, however fast they arrive.
+    const { zine, el } = await makeZine(0, { source: new FakeSource(12) });
+    expect(zine.getPage()).toBe(0);
+
+    tap(el, 790, 300); // → spread 1
+    await flush();
+    tap(el, 790, 300); // → spread 2
+    await flush();
+    tap(el, 10, 300); // → back to spread 1
+    for (let i = 0; i < 4; i++) await settleInstant();
+
+    expect(zine.getPage()).toBe(2); // spread 1
+  });
+
+  it('reverses off the first spread, where the backward step is only legal once the turn lands', async () => {
+    // The reader's first move: forward one, then straight back. At the moment of the second
+    // tap the book is still showing spread 0, so "one back" looks out of bounds — but the
+    // turn in flight is about to land on spread 1, from which it is perfectly legal. Judging
+    // the tap against the spread on screen drops it and the reader gets nothing.
+    const { zine, el } = await makeZine(0, { source: new FakeSource(8) });
+    expect(zine.getPage()).toBe(0); // spread 0
+
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await flush(); // the fold is now animating, so the next tap interrupts it
+    tap(el, 10, 300); // straight back
+    await settleInstant();
+    await settleInstant();
+
+    expect(zine.getPage()).toBe(0); // interrupt lands spread 1, reversal returns to spread 0
+  });
+
+  it('both taps still count when the pages resolve slowly', async () => {
+    // Staging the destination is async. With a source that takes a real tick, the first flip
+    // is still awaiting its page when the second tap arrives, so the two interleave through
+    // the queue rather than through the animation. Both must still land, in order.
+    const { zine, el } = await makeZine(4, { source: new SlowSource(12) });
     expect(zine.getPage()).toBe(4); // spread 2
+
+    tap(el, 790, 300); // forward, but its content has not resolved yet
+    tap(el, 10, 300); // reverse before that happens
+    await wait(40); // let both content promises settle
+    for (let i = 0; i < 4; i++) await settleInstant();
+
+    expect(zine.getPage()).toBe(4); // forward one, back one → where it started
   });
 
   it('flipPrev during a flipNext moves back, never further forward', async () => {
@@ -135,11 +204,11 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
 
     zine.flipNext(); // → spread 3
     await flush();
-    zine.flipPrev(); // reverse, from spread 3 → spread 2
+    zine.flipPrev(); // reverse: lands spread 3, then steps back to spread 2
     await settleInstant();
     await settleInstant();
 
-    expect(zine.getPage()).toBe(4); // spread 2, not 6
+    expect(zine.getPage()).toBe(4); // spread 2 — never further forward
   });
 
   it('does nothing when the tap would go past the ends', async () => {
