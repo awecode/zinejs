@@ -268,13 +268,25 @@ export class Toolbar {
   #refresh(): void {
     const ctx = this.#context();
     for (const { el, def } of this.#buttons) {
-      if (def.isVisible) el.style.display = def.isVisible(ctx) ? '' : 'none';
+      const visible = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
+      if (visible !== undefined) el.style.display = visible ? '' : 'none';
       el.disabled = def.isDisabled?.(ctx) ?? false;
       if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
     }
     if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {
       this.#pageInput.value = String(this.#zine.getPage() + 1);
     }
+  }
+
+  /** A submenu is only worth showing if something inside it is. Keeps the overflow button from
+   *  opening onto nothing when every entry has hidden itself. */
+  #hasVisibleChildren(def: ControlDef, ctx: ControlContext): boolean {
+    if (def.isVisible && !def.isVisible(ctx)) return false;
+    return (def.children ?? []).some((child) => {
+      if (child === '|') return false;
+      const childDef = resolveControl(child);
+      return childDef.isVisible ? childDef.isVisible(ctx) : true;
+    });
   }
 
   /** Registered lazily by {@link registerWidgets} so the widget can reach this instance. */

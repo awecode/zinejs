@@ -27,10 +27,10 @@ export const CSS = `
   position: relative;
   display: flex;
   gap: 4px;
-  padding: 6px;
+  padding: 5px;
   z-index: 2;
   box-sizing: border-box;
-  font: 500 13px/1.2 system-ui, sans-serif;
+  font: 500 12px/1.2 system-ui, sans-serif;
   color: var(--zine-controls-fg, #f4f4f5);
   touch-action: auto;
   -webkit-user-select: none;
@@ -45,9 +45,9 @@ export const CSS = `
 .zine-controls-bar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px;
-  border-radius: 10px;
+  gap: 1px;
+  padding: 3px;
+  border-radius: 8px;
   pointer-events: auto;
   background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
   backdrop-filter: blur(8px);
@@ -70,17 +70,17 @@ export const CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
 }
-.zine-controls-btn svg { width: 18px; height: 18px; }
+.zine-controls-btn svg { width: 15px; height: 15px; }
 .zine-controls-btn:hover:not(:disabled) { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
 .zine-controls-btn:focus-visible {
   outline: 2px solid var(--zine-controls-accent, #7dd3fc);
@@ -93,26 +93,26 @@ export const CSS = `
 .zine-controls-sep {
   width: 1px;
   align-self: stretch;
-  margin: 4px 2px;
+  margin: 3px 3px;
   background: currentColor;
   opacity: 0.22;
 }
 .zine-controls-left .zine-controls-sep,
-.zine-controls-right .zine-controls-sep { width: auto; height: 1px; margin: 2px 4px; }
+.zine-controls-right .zine-controls-sep { width: auto; height: 1px; margin: 3px 3px; }
 
 .zine-controls-page {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 4px;
+  gap: 3px;
+  padding: 0 3px;
   pointer-events: auto;
   white-space: nowrap;
 }
 .zine-controls-page input {
-  width: 2.6em;
-  padding: 3px 4px;
+  width: 2.2em;
+  padding: 2px 3px;
   border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
-  border-radius: 5px;
+  border-radius: 4px;
   background: rgba(0, 0, 0, 0.25);
   color: inherit;
   font: inherit;
@@ -130,10 +130,10 @@ export const CSS = `
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 168px;
-  padding: 5px;
-  border-radius: 10px;
+  gap: 1px;
+  min-width: 152px;
+  padding: 4px;
+  border-radius: 8px;
   pointer-events: auto;
   background: var(--zine-controls-bg, rgba(24, 24, 27, 0.94));
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.36);
@@ -142,8 +142,8 @@ export const CSS = `
 .zine-controls-menu .zine-controls-btn {
   width: 100%;
   height: auto;
-  gap: 9px;
-  padding: 7px 9px;
+  gap: 8px;
+  padding: 6px 8px;
   justify-content: flex-start;
 }
 

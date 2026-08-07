@@ -97,6 +97,7 @@ export function registerBuiltins(): void {
     id: 'menu',
     title: 'More',
     icon: ICONS.menu,
-    children: ['download', 'share', 'fullscreen'],
+    // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
+    children: ['download'],
   });
 }

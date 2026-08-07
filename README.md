@@ -133,12 +133,19 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 `prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `download`,
 `share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
 
-The default layout is `['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', '|', 'search', 'menu']`,
-and `menu` (the `⋮` overflow) holds `['download', 'share', 'fullscreen']`.
+The default layout is:
+
+```js
+['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', 'search', 'share', 'menu', 'fullscreen']
+```
+
+`menu` is the `⋮` overflow, holding `['download']`.
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
-[Download](#download)), and `fullscreen` where the Fullscreen API is unavailable.
+[Download](#download)), and `fullscreen` where the Fullscreen API is unavailable. A submenu whose
+entries have all hidden themselves hides too, rather than opening onto nothing — so `menu`
+disappears on a book with no downloadable file.
 
 ### Custom controls
 
@@ -217,7 +224,8 @@ and an image book is not a single file at all — both resolve `false`.
 if (zine.canDownload()) await zine.download();
 ```
 
-The `download` control in the `⋮` menu calls this, and hides itself when `canDownload()` is false.
+The `download` control in the `⋮` menu calls this, and hides itself (taking the empty menu with
+it) when `canDownload()` is false.
 To make a custom source downloadable, implement the optional
 `getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
 when `url` came from `URL.createObjectURL` so it is released after the save.

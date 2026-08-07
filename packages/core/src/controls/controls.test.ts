@@ -226,7 +226,7 @@ describe('controls toolbar', () => {
   });
 
   it('opens a submenu and closes it again on a second press', async () => {
-    const { el } = await mount();
+    const { el } = await mount({ source: new DownloadableSource(8) });
     const menu = byLabel(el, 'More')!;
     menu.click();
     expect(scope(el).querySelector('.zine-controls-menu')).not.toBeNull();
@@ -237,10 +237,18 @@ describe('controls toolbar', () => {
   });
 
   it('closes an open submenu on Escape', async () => {
-    const { el } = await mount();
+    const { el } = await mount({ source: new DownloadableSource(8) });
     byLabel(el, 'More')!.click();
     toolbar(el)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(scope(el).querySelector('.zine-controls-menu')).toBeNull();
+  });
+
+  it('puts share and fullscreen on the bar, in the documented order', async () => {
+    const { el } = await mount();
+    const order = buttons(el)
+      .map((b) => b.getAttribute('aria-label'))
+      .filter((l) => ['Search', 'Share', 'More', 'Fullscreen'].includes(l ?? ''));
+    expect(order).toEqual(['Search', 'Share', 'More', 'Fullscreen']);
   });
 
   it('offers Download PDF in the menu when the source has a file', async () => {
@@ -250,11 +258,10 @@ describe('controls toolbar', () => {
     expect(items.map((b) => b.getAttribute('aria-label'))).toContain('Download PDF');
   });
 
-  it('leaves Download PDF out for a book with no original file', async () => {
-    const { el } = await mount(); // plain image book
-    byLabel(el, 'More')!.click();
-    const items = [...scope(el).querySelectorAll('.zine-controls-menu button')];
-    expect(items.map((b) => b.getAttribute('aria-label'))).not.toContain('Download PDF');
+  it('hides the overflow menu entirely when nothing inside it applies', async () => {
+    // Download is the only entry, so an image book leaves the menu with nothing to open onto.
+    const { el } = await mount();
+    expect(byLabel(el, 'More')?.style.display).toBe('none');
   });
 
   it('saves the file when Download PDF is chosen', async () => {

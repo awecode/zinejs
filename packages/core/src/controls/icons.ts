@@ -6,8 +6,8 @@
  *   (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.
  *
  * Each value is the inner markup of a 24x24 `viewBox` drawn with `stroke="currentColor"`,
- * `fill="none"`, `stroke-width="2"` and round caps/joins — the wrapper supplies those, so the
- * strings stay to the geometry.
+ * `fill="none"` and round caps/joins — {@link createIcon} supplies those, so the strings stay to
+ * the geometry.
  */
 export const ICONS: Record<string, string> = {
   /** chevron-left */
@@ -44,7 +44,9 @@ export function createIcon(doc: Document, markup: string): SVGSVGElement {
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
+  // Slightly under Lucide's default 2: at the toolbar's icon size a full-weight stroke reads
+  // heavy and closes up the tighter shapes.
+  svg.setAttribute('stroke-width', '1.75');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.setAttribute('aria-hidden', 'true');

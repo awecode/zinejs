@@ -56,7 +56,8 @@ export const DEFAULT_ITEMS: readonly ControlItem[] = [
   '|',
   'zoomOut',
   'zoomIn',
-  '|',
   'search',
+  'share',
   'menu',
+  'fullscreen',
 ];
