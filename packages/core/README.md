@@ -59,8 +59,18 @@ new Zine(container, {
   clickToFlip: 'edge',       // 'edge' | 'half' | 'off'
   zoom: { enabled: true, max: 4, wheel: true, doubleClick: [1, 2, 4] },
   renderer: 'auto',          // 'auto' | 'css' | 'webgl2' | a custom Renderer
+  controls: true,            // built-in toolbar; false for none, or { position, items, … }
 });
 ```
+
+## Controls
+
+A toolbar (paging, page number, zoom, search, share, fullscreen) is rendered over the book by
+default. Turn it off with `controls: false`, move it with `controls: { position: 'top' }`, or
+choose the buttons with `controls: { items: [...] }`. Register your own with `defineControl`.
+
+The toolbar and its icons load as a separate chunk, so a book with `controls: false` never
+downloads them. See the [full docs](https://github.com/awecode/zinejs#controls).
 
 See the [root README](../../README.md#curl-models) for what each curl model does.
 ## Methods & events

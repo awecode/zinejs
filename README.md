@@ -84,6 +84,7 @@ new Zine(document.getElementById('book'), {
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
 | `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread; `0` disables the responsive fallback. |
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
+| `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
 
 ### `spreadMode`
 
@@ -101,6 +102,102 @@ new Zine(document.getElementById('book'), {
 | `wheel` | `boolean` | `true` | Zoom on Ctrl/Cmd + wheel. |
 | `doubleClick` | `number[] \| false` | `[1, 2, 4]` | Zoom levels cycled by double-click (wraps); `false` disables. |
 | `doubleClickInFlipZone` | `boolean` | off in `'edge'`, on in `'half'` | Listen for double-click zoom inside click-to-flip zones. Enabling makes clicks wait out `clickFlipDelay`. |
+
+## Controls
+
+A toolbar is rendered over the book by default. It floats above the page.
+
+```js
+new Zine(el, { source, controls: false });                   // no toolbar
+new Zine(el, { source, controls: { position: 'top' } });     // move it
+new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the buttons
+```
+
+### `controls` options
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge the toolbar sits on. |
+| `docked` | `boolean` | `false` | Place it in normal flow instead of floating over the book. |
+| `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
+| `className` | `string` | — | Extra class on the toolbar root, for styling. |
+
+### Built-in controls
+
+`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `share`,
+`fullscreen`, `menu`. A `'|'` in `items` draws a separator.
+
+The default layout is `['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', '|', 'search', 'menu']`.
+
+`search` hides itself unless the source can produce text — see [Search](#search). `fullscreen`
+hides itself where the Fullscreen API is unavailable.
+
+### Custom controls
+
+Register one with `defineControl`, then name it in `items`. A control with `children` becomes a
+submenu, nested as deeply as you like.
+
+```js
+import { Zine, defineControl } from '@zinejs/core';
+
+defineControl({
+  id: 'print',
+  title: 'Print',
+  icon: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+  action: ({ zine }) => window.print(),
+});
+
+new Zine(el, {
+  source,
+  controls: { items: ['prev', 'next', '|', { id: 'tools', title: 'Tools', children: ['print', 'share'] }] },
+});
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | Unique key; how `items` refers to it. Reusing an id replaces that control. |
+| `title` | `string` | Tooltip and accessible name. |
+| `icon` | `string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. |
+| `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
+| `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
+| `render` | `(ctx) => HTMLElement` | Build a custom widget instead of a button. |
+| `isVisible` | `(ctx) => boolean` | Hide conditionally. |
+| `isDisabled` | `(ctx) => boolean` | Grey out and block the action. |
+| `isActive` | `(ctx) => boolean` | Mark as currently on. |
+
+Naming an id in `items` with only some fields overrides just those: `{ id: 'next', title: 'Forward' }`
+relabels the built-in without reimplementing it.
+
+### Styling
+
+The toolbar reads these custom properties, so it can be rethemed without overriding rules:
+
+```css
+.zine-controls {
+  --zine-controls-bg: rgba(24, 24, 27, 0.82);
+  --zine-controls-fg: #f4f4f5;
+  --zine-controls-hover: rgba(255, 255, 255, 0.14);
+  --zine-controls-accent: #7dd3fc;
+}
+```
+
+## Search
+
+`zine.search(query)` resolves to `{ page, excerpt }[]` for every page whose text contains `query`,
+case-insensitively. It needs a source that can produce text: `PdfSource` can, `ImageSource` cannot.
+
+```js
+if (zine.canSearch()) {
+  const hits = await zine.search('invoice');
+  zine.flipTo(hits[0].page);
+}
+```
+
+Text is pulled per page on demand and cached, so the first search over a long document costs one
+extraction per page and later ones are cheap. Pages replaced by an image (`pages`, `frontCover`,
+`backCover`) report no text, since the PDF text underneath is not what the reader sees.
+
+To make a custom source searchable, implement the optional `getText(index): Promise<string>`.
 
 ## Curl models
 
@@ -129,7 +226,13 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `flipTo(page)` | `void` | Animate to the spread containing zero-based `page`. |
 | `getPage()` | `number` | Current leading page index. |
 | `getPageCount()` | `number` | Total page count (including covers/replacements). |
+| `canFlipNext()` | `boolean` | Whether a spread follows the current one. |
+| `canFlipPrev()` | `boolean` | Whether a spread precedes the current one. |
 | `getZoom()` | `number` | Current zoom scale (`1` = fit). |
+| `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |
+| `canSearch()` | `boolean` | Whether this book's source can produce text. |
+| `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
+| `container` (getter) | `HTMLElement` | The element the flipbook was mounted into. |
 | `setZoom(scale, center?)` | `void` | Zoom to `scale`, keeping container-local `center` `{x, y}` fixed. |
 | `resetZoom()` | `void` | Zoom back to `1`. |
 | `on(event, listener)` | `() => void` | Subscribe to an event; returns an unsubscribe function. |
