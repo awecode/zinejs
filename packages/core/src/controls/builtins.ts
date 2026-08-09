@@ -69,14 +69,15 @@ export function registerBuiltins(): void {
     title: 'Share',
     icon: ICONS.share,
     action: (ctx) => {
-      // Deep-link to the page on screen so a shared link opens where the reader was.
-      const url = new URL(location.href);
-      url.hash = `page=${ctx.zine.getPage() + 1}`;
-      const link = url.toString();
-      const nav = navigator as Navigator & { share?: (d: { url: string }) => Promise<void> };
-      if (typeof nav.share === 'function') void nav.share({ url: link }).catch(() => {});
-      else void navigator.clipboard?.writeText(link).catch(() => {});
       ctx.close();
+      // The dialog, its brand marks and the QR encoder are a chunk of their own: a book nobody
+      // shares never downloads any of it.
+      void import('./share')
+        .then(({ ShareDialog }) => new ShareDialog(ctx.zine, ctx.zine.container))
+        .catch(() => {
+          // No dialog, so fall back to the plain behaviour rather than doing nothing.
+          void navigator.clipboard?.writeText(ctx.zine.pageLink()).catch(() => {});
+        });
     },
   });
 

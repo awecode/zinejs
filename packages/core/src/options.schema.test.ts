@@ -28,6 +28,7 @@ describe('options.schema.json', () => {
         'source',
         'startPage',
         'controls',
+        'deepLink',
       ].sort(),
     );
   });

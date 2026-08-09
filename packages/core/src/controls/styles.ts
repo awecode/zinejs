@@ -341,6 +341,106 @@ export const CSS = `
 .zine-thumbs-img { display: block; width: 100%; height: auto; }
 .zine-thumbs-caption { flex: 1 0 100%; text-align: center; opacity: 0.7; }
 
+/* Share dialog. Centred over the page rather than in the side rail: a QR and six destinations
+   need more room than the rail gives, and sharing is a brief interruption, not a browsing mode. */
+.zine-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  font: 500 13px/1.4 system-ui, sans-serif;
+  color: var(--zine-controls-fg, #f4f4f5);
+}
+.zine-share {
+  width: min(320px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--zine-share-bg, #1c1c20);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+}
+.zine-share-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zine-share-head strong { font-size: 15px; }
+.zine-share-close {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.zine-share-close svg { width: 16px; height: 16px; }
+.zine-share-close:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+
+.zine-share-qr {
+  align-self: center;
+  line-height: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+}
+.zine-share-qr svg { display: block; }
+
+.zine-share-link { display: flex; gap: 6px; }
+.zine-share-link input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+  font: inherit;
+}
+.zine-share-copy {
+  flex: 0 0 auto;
+  min-width: 74px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--zine-controls-accent, #7dd3fc);
+  color: #06202c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zine-share-socials { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.zine-share-social {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  text-decoration: none;
+}
+.zine-share-social svg { width: 19px; height: 19px; }
+.zine-share-social:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
+.zine-share-close:focus-visible,
+.zine-share-copy:focus-visible,
+.zine-share-social:focus-visible,
+.zine-share-link input:focus-visible {
+  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .zine-controls-btn { transition: background 120ms ease; }
 }

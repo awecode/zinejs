@@ -59,6 +59,12 @@
       "path": "dist/controls-*.js",
       "limit": "8 kB",
       "gzip": true
+    },
+    {
+      "name": "share dialog chunk (lazy, gzip)",
+      "path": "dist/share-*.js",
+      "limit": "6 kB",
+      "gzip": true
     }
   ]
 }

@@ -85,6 +85,7 @@ new Zine(document.getElementById('book'), {
 | `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread; `0` disables the responsive fallback. |
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
 | `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
+| `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
 
 ### `spreadMode`
 
@@ -233,6 +234,33 @@ The toolbar reads these custom properties, so it can be rethemed without overrid
 }
 ```
 
+## Deep links
+
+The current page lives in the URL hash, so a link opens where the reader was and back/forward move
+through the book:
+
+```
+yoursite.com/brochure#page=12
+```
+
+Only the `page` key is read or written — anything else in the hash is left alone, so an app routing
+on it is unaffected — and updates use `replaceState`, so turning fifty pages does not put fifty
+entries in the reader's history. A page in the URL takes precedence over `startPage`, since the
+reader followed a link to it.
+
+`zine.pageLink(page?)` returns the URL for a page, defaulting to the current one. Pass
+`deepLink: false` if your app owns the hash.
+
+## Share
+
+The `share` control opens a dialog with a QR code for the current page, the link with a copy
+button, and buttons for Facebook, X, LinkedIn, WhatsApp, Pinterest and email.
+
+The dialog, its brand marks and the QR encoder are a separate lazy chunk, downloaded the first
+time a reader presses Share — a book nobody shares pays nothing for it. The QR is generated
+locally rather than through an image service, so no reader's URL leaves the page, and the social
+buttons are plain share links with no third-party scripts or trackers.
+
 ## Search
 
 `zine.search(query)` resolves to `{ page, excerpt }[]` for every page whose text contains `query`,
@@ -307,6 +335,7 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `canDownload()` | `boolean` | Whether the original document can be saved. |
 | `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
 | `isDocument()` | `boolean` | Whether the book is a document (a PDF) rather than loose images. |
+| `pageLink(page?)` | `string` | URL that opens the book at `page` (default: current). |
 | `canOutline()` | `boolean` | Whether the source can supply a table of contents. |
 | `getOutline()` | `Promise<OutlineItem[]>` | The table of contents; empty when there is none. |
 | `container` (getter) | `HTMLElement` | The element the flipbook was mounted into. |

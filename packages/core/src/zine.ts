@@ -10,6 +10,7 @@ import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
 import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
 import { hitTest } from './geometry/hitTest';
+import { bindDeepLink, hashWithPage, pageFromHash, type DeepLinkHandle } from './engine/deeplink';
 import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
@@ -122,6 +123,15 @@ export interface ZineOptions {
    * its position and which controls appear.
    */
   controls?: boolean | ControlsOptions;
+  /**
+   * Keep the current page in the URL hash (`#page=12`), so a link opens where the reader was and
+   * back/forward move through the book. Default true.
+   *
+   * Only a `page` key is read or written — anything else in the hash is left alone — and updates
+   * use `replaceState`, so turning pages does not fill the back button. Pass `false` if your app
+   * owns the hash.
+   */
+  deepLink?: boolean;
 }
 
 /**
@@ -149,6 +159,9 @@ export class Zine {
   #narrow = false; // responsive: container currently below singlePageThreshold
   #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
   #startPageOption: number | undefined;
+  #deepLinkEnabled: boolean;
+  #deepLink: DeepLinkHandle | null = null;
+  #unsubscribeDeepLink: (() => void) | null = null;
   #spreads: Spread[] = [];
   #current = 0;
   #currentPage = 0;
@@ -215,6 +228,8 @@ export class Zine {
     });
     const direction = options.direction ?? 'ltr';
     this.#direction = direction;
+    // Set before the spread model is built: that is where a page in the URL is honoured.
+    this.#deepLinkEnabled = options.deepLink ?? true;
     this.#spreadMode = options.spreadMode ?? 'cover';
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
@@ -521,6 +536,9 @@ export class Zine {
     this.#queuedFlip = null;
     this.#clearPendingClickFlip();
     this.#resizeObserver?.disconnect();
+    this.#deepLink?.stop();
+    this.#deepLink = null;
+    this.#unsubscribeDeepLink?.();
     this.#controlsCleanup?.();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
@@ -951,6 +969,7 @@ export class Zine {
     this.#observeResize();
     this.#prefetchWindow();
     this.#announce();
+    this.#bindDeepLink();
     await this.#mountControls();
     this.#emitter.emit('ready');
   }
@@ -1020,6 +1039,26 @@ export class Zine {
     } catch {
       // No toolbar; the book itself is unaffected.
     }
+  }
+
+  /** Mirror the page in the URL, and follow the URL when it changes. */
+  #bindDeepLink(): void {
+    if (!this.#deepLinkEnabled || typeof globalThis.location === 'undefined') return;
+    const win = globalThis as unknown as Window;
+    this.#deepLink = bindDeepLink(win, (page) => this.flipTo(page));
+    this.#deepLink.push(this.#currentPage);
+    this.#unsubscribeDeepLink = this.#emitter.on('pageChanged', ({ page }) => {
+      this.#deepLink?.push(page);
+    });
+  }
+
+  /** The URL that opens this book at `page` (defaults to the current one). */
+  pageLink(page: number = this.#currentPage): string {
+    const href = globalThis.location?.href ?? '';
+    if (!href) return '';
+    const url = new URL(href);
+    url.hash = hashWithPage(url.hash, clamp(page, 0, Math.max(0, this.#source.pageCount - 1)));
+    return url.toString();
   }
 
   /** Wire keyboard nav + an aria-live page announcer. Skips non-DOM containers. */
@@ -1222,7 +1261,10 @@ export class Zine {
     const mode = this.#effectiveMode();
     this.#singlePage = mode === 'single';
     this.#spreads = buildSpreads(pageCount, { direction: this.#direction, mode });
-    this.#currentPage = clamp(startPage ?? 0, 0, pageCount - 1);
+    // A page in the URL wins over `startPage`: the reader followed a link to it, which is a
+    // later and more specific intent than the page the author configured.
+    const linked = this.#deepLinkEnabled ? pageFromHash(globalThis.location?.hash ?? '') : null;
+    this.#currentPage = clamp(linked ?? startPage ?? 0, 0, pageCount - 1);
     this.#current = this.#spreadIndexForPage(this.#currentPage);
   }
 }
