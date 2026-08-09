@@ -147,49 +147,52 @@ export const CSS = `
   justify-content: flex-start;
 }
 
-.zine-controls-search {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  width: min(300px, 84%);
-  max-height: 260px;
-  padding: 6px;
-  border-radius: 10px;
-  pointer-events: auto;
-  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.94));
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.36);
-  backdrop-filter: blur(8px);
-}
-.zine-controls-search input {
+/* Search shares the rail: a query field pinned at the top over a scrolling list of hits. */
+.zine-search { gap: 0; overflow: hidden; }
+.zine-search-input {
+  flex: 0 0 auto;
   width: 100%;
-  padding: 7px 9px;
+  padding: 6px 8px;
   border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
-  border-radius: 7px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.25);
   color: inherit;
   font: inherit;
   box-sizing: border-box;
 }
-.zine-controls-hits { overflow-y: auto; margin-top: 5px; }
-.zine-controls-hit {
+.zine-search-hits {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 5px;
+  scrollbar-width: thin;
+}
+.zine-search-hit {
   display: block;
   width: 100%;
-  padding: 7px 9px;
+  padding: 6px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
 }
-.zine-controls-hit:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
-.zine-controls-hit:focus-visible {
+.zine-search-hit:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-search-hit:focus-visible {
   outline: 2px solid var(--zine-controls-accent, #7dd3fc);
   outline-offset: -2px;
 }
-.zine-controls-hit small { display: block; opacity: 0.62; font-size: 0.85em; }
-.zine-controls-note { padding: 8px 9px; opacity: 0.66; }
+.zine-search-page { display: block; font-size: 0.9em; opacity: 0.85; }
+.zine-search-hit small {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.62;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 
 /* Side panels (thumbnails, outline). The rail wraps the book and its docked toolbar so it sits
    beside them without shrinking the container the renderer measures. */

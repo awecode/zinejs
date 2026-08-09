@@ -4,6 +4,13 @@ import { registerBuiltins } from './builtins';
 import { ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
 import { Outline } from './outline';
+import { Search } from './search';
+
+/** The side panels, all of which share the one rail beside the book. */
+const PANELS = { thumbnails: Thumbnails, outline: Outline, search: Search };
+type PanelKind = keyof typeof PANELS;
+/** What every panel has in common: build itself on construction, and clean up after itself. */
+type Panel = InstanceType<(typeof PANELS)[PanelKind]>;
 import type {
   ControlContext,
   ControlDef,
@@ -38,8 +45,8 @@ export class Toolbar {
   #wrap: HTMLElement | null = null;
   #container: HTMLElement;
   /** The side panel currently in the rail. Only one at a time — they share the space. */
-  #panel: Thumbnails | Outline | null = null;
-  #panelKind: 'thumbnails' | 'outline' | null = null;
+  #panel: Panel | null = null;
+  #panelKind: PanelKind | null = null;
   /** Whether the document turned out to have any outline entries. Null until known: the answer
    *  is async, and the outline control stays hidden rather than flash in and out. */
   #hasOutline: boolean | null = null;
@@ -198,14 +205,10 @@ export class Toolbar {
 
   #activate(def: ControlDef, trigger: HTMLButtonElement): void {
     if (def.isDisabled?.(this.#context())) return;
-    // Controls that own a panel toggle it; a second press on the same trigger closes.
-    if (def.children || def.id === 'search') {
-      if (this.#popover?.trigger === trigger) {
-        this.#closePopover();
-        return;
-      }
-      if (def.children) this.#openMenu(def, trigger);
-      else this.openSearch(trigger);
+    // A submenu toggles its popover; a second press on the same trigger closes it.
+    if (def.children) {
+      if (this.#popover?.trigger === trigger) this.#closePopover();
+      else this.#openMenu(def, trigger);
       return;
     }
     def.action?.(this.#context());
@@ -347,7 +350,7 @@ export class Toolbar {
   }
 
   /** Which side panel is showing, if any. */
-  openPanel(): 'thumbnails' | 'outline' | null {
+  openPanel(): PanelKind | null {
     return this.#panelKind;
   }
 
@@ -373,82 +376,21 @@ export class Toolbar {
 
   /**
    * Show one of the side panels, or close it if it is already up. They share the rail beside the
-   * book, so opening one closes the other. Rebuilt each time, so the thumbnail rail always
+   * book, so opening one closes the others. Rebuilt each time, so the thumbnail rail always
    * matches the current spread grouping (which `spreadMode` and the responsive fallback change).
    */
-  togglePanel(kind: 'thumbnails' | 'outline'): void {
+  togglePanel(kind: PanelKind): void {
     const wasOpen = this.#panelKind;
     this.#panel?.destroy();
     this.#panel = null;
     this.#panelKind = null;
     if (wasOpen !== kind) {
-      this.#panel =
-        kind === 'thumbnails'
-          ? new Thumbnails(this.#zine, this.#container)
-          : new Outline(this.#zine, this.#container);
+      this.#panel = new PANELS[kind](this.#zine, this.#container);
       this.#panelKind = kind;
     }
     this.#refresh();
   }
 
-  /** Open the search panel: a query field over a list of hits. */
-  openSearch(trigger: HTMLElement): void {
-    this.#closePopover();
-    const panel = this.#doc.createElement('div');
-    panel.className = 'zine-controls-search';
-    const input = this.#doc.createElement('input');
-    input.type = 'search';
-    input.placeholder = 'Search…';
-    input.setAttribute('aria-label', 'Search the document');
-    const hits = this.#doc.createElement('div');
-    hits.className = 'zine-controls-hits';
-    panel.append(input, hits);
-    this.#showPopover(panel, trigger);
-    input.focus();
-
-    let run = 0;
-    const search = async (): Promise<void> => {
-      const query = input.value.trim();
-      const mine = ++run;
-      if (query.length < 2) {
-        hits.replaceChildren();
-        return;
-      }
-      const note = this.#doc.createElement('div');
-      note.className = 'zine-controls-note';
-      note.textContent = 'Searching…';
-      hits.replaceChildren(note);
-      const results = await this.#zine.search(query);
-      if (mine !== run) return; // a newer query has overtaken this one
-      if (results.length === 0) {
-        note.textContent = 'No matches';
-        return;
-      }
-      hits.replaceChildren(
-        ...results.map((hit) => {
-          const btn = this.#doc.createElement('button');
-          btn.type = 'button';
-          btn.className = 'zine-controls-hit';
-          const label = this.#doc.createElement('span');
-          label.textContent = `Page ${hit.page + 1}`;
-          const excerpt = this.#doc.createElement('small');
-          excerpt.textContent = hit.excerpt;
-          btn.append(label, excerpt);
-          btn.addEventListener('click', () => {
-            this.#zine.flipTo(hit.page);
-            this.#closePopover();
-          });
-          return btn;
-        }),
-      );
-    };
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    input.addEventListener('input', () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void search(), 180);
-    });
-    this.#unsubscribe.push(() => timer && clearTimeout(timer));
-  }
 }
 
 /**
@@ -488,9 +430,10 @@ export function registerWidgets(toolbar: Toolbar): void {
   });
   defineControl({
     id: 'search',
-    title: 'Search',
+    title: () => (toolbar.openPanel() === 'search' ? 'Hide search' : 'Search'),
     icon: ICONS.search,
     isVisible: (ctx) => ctx.zine.canSearch(),
-    // The panel is opened by the toolbar, which knows the trigger to anchor it to.
+    isActive: () => toolbar.openPanel() === 'search',
+    action: () => toolbar.togglePanel('search'),
   });
 }

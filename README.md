@@ -143,9 +143,9 @@ The default layout is:
 
 ### Side panels
 
-`thumbnails` and `outline` each open a rail beside the book. They share that space, so opening one
-closes the other, and both are as tall as the book and scroll internally — a long document never
-runs past the bottom. Both are for documents (a PDF), not image books.
+`thumbnails`, `outline` and `search` each open a rail beside the book. They share that space, so
+opening one closes the others, and all are as tall as the book and scroll internally — a long list
+never runs past the bottom. All three are for documents (a PDF), not image books.
 
 **`thumbnails`** shows the pages. Its rows mirror the book's own spread grouping, so it always
 matches what the reader sees, including the responsive fallback on a narrow container:
@@ -162,6 +162,10 @@ in a single column. Clicking a heading turns to its page, and the entry containi
 stays highlighted. A heading whose destination cannot be resolved is still listed, just not
 clickable. Many PDFs carry no outline, so the control only appears once the document is known to
 have one.
+
+**`search`** puts a query field over its results: one row per matching page, showing the page
+number and the matching text in context. Clicking a row turns to that page. It appears only for a
+source that can produce text — see [Search](#search).
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see

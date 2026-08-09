@@ -482,6 +482,26 @@ describe('controls outline panel', () => {
     expect(labels).toContain('Show outline');
   });
 
+  it('opens search in the same rail, replacing whichever panel was up', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openThumbs(el);
+    expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
+    byLabel(el, 'Search')!.click();
+    await flush();
+    expect(scope(el).querySelector('.zine-search')).not.toBeNull();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull(); // one rail, one panel
+  });
+
+  it('closes search on a second press of its button', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    byLabel(el, 'Search')!.click();
+    await flush();
+    expect(scope(el).querySelector('.zine-search')).not.toBeNull();
+    byLabel(el, 'Search')!.click();
+    await flush();
+    expect(scope(el).querySelector('.zine-search')).toBeNull();
+  });
+
   it('replaces the thumbnail rail rather than stacking beside it', async () => {
     // Both panels want the same space, so opening one closes the other.
     const { el } = await mount({ source: new DocSource(8, toc()) });
