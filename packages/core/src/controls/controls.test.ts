@@ -114,7 +114,8 @@ function scope(el: HTMLElement): HTMLElement {
   let node = el;
   while (
     node.parentElement?.classList.contains('zine-controls-wrap') ||
-    node.parentElement?.classList.contains('zine-panel-wrap')
+    node.parentElement?.classList.contains('zine-panel-wrap') ||
+    node.parentElement?.classList.contains('zine-arrows-wrap')
   ) {
     node = node.parentElement;
   }
@@ -407,6 +408,71 @@ describe('controls toolbar', () => {
     expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
     zine.destroy();
     expect(document.querySelector('.zine-panel')).toBeNull();
+  });
+});
+
+describe('controls page arrows', () => {
+  const arrows = (el: HTMLElement): HTMLButtonElement[] => [
+    ...scope(el).querySelectorAll<HTMLButtonElement>('.zine-arrow'),
+  ];
+  const arrow = (el: HTMLElement, label: string): HTMLButtonElement =>
+    arrows(el).find((b) => b.getAttribute('aria-label') === label)!;
+
+  it('flanks the book with a back and a forward arrow', async () => {
+    const { el } = await mount();
+    expect(arrows(el).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Previous page',
+      'Next page',
+    ]);
+  });
+
+  it('keeps the arrows outside the container, which the renderer measures', async () => {
+    const { el } = await mount();
+    expect(el.querySelector('.zine-arrow')).toBeNull();
+  });
+
+  it('turns the page when pressed', async () => {
+    const { zine, el } = await mount();
+    expect(zine.getPage()).toBe(0);
+    arrow(el, 'Next page').click();
+    await flush();
+    expect(zine.getPage()).toBeGreaterThan(0);
+  });
+
+  it('hides an arrow that has nowhere to go, and brings it back', async () => {
+    const { zine, el } = await mount();
+    const back = arrow(el, 'Previous page');
+    expect(back.classList.contains('zine-arrow-hidden')).toBe(true);
+    expect(back.disabled).toBe(true); // inert as well as invisible
+    zine.flipNext();
+    await flush();
+    expect(back.classList.contains('zine-arrow-hidden')).toBe(false);
+    expect(back.disabled).toBe(false);
+  });
+
+  it('keeps a hidden arrow in the layout so the book does not slide across', async () => {
+    // Removing it from the flow would shift the book sideways at every cover.
+    const { el } = await mount();
+    expect(arrow(el, 'Previous page').isConnected).toBe(true);
+  });
+
+  it('renders none when arrows are turned off', async () => {
+    const { el } = await mount({ controls: { arrows: false } });
+    expect(arrows(el)).toHaveLength(0);
+  });
+
+  it('leaves the DOM as it found it on destroy', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const el = document.createElement('div');
+    host.append(el);
+    const zine = new Zine(el, { source: new FakeSource(8), renderer: new MockRenderer() });
+    await zine.ready;
+    await flush();
+    expect(el.parentElement).not.toBe(host); // wrapped by toolbar and arrows
+    zine.destroy();
+    expect(el.parentElement).toBe(host);
+    expect(host.querySelector('.zine-arrows-wrap')).toBeNull();
   });
 });
 

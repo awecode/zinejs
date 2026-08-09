@@ -147,6 +147,11 @@
               "description": "Toolbar layout: control ids, '|' separators, or inline control definitions. Omit for the default set.",
               "items": { "type": ["string", "object"] }
             },
+            "arrows": {
+              "type": "boolean",
+              "default": true,
+              "description": "Large page-turn arrows flanking the book."
+            },
             "className": {
               "type": "string",
               "description": "Extra class on the toolbar root, for styling."

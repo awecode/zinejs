@@ -194,6 +194,49 @@ export const CSS = `
   overflow-wrap: anywhere;
 }
 
+/* Page-turn arrows flanking the book. Like the docked toolbar and the side panels, they sit
+   outside the container so they never shrink the book or intercept its gestures. */
+.zine-arrows-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.zine-arrows-wrap > *:not(.zine-arrow) { flex: 1 1 auto; min-width: 0; }
+.zine-arrow {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
+  color: var(--zine-controls-fg, #f4f4f5);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.zine-arrow svg { width: 22px; height: 22px; }
+.zine-arrow:hover:not(:disabled) { background: var(--zine-controls-hover, rgba(255,255,255,0.22)); }
+.zine-arrow:focus-visible {
+  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline-offset: 2px;
+}
+/* Nothing to turn to: invisible, but still occupying its slot so the book does not slide across
+   as the reader reaches a cover. */
+.zine-arrow-hidden { visibility: hidden; }
+/* No room to flank on a narrow screen; the toolbar's own prev/next still work. */
+@media (max-width: 640px) {
+  .zine-arrow { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zine-arrow { transition: background 120ms ease; }
+}
+
 /* Side panels (thumbnails, outline). The rail wraps the book and its docked toolbar so it sits
    beside them without shrinking the container the renderer measures. */
 .zine-panel-wrap { display: flex; align-items: stretch; gap: 8px; }

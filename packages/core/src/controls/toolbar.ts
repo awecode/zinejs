@@ -5,6 +5,7 @@ import { ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
 import { Outline } from './outline';
 import { Search } from './search';
+import { Arrows } from './arrows';
 
 /** The side panels, all of which share the one rail beside the book. */
 const PANELS = { thumbnails: Thumbnails, outline: Outline, search: Search };
@@ -50,6 +51,7 @@ export class Toolbar {
   /** Whether the document turned out to have any outline entries. Null until known: the answer
    *  is async, and the outline control stays hidden rather than flash in and out. */
   #hasOutline: boolean | null = null;
+  #arrows: Arrows | null = null;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -132,6 +134,8 @@ export class Toolbar {
    *  search panel) can be registered against this toolbar first. */
   mount(options: ControlsOptions): void {
     this.#build(options.items ?? DEFAULT_ITEMS);
+    // After #place, so the arrows can wrap whatever it built around the book.
+    if (options.arrows ?? true) this.#arrows = new Arrows(this.#zine, this.#container);
     this.#refresh();
     this.#probeOutline();
   }
@@ -144,13 +148,16 @@ export class Toolbar {
     this.#panel = null;
     this.#panelKind = null;
     this.#root.remove();
-    // Put the container back where it was, so destroy() leaves the DOM as it found it.
+    // Unwrap from the inside out: the arrows enclose the toolbar's wrapper, so removing theirs
+    // first would leave this one orphaned outside the document.
     const wrap = this.#wrap;
     if (wrap?.parentNode) {
       wrap.parentNode.insertBefore(wrap.firstChild!, wrap);
       wrap.remove();
     }
     this.#wrap = null;
+    this.#arrows?.destroy();
+    this.#arrows = null;
   }
 
   /** Keep toolbar interaction from reaching the book's own gesture/zoom/keyboard handlers. */

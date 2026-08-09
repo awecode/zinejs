@@ -65,6 +65,11 @@ export interface ControlsOptions {
   docked?: boolean;
   /** The toolbar layout. Omit for the default set; pass an array to replace it outright. */
   items?: readonly ControlItem[];
+  /**
+   * Large page-turn arrows flanking the book, as most flipbooks show. Default true. They sit
+   * beside the pages rather than over them, so they never cover content.
+   */
+  arrows?: boolean;
   /** Extra class on the toolbar root, for styling hooks. */
   className?: string;
 }
