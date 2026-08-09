@@ -320,38 +320,36 @@ describe('controls toolbar', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('leaves out an end jump the book is already at', async () => {
+  it('disables an end jump the book is already at', async () => {
     const { zine, el } = await mount({ source: new FakeSource(12) });
-    const labels = (): (string | null)[] => {
+    const item = (name: string): HTMLButtonElement => {
       byLabel(el, 'More')!.click();
-      return [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
-        b.getAttribute('aria-label'),
-      );
+      return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => b.getAttribute('aria-label') === name,
+      )!;
     };
 
-    expect(labels()).not.toContain('First page'); // already on page 1
-    expect(labels()).toContain('Last page');
+    expect(item('First page').disabled).toBe(true); // already on page 1
+    expect(item('Last page').disabled).toBe(false);
 
     zine.flipTo(11);
     await flush();
-    expect(labels()).toContain('First page');
-    expect(labels()).not.toContain('Last page');
+    expect(item('First page').disabled).toBe(false);
+    expect(item('Last page').disabled).toBe(true);
   });
 
-  it('keeps an unavailable control’s slot on the bar, so the toolbar does not reshuffle', async () => {
-    // A menu is rebuilt on every open, but the bar is live under the reader's cursor: letting
-    // 'first' collapse away at page 1 would shift every button beside it.
+  it('disables an end jump on the bar rather than moving its neighbours', async () => {
     const { zine, el } = await mount({
       source: new FakeSource(12),
       controls: { items: ['first', 'prev', 'next', 'last'] },
     });
     const first = byLabel(el, 'First page')!;
-    expect(first.style.visibility).toBe('hidden'); // invisible…
-    expect(first.style.display).not.toBe('none'); // …but still holding its place
+    expect(first.disabled).toBe(true);
+    expect(first.style.display).not.toBe('none'); // still holding its place
 
     zine.flipTo(4);
     await flush();
-    expect(first.style.visibility).not.toBe('hidden');
+    expect(first.disabled).toBe(false);
   });
 
   it('removes a control that does not apply to the book at all', async () => {

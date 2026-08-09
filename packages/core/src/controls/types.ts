@@ -40,16 +40,11 @@ export interface ControlDef {
   /**
    * Whether the control applies at all — search on a book with no text, download with no file.
    * A control that fails this is removed outright, since it will not come back.
+   *
+   * For something that comes and goes as the reader moves, prefer `isDisabled`: a control that
+   * vanished and reappeared would shift every button beside it on the bar.
    */
   isVisible?(ctx: ControlContext): boolean;
-  /**
-   * Whether the control has anything to do *right now* — "first page" on the first page.
-   *
-   * Unlike `isVisible` this comes and goes as the reader moves, so on the toolbar the control
-   * keeps its slot while hidden, and the bar does not shrink and reshuffle under the cursor. In
-   * a menu, which is rebuilt on every open, the entry is simply left out.
-   */
-  isAvailable?(ctx: ControlContext): boolean;
   /** Grey out and block the action, e.g. "previous" on the first spread. */
   isDisabled?(ctx: ControlContext): boolean;
   /** Mark as currently on, e.g. fullscreen while engaged. */

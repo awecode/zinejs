@@ -217,8 +217,7 @@ new Zine(el, {
 | `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
 | `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
 | `render` | `(ctx) => HTMLElement` | Build a custom widget instead of a button. |
-| `isVisible` | `(ctx) => boolean` | Whether the control applies to this book at all. Failing it removes the control outright. |
-| `isAvailable` | `(ctx) => boolean` | Whether it has anything to do right now. On the bar it keeps its slot while hidden so the toolbar does not reshuffle; in a menu the entry is left out. |
+| `isVisible` | `(ctx) => boolean` | Whether the control applies to this book at all — search with no text, download with no file. Failing it removes the control. For something that comes and goes as the reader moves, prefer `isDisabled`, so the bar does not reshuffle. |
 | `isDisabled` | `(ctx) => boolean` | Grey out and block the action. |
 | `isActive` | `(ctx) => boolean` | Mark as currently on. |
 
