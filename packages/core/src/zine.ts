@@ -132,6 +132,14 @@ export interface ZineOptions {
    * owns the hash.
    */
   deepLink?: boolean;
+  /**
+   * Suppress the browser's right-click menu over the book. Default false.
+   *
+   * A mild deterrent for published documents, not protection: the pages are still in the DOM and
+   * reachable by anyone who wants them. It also takes away Inspect and "Open image in new tab"
+   * for everyone, so it is off unless asked for.
+   */
+  disableContextMenu?: boolean;
 }
 
 /**
@@ -160,6 +168,7 @@ export class Zine {
   #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
   #startPageOption: number | undefined;
   #deepLinkEnabled: boolean;
+  #disableContextMenu: boolean;
   #deepLink: DeepLinkHandle | null = null;
   #unsubscribeDeepLink: (() => void) | null = null;
   #spreads: Spread[] = [];
@@ -199,6 +208,7 @@ export class Zine {
   #liveRegion: HTMLElement | null = null;
   #unbindInput: (() => void) | null = null;
   #unbindWheel: (() => void) | null = null;
+  #unbindContextMenu: (() => void) | null = null;
   #unbindDblClick: (() => void) | null = null;
   #a11yCleanup: (() => void) | null = null;
   /** Resolved once and reused; see {@link getOutline}. */
@@ -230,6 +240,7 @@ export class Zine {
     this.#direction = direction;
     // Set before the spread model is built: that is where a page in the URL is honoured.
     this.#deepLinkEnabled = options.deepLink ?? true;
+    this.#disableContextMenu = options.disableContextMenu ?? false;
     this.#spreadMode = options.spreadMode ?? 'cover';
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
@@ -543,6 +554,7 @@ export class Zine {
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
     this.#unbindDblClick?.();
+    this.#unbindContextMenu?.();
     this.#unbindInput?.();
     this.#renderer?.destroy();
     this.#renderer = null;
@@ -889,6 +901,15 @@ export class Zine {
     this.#pinching = false;
   }
 
+  /** Swallow the right-click menu over the book, when the consumer asked for that. */
+  #bindContextMenu(): void {
+    if (!this.#disableContextMenu) return;
+    const onContextMenu = (event: Event): void => event.preventDefault();
+    this.#container.addEventListener('contextmenu', onContextMenu);
+    this.#unbindContextMenu = () =>
+      this.#container.removeEventListener('contextmenu', onContextMenu);
+  }
+
   #bindWheelZoom(): void {
     const onWheel = (event: WheelEvent): void => {
       // Ctrl/⌘ + wheel only — this is also what a desktop trackpad pinch emits.
@@ -962,6 +983,7 @@ export class Zine {
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
     this.#bindWheelZoom();
     this.#bindDoubleClickZoom();
+    this.#bindContextMenu();
     this.#setupReducedMotion();
     this.#a11yCleanup = this.#setupA11y();
 
@@ -1339,6 +1361,12 @@ function validateOptions(container: unknown, options: unknown): void {
   const curl = o.curl;
   if (curl !== undefined && !CURL_TYPES.includes(curl as CurlType)) {
     throw new Error(`Zine: curl must be one of ${CURL_TYPES.join(', ')}; got ${JSON.stringify(curl)}.`);
+  }
+
+  for (const flag of ['deepLink', 'disableContextMenu'] as const) {
+    if (o[flag] !== undefined && typeof o[flag] !== 'boolean') {
+      throw new Error(`Zine: ${flag} must be a boolean; got ${typeName(o[flag])}.`);
+    }
   }
 
   const controls = o.controls;

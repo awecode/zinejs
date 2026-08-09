@@ -127,6 +127,11 @@
       "default": true,
       "description": "Keep the current page in the URL hash (#page=12), so a link opens where the reader was. Only the 'page' key is touched."
     },
+    "disableContextMenu": {
+      "type": "boolean",
+      "default": false,
+      "description": "Suppress the browser's right-click menu over the book. A deterrent, not protection: the pages remain in the DOM."
+    },
     "controls": {
       "default": true,
       "description": "Built-in toolbar. true for the default set, false for none, or an object to configure it.",

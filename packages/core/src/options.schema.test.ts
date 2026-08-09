@@ -29,6 +29,7 @@ describe('options.schema.json', () => {
         'startPage',
         'controls',
         'deepLink',
+        'disableContextMenu',
       ].sort(),
     );
   });

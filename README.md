@@ -86,6 +86,7 @@ new Zine(document.getElementById('book'), {
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
 | `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
 | `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
+| `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. |
 
 ### `spreadMode`
 

@@ -148,3 +148,44 @@ describe('Zine — slice 3 (drag to flip)', () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Zine — context menu', () => {
+  /** Right-click, and report whether anything suppressed the menu. */
+  const rightClick = (el: HTMLElement): boolean =>
+    !el.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true }));
+
+  const mount = async (options: Record<string, unknown>): Promise<HTMLElement> => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer: new MockRenderer(),
+      spreadMode: 'double',
+      ...options,
+    });
+    await zine.ready;
+    return el;
+  };
+
+  it('leaves the browser menu alone by default', async () => {
+    expect(rightClick(await mount({}))).toBe(false);
+  });
+
+  it('suppresses it when asked', async () => {
+    expect(rightClick(await mount({ disableContextMenu: true }))).toBe(true);
+  });
+
+  it('stops suppressing it once the book is destroyed', async () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer: new MockRenderer(),
+      disableContextMenu: true,
+    });
+    await zine.ready;
+    expect(rightClick(el)).toBe(true);
+    zine.destroy();
+    expect(rightClick(el)).toBe(false); // the listener went with it
+  });
+});
