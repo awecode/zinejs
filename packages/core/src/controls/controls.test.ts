@@ -419,6 +419,22 @@ describe('controls toolbar', () => {
     expect(byLabel(el, 'Search')?.style.display).toBe('none');
   });
 
+  it('offers Print only when there is an original document', async () => {
+    const { el } = await mount({ source: new DownloadableSource(8) });
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toContain('Print');
+
+    const plain = await mount(); // an image book has no file to print
+    byLabel(plain.el, 'More')!.click();
+    const plainLabels = [...scope(plain.el).querySelectorAll('.zine-controls-menu button')].map(
+      (b) => b.getAttribute('aria-label'),
+    );
+    expect(plainLabels).not.toContain('Print');
+  });
+
   it('offers Download PDF in the menu when the source has a file', async () => {
     const { el } = await mount({ source: new DownloadableSource(8) });
     byLabel(el, 'More')!.click();
@@ -752,6 +768,43 @@ describe('Zine.search', () => {
     expect(await zine.search('   ')).toEqual([]);
     const plain = await mount();
     expect(await plain.zine.search('alpha')).toEqual([]);
+  });
+});
+
+describe('Zine.print', () => {
+  it('reports whether the book can be printed', async () => {
+    expect((await mount()).zine.canPrint()).toBe(false);
+    expect((await mount({ source: new DownloadableSource(4) })).zine.canPrint()).toBe(true);
+  });
+
+  it('resolves false for a book with no original document', async () => {
+    const { zine } = await mount();
+    expect(await zine.print()).toBe(false);
+  });
+
+  it('hands the document to an offscreen frame rather than printing the page', async () => {
+    // Printing the host page would capture the toolbar and one spread; the browser paginates
+    // the PDF itself.
+    const { zine } = await mount({ source: new DownloadableSource(8) });
+    const printed: string[] = [];
+    // happy-dom does not navigate iframes, so stand in for the frame's own window.
+    const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+      configurable: true,
+      get() {
+        return { focus: () => {}, print: () => printed.push((this as HTMLIFrameElement).src) };
+      },
+    });
+    try {
+      const done = zine.print();
+      const frame = document.querySelector('iframe')!;
+      expect(frame.src).toContain('/brochure.pdf');
+      frame.dispatchEvent(new Event('load'));
+      expect(await done).toBe(true);
+      expect(printed).toEqual(['/brochure.pdf']);
+    } finally {
+      if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
+    }
   });
 });
 

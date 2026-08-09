@@ -361,6 +361,61 @@ export class Zine {
     return typeof this.#source.getOutline === 'function' || typeof this.#source.getText === 'function';
   }
 
+  /** Whether this book can be printed — true when the source has an original document. */
+  canPrint(): boolean {
+    return typeof this.#source.getDownload === 'function';
+  }
+
+  /**
+   * Print the document.
+   *
+   * The original file is handed to the browser in an offscreen frame rather than printing the
+   * host page: printing the page would capture the toolbar and whatever single spread happens to
+   * be on screen, while the browser paginates a PDF properly on its own. Resolves false when
+   * there is no original to print — an image book, or a caller-owned pdf.js document.
+   */
+  async print(): Promise<boolean> {
+    const info = await this.getSourceFile();
+    const doc = this.#container.ownerDocument;
+    if (!info || !doc) return false;
+
+    const frame = doc.createElement('iframe');
+    // Offscreen rather than display:none: a hidden frame does not always lay out its document,
+    // and an unlaid-out frame has nothing to print.
+    frame.style.cssText =
+      'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0;';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.src = info.url;
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean): void => {
+        if (settled) return;
+        settled = true;
+        // Outlive the print dialog, which is modal and synchronous in some browsers; removing
+        // the frame while it is open cancels the job.
+        setTimeout(() => {
+          frame.remove();
+          if (info.revoke) URL.revokeObjectURL(info.url);
+        }, 60_000);
+        resolve(ok);
+      };
+      frame.addEventListener('load', () => {
+        try {
+          const win = frame.contentWindow;
+          if (!win) return finish(false);
+          win.focus();
+          win.print();
+          finish(true);
+        } catch {
+          finish(false); // a cross-origin PDF cannot be driven from here
+        }
+      });
+      frame.addEventListener('error', () => finish(false));
+      doc.body.appendChild(frame);
+    });
+  }
+
   /** Whether the source can supply a table of contents. True for PDFs; the document may still
    *  turn out to have no outline, in which case {@link getOutline} resolves empty. */
   canOutline(): boolean {
@@ -389,10 +444,21 @@ export class Zine {
    * Save the original document. Resolves to false when the source has nothing to hand over
    * (an image book, or a PDF opened from a caller-owned pdf.js document).
    */
-  async download(): Promise<boolean> {
+  /**
+   * Where the original document lives, if the source has one — a PDF's URL or a blob of its
+   * bytes. Null for an image book, or a PDF opened from a caller-owned pdf.js document.
+   *
+   * Saving and printing both start here: the original is better than anything reassembled from
+   * page rasters, and the browser already knows how to paginate it.
+   */
+  async getSourceFile(): Promise<DownloadInfo | null> {
     const getDownload = this.#source.getDownload;
-    if (typeof getDownload !== 'function') return false;
-    const info = await getDownload.call(this.#source);
+    if (typeof getDownload !== 'function') return null;
+    return (await getDownload.call(this.#source)) ?? null;
+  }
+
+  async download(): Promise<boolean> {
+    const info = await this.getSourceFile();
     if (!info) return false;
     const doc = this.#container.ownerDocument;
     if (!doc) return false;

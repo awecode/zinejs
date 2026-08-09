@@ -144,8 +144,8 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 ### Built-in controls
 
 `prev`, `next`, `first`, `last`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`,
-`search`, `thumbnails`, `outline`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in `items`
-draws a separator.
+`search`, `thumbnails`, `outline`, `print`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in
+`items` draws a separator.
 
 The default layout is:
 
@@ -154,7 +154,7 @@ The default layout is:
 ```
 
 `menu` is the `⋮` overflow, holding
-`['first', 'last', 'thumbnails', 'outline', 'download']`.
+`['first', 'last', 'thumbnails', 'outline', 'print', 'download']`.
 
 ### Side panels
 
@@ -294,6 +294,15 @@ if (zine.canDownload()) await zine.download();
 
 The `download` control in the `⋮` menu calls this, and hides itself (taking the empty menu with
 it) when `canDownload()` is false.
+
+## Print
+
+`zine.print()` prints the document. It hands the original file to the browser in an offscreen
+frame rather than printing the host page — printing the page would capture the toolbar and
+whichever single spread is on screen, while the browser paginates a PDF properly by itself.
+
+Like download, it needs a source with an original file, so the `print` control appears for PDFs
+and not for image books.
 To make a custom source downloadable, implement the optional
 `getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
 when `url` came from `URL.createObjectURL` so it is released after the save.
@@ -337,6 +346,8 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
 | `canDownload()` | `boolean` | Whether the original document can be saved. |
 | `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
+| `canPrint()` | `boolean` | Whether the book can be printed. |
+| `print()` | `Promise<boolean>` | Print the original; `false` if there is nothing to print. |
 | `isDocument()` | `boolean` | Whether the book is a document (a PDF) rather than loose images. |
 | `pageLink(page?)` | `string` | URL that opens the book at `page` (default: current). |
 | `canOutline()` | `boolean` | Whether the source can supply a table of contents. |

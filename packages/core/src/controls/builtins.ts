@@ -122,10 +122,22 @@ export function registerBuiltins(): void {
   });
 
   defineControl({
+    id: 'print',
+    title: 'Print',
+    icon: ICONS.print,
+    // Same reach as download: there has to be an original document to print.
+    isVisible: (ctx) => ctx.zine.canPrint(),
+    action: (ctx) => {
+      void ctx.zine.print();
+      ctx.close();
+    },
+  });
+
+  defineControl({
     id: 'menu',
     title: 'More',
     icon: ICONS.menu,
     // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
-    children: ['first', 'last', 'thumbnails', 'outline', 'download'],
+    children: ['first', 'last', 'thumbnails', 'outline', 'print', 'download'],
   });
 }
