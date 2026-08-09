@@ -258,10 +258,18 @@ describe('controls toolbar', () => {
     expect(items.map((b) => b.getAttribute('aria-label'))).toContain('Download PDF');
   });
 
-  it('hides the overflow menu entirely when nothing inside it applies', async () => {
-    // Download is the only entry, so an image book leaves the menu with nothing to open onto.
-    const { el } = await mount();
-    expect(byLabel(el, 'More')?.style.display).toBe('none');
+  it('leaves Download PDF out for a book with no original file', async () => {
+    const { el } = await mount(); // plain image book
+    byLabel(el, 'More')!.click();
+    const items = [...scope(el).querySelectorAll('.zine-controls-menu button')];
+    expect(items.map((b) => b.getAttribute('aria-label'))).not.toContain('Download PDF');
+  });
+
+  it('hides a submenu whose entries have all hidden themselves', async () => {
+    const { el } = await mount({
+      controls: { items: [{ id: 'empty', title: 'Empty', children: ['download'] }] },
+    });
+    expect(byLabel(el, 'Empty')?.style.display).toBe('none');
   });
 
   it('saves the file when Download PDF is chosen', async () => {
@@ -282,6 +290,64 @@ describe('controls toolbar', () => {
       HTMLAnchorElement.prototype.click = realClick;
     }
     expect(clicked).toEqual([{ href: '/brochure.pdf', download: 'brochure.pdf' }]);
+  });
+
+  it('toggles the thumbnail rail from the menu', async () => {
+    const { el } = await mount();
+    const open = (): HTMLButtonElement =>
+      [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find((b) =>
+        (b.getAttribute('aria-label') ?? '').includes('thumbnails'),
+      )!;
+
+    byLabel(el, 'More')!.click();
+    expect(open().getAttribute('aria-label')).toBe('Show thumbnails');
+    open().click();
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
+
+    byLabel(el, 'More')!.click();
+    expect(open().getAttribute('aria-label')).toBe('Hide thumbnails'); // label follows state
+    open().click();
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+  });
+
+  it('gives the rail one row per spread, pairing pages as the book does', async () => {
+    // 8 pages in 'double' → 4 rows of two.
+    const { el } = await mount({ spreadMode: 'double' });
+    (el as HTMLElement).ownerDocument.body.focus();
+    byLabel(el, 'More')!.click();
+    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
+      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
+      .click();
+    await flush();
+    const rows = [...scope(el).querySelectorAll('.zine-thumbs-row')];
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.getAttribute('aria-label')).toBe('Pages 1–2');
+  });
+
+  it('gives a single-page book one page per row', async () => {
+    const { el } = await mount({ spreadMode: 'single' });
+    byLabel(el, 'More')!.click();
+    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
+      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
+      .click();
+    await flush();
+    const rows = [...scope(el).querySelectorAll('.zine-thumbs-row')];
+    expect(rows).toHaveLength(8);
+    expect(rows[0]?.getAttribute('aria-label')).toBe('Page 1');
+  });
+
+  it('takes the rail down with the book', async () => {
+    const { zine, el } = await mount();
+    byLabel(el, 'More')!.click();
+    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
+      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
+      .click();
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
+    zine.destroy();
+    expect(document.querySelector('.zine-thumbs')).toBeNull();
   });
 
   it('hides search on a book whose source has no text', async () => {

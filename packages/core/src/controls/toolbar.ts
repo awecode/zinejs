@@ -2,6 +2,7 @@ import { createIcon, ICONS } from './icons';
 import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
 import { registerBuiltins } from './builtins';
 import { ensureStyles } from './styles';
+import { Thumbnails } from './thumbnails';
 import type {
   ControlContext,
   ControlDef,
@@ -34,9 +35,12 @@ export class Toolbar {
   #pageInput: HTMLInputElement | null = null;
   /** The flex wrapper docked mode inserts around the container; unwound on destroy. */
   #wrap: HTMLElement | null = null;
+  #container: HTMLElement;
+  #thumbs: Thumbnails | null = null;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
+    this.#container = container;
     const doc = container.ownerDocument!;
     this.#doc = doc;
     ensureStyles(doc);
@@ -122,6 +126,8 @@ export class Toolbar {
     for (const off of this.#unsubscribe) off();
     this.#unsubscribe = [];
     this.#closePopover();
+    this.#thumbs?.destroy();
+    this.#thumbs = null;
     this.#root.remove();
     // Put the container back where it was, so destroy() leaves the DOM as it found it.
     const wrap = this.#wrap;
@@ -159,16 +165,23 @@ export class Toolbar {
 
   /** A control button. Bar buttons are icon-only with the title as tooltip; menu items and any
    *  control without an icon also carry a visible label. */
+  /** A control's label, which may be a function of the current state. */
+  #titleOf(def: ControlDef): string {
+    return typeof def.title === 'function' ? def.title(this.#context()) : def.title;
+  }
+
   #button(def: ControlDef, className: string, withLabel = false): HTMLButtonElement {
     const btn = this.#doc.createElement('button');
+    const title = this.#titleOf(def);
     btn.type = 'button';
     btn.className = className;
-    btn.title = def.title;
-    btn.setAttribute('aria-label', def.title);
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
     if (def.icon) btn.appendChild(createIcon(this.#doc, def.icon));
     if (withLabel || !def.icon) {
       const label = this.#doc.createElement('span');
-      label.textContent = def.title;
+      label.className = 'zine-controls-label';
+      label.textContent = title;
       btn.appendChild(label);
     }
     btn.addEventListener('click', () => this.#activate(def, btn));
@@ -272,6 +285,13 @@ export class Toolbar {
       if (visible !== undefined) el.style.display = visible ? '' : 'none';
       el.disabled = def.isDisabled?.(ctx) ?? false;
       if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
+      if (typeof def.title === 'function') {
+        const title = def.title(ctx);
+        el.title = title;
+        el.setAttribute('aria-label', title);
+        const label = el.querySelector('.zine-controls-label');
+        if (label) label.textContent = title;
+      }
     }
     if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {
       this.#pageInput.value = String(this.#zine.getPage() + 1);
@@ -317,6 +337,23 @@ export class Toolbar {
     wrap.append(input, total);
     this.#pageInput = input;
     return wrap;
+  }
+
+  /** Whether the thumbnail rail is currently showing. */
+  thumbnailsOpen(): boolean {
+    return this.#thumbs !== null;
+  }
+
+  /** Show or hide the page rail. Rebuilt each time it opens so it always matches the current
+   *  spread grouping, which changes with `spreadMode` and the responsive fallback. */
+  toggleThumbnails(): void {
+    if (this.#thumbs) {
+      this.#thumbs.destroy();
+      this.#thumbs = null;
+    } else {
+      this.#thumbs = new Thumbnails(this.#zine, this.#container);
+    }
+    this.#refresh();
   }
 
   /** Open the search panel: a query field over a list of hits. */
@@ -385,6 +422,16 @@ export class Toolbar {
  */
 export function registerWidgets(toolbar: Toolbar): void {
   registerBuiltins();
+  defineControl({
+    id: 'thumbnails',
+    title: () => (toolbar.thumbnailsOpen() ? 'Hide thumbnails' : 'Show thumbnails'),
+    icon: ICONS.thumbnails,
+    isActive: () => toolbar.thumbnailsOpen(),
+    action: (ctx) => {
+      toolbar.toggleThumbnails();
+      ctx.close();
+    },
+  });
   defineControl({
     id: 'pageInput',
     title: 'Page',

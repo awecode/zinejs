@@ -191,6 +191,65 @@ export const CSS = `
 .zine-controls-hit small { display: block; opacity: 0.62; font-size: 0.85em; }
 .zine-controls-note { padding: 8px 9px; opacity: 0.66; }
 
+/* Thumbnail rail. Wraps the book (and its docked toolbar) so it sits beside them without
+   shrinking the container the renderer measures. */
+.zine-thumbs-wrap { display: flex; align-items: stretch; gap: 8px; }
+.zine-thumbs {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
+  color: var(--zine-controls-fg, #f4f4f5);
+  font: 500 11px/1.2 system-ui, sans-serif;
+  touch-action: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Overlay fallback, used when the container has no parent to wrap. */
+.zine-thumbs-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
+
+.zine-thumbs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.zine-thumbs-row:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-thumbs-row:focus-visible {
+  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline-offset: -2px;
+}
+.zine-thumbs-active { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
+.zine-thumbs-active .zine-thumbs-cell { outline: 1px solid var(--zine-controls-accent, #7dd3fc); }
+
+.zine-thumbs-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 24px;
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+/* A lone cover's empty half keeps its column so pages line up as the book shows them. */
+.zine-thumbs-blank { background: transparent; }
+.zine-thumbs-img { display: block; width: 100%; height: auto; }
+.zine-thumbs-caption { flex: 1 0 100%; text-align: center; opacity: 0.7; }
+
 @media (prefers-reduced-motion: no-preference) {
   .zine-controls-btn { transition: background 120ms ease; }
 }

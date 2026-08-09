@@ -267,6 +267,34 @@ export class Zine {
     return this.#container;
   }
 
+  /**
+   * How pages are currently grouped, one entry per spread — the same model the renderer paints,
+   * so it already reflects `spreadMode` and the responsive single-page fallback. Useful for
+   * building a page list or thumbnail rail that matches the book.
+   */
+  getSpreads(): readonly Spread[] {
+    return this.#spreads;
+  }
+
+  /** The spread index currently on screen; indexes into {@link getSpreads}. */
+  getSpreadIndex(): number {
+    return this.#current;
+  }
+
+  /** Reading direction, which mirrors each spread's left/right sides. */
+  getDirection(): Direction {
+    return this.#direction;
+  }
+
+  /**
+   * Resolve one page's raster, for drawing a thumbnail or exporting. Returns null if the page
+   * cannot be decoded — the failure is reported through `sourceError` rather than thrown, as it
+   * is for the pages the renderer paints.
+   */
+  getPageImage(index: number): Promise<PageContent | null> {
+    return this.#getPage(index);
+  }
+
   /** Whether there is a spread after the current one (false on the last). */
   canFlipNext(): boolean {
     return this.#current + 1 < this.#spreads.length;

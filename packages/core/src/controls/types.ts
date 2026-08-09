@@ -21,8 +21,11 @@ export interface ControlContext {
 export interface ControlDef {
   /** Unique key; also how a layout refers to this control. */
   readonly id: string;
-  /** Tooltip and accessible name. */
-  readonly title: string;
+  /**
+   * Tooltip and accessible name. A function is re-read whenever the book changes, so a toggle
+   * can say what it will do next ("Show thumbnails" / "Hide thumbnails").
+   */
+  readonly title: string | ((ctx: ControlContext) => string);
   /** Inner SVG markup, drawn inside a 24x24 viewBox. See `./icons`. */
   readonly icon?: string;
   /** Nested controls. A control with children opens a submenu instead of acting. */

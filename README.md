@@ -130,8 +130,8 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 
 ### Built-in controls
 
-`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `download`,
-`share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
+`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `thumbnails`,
+`download`, `share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
 
 The default layout is:
 
@@ -139,7 +139,13 @@ The default layout is:
 ['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', 'search', 'share', 'menu', 'fullscreen']
 ```
 
-`menu` is the `⋮` overflow, holding `['download']`.
+`menu` is the `⋮` overflow, holding `['thumbnails', 'download']`.
+
+`thumbnails` toggles a rail of page thumbnails beside the book. Its rows mirror the book's own
+spread grouping — two pages per row in `double`, one in `single`, with the lone first/last pages
+of `cover` and `book` keeping their blank half — so it always matches what the reader sees,
+including the responsive fallback on a narrow container. Clicking a row turns to that spread, and
+pages decode only as they scroll into view.
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
@@ -171,7 +177,7 @@ new Zine(el, {
 | Field | Type | Description |
 | --- | --- | --- |
 | `id` | `string` | Unique key; how `items` refers to it. Reusing an id replaces that control. |
-| `title` | `string` | Tooltip and accessible name. |
+| `title` | `string \| (ctx) => string` | Tooltip and accessible name. A function is re-read on every change, so a toggle can say what it will do next. |
 | `icon` | `string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. |
 | `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
 | `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
@@ -259,6 +265,10 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `getPageCount()` | `number` | Total page count (including covers/replacements). |
 | `canFlipNext()` | `boolean` | Whether a spread follows the current one. |
 | `canFlipPrev()` | `boolean` | Whether a spread precedes the current one. |
+| `getSpreads()` | `readonly Spread[]` | How pages are grouped, one entry per spread. Reflects `spreadMode` and the responsive fallback. |
+| `getSpreadIndex()` | `number` | Which spread is on screen; indexes into `getSpreads()`. |
+| `getDirection()` | `'ltr' \| 'rtl'` | Reading direction. |
+| `getPageImage(index)` | `Promise<PageContent \| null>` | One page's raster, for thumbnails or export. `null` if it cannot be decoded. |
 | `getZoom()` | `number` | Current zoom scale (`1` = fit). |
 | `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |
 | `canSearch()` | `boolean` | Whether this book's source can produce text. |
