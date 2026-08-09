@@ -188,6 +188,8 @@ export class Zine {
   #unbindWheel: (() => void) | null = null;
   #unbindDblClick: (() => void) | null = null;
   #a11yCleanup: (() => void) | null = null;
+  /** Resolved once and reused; see {@link getOutline}. */
+  #outline: Promise<OutlineItem[]> | null = null;
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
   #ready: Promise<void>;
@@ -337,15 +339,22 @@ export class Zine {
     return typeof this.#source.getOutline === 'function';
   }
 
-  /** The document's table of contents, or an empty list when it has none. */
-  async getOutline(): Promise<OutlineItem[]> {
-    const getOutline = this.#source.getOutline;
-    if (typeof getOutline !== 'function') return [];
-    try {
-      return await getOutline.call(this.#source);
-    } catch {
-      return [];
+  /**
+   * The document's table of contents, or an empty list when it has none.
+   *
+   * Memoized: an outline does not change for the life of the document, and resolving one means
+   * following every entry's destination to a page. The toolbar asks for it up front to decide
+   * whether to offer the outline panel at all, and the panel itself then gets it for free.
+   */
+  getOutline(): Promise<OutlineItem[]> {
+    if (!this.#outline) {
+      const getOutline = this.#source.getOutline;
+      this.#outline =
+        typeof getOutline === 'function'
+          ? Promise.resolve(getOutline.call(this.#source)).catch(() => [])
+          : Promise.resolve([]);
     }
+    return this.#outline;
   }
 
   /**

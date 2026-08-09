@@ -40,6 +40,9 @@ export class Toolbar {
   /** The side panel currently in the rail. Only one at a time — they share the space. */
   #panel: Thumbnails | Outline | null = null;
   #panelKind: 'thumbnails' | 'outline' | null = null;
+  /** Whether the document turned out to have any outline entries. Null until known: the answer
+   *  is async, and the outline control stays hidden rather than flash in and out. */
+  #hasOutline: boolean | null = null;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -349,6 +352,26 @@ export class Toolbar {
   }
 
   /**
+   * Whether this document has a table of contents worth offering.
+   *
+   * Many PDFs have none, and a control that can only report its own emptiness is a dead end, so
+   * the outline button stays hidden until the outline is known to be non-empty. The first call
+   * kicks off the lookup and refreshes the toolbar when it lands; `Zine.getOutline` memoizes, so
+   * the panel does not pay for it twice.
+   */
+  hasOutline(): boolean {
+    if (this.#hasOutline === null) {
+      this.#hasOutline = false; // assume not, until we hear otherwise
+      void this.#zine.getOutline().then((items) => {
+        if (items.length === 0) return;
+        this.#hasOutline = true;
+        this.#refresh();
+      });
+    }
+    return this.#hasOutline;
+  }
+
+  /**
    * Show one of the side panels, or close it if it is already up. They share the rail beside the
    * book, so opening one closes the other. Rebuilt each time, so the thumbnail rail always
    * matches the current spread grouping (which `spreadMode` and the responsive fallback change).
@@ -450,8 +473,8 @@ export function registerWidgets(toolbar: Toolbar): void {
     id: 'outline',
     title: () => (toolbar.openPanel() === 'outline' ? 'Hide outline' : 'Show outline'),
     icon: ICONS.outline,
-    // Only a source with a table of contents: image books have none.
-    isVisible: (ctx) => ctx.zine.canOutline(),
+    // Only when the document actually has entries to show.
+    isVisible: () => toolbar.hasOutline(),
     isActive: () => toolbar.openPanel() === 'outline',
     action: (ctx) => {
       toolbar.togglePanel('outline');

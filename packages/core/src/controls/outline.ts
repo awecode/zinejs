@@ -49,6 +49,8 @@ export class Outline {
     const items = await this.#zine.getOutline();
     if (!this.#bar.root.isConnected) return; // closed while the outline was loading
     if (items.length === 0) {
+      // The toolbar hides the control when there is nothing to list, so this is only reachable
+      // through a hand-written layout that names 'outline' regardless.
       this.#note('This document has no outline.');
       return;
     }

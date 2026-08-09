@@ -417,12 +417,13 @@ describe('controls outline panel', () => {
     { title: 'Broken link', page: null, children: [] },
   ];
   const openOutline = async (el: HTMLElement): Promise<void> => {
+    await flush(); // the control only appears once the outline is known to be non-empty
     byLabel(el, 'More')!.click();
     [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
       .find((b) => (b.getAttribute('aria-label') ?? '').includes('outline'))!
       .click();
     await flush();
-    await flush(); // the outline resolves asynchronously
+    await flush(); // the panel then resolves and renders it
   };
 
   it('lists every heading, nested ones indented', async () => {
@@ -459,10 +460,26 @@ describe('controls outline panel', () => {
     expect(broken.disabled).toBe(true);
   });
 
-  it('says so when the document has no outline', async () => {
+  it('does not offer the outline when the document has none', async () => {
+    // A control whose only outcome is reporting its own emptiness is worse than no control.
     const { el } = await mount({ source: new DocSource(8, []) });
-    await openOutline(el);
-    expect(scope(el).querySelector('.zine-panel-note')?.textContent).toMatch(/no outline/i);
+    await flush(); // the outline lookup settles, and the toolbar refreshes
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).not.toContain('Show outline');
+    expect(labels).toContain('Show thumbnails'); // the page rail is still on offer
+  });
+
+  it('offers the outline once its entries are known', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await flush();
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toContain('Show outline');
   });
 
   it('replaces the thumbnail rail rather than stacking beside it', async () => {

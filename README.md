@@ -160,7 +160,8 @@ Clicking a row turns to that spread, and pages decode only as they scroll into v
 **`outline`** shows the document's table of contents: one heading per row, nested entries indented,
 in a single column. Clicking a heading turns to its page, and the entry containing the current page
 stays highlighted. A heading whose destination cannot be resolved is still listed, just not
-clickable. PDFs often have no outline at all, in which case the panel says so.
+clickable. Many PDFs carry no outline, so the control only appears once the document is known to
+have one.
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
