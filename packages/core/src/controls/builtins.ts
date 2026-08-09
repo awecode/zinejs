@@ -43,7 +43,7 @@ export function registerBuiltins(): void {
     id: 'first',
     title: 'First page',
     icon: (ctx) => (rtl(ctx) ? ICONS.last : ICONS.first),
-    isDisabled: (ctx) => !ctx.zine.canFlipPrev(),
+    isAvailable: (ctx) => ctx.zine.canFlipPrev(),
     action: (ctx) => {
       ctx.zine.flipTo(0);
       ctx.close();
@@ -54,7 +54,7 @@ export function registerBuiltins(): void {
     id: 'last',
     title: 'Last page',
     icon: (ctx) => (rtl(ctx) ? ICONS.first : ICONS.last),
-    isDisabled: (ctx) => !ctx.zine.canFlipNext(),
+    isAvailable: (ctx) => ctx.zine.canFlipNext(),
     action: (ctx) => {
       ctx.zine.flipTo(ctx.zine.getPageCount() - 1);
       ctx.close();

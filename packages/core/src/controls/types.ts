@@ -37,8 +37,19 @@ export interface ControlDef {
   action?(ctx: ControlContext): void;
   /** Build a custom element instead of a button — for inputs and other non-button widgets. */
   render?(ctx: ControlContext): HTMLElement;
-  /** Hide the control entirely, e.g. search on a book whose source has no text. */
+  /**
+   * Whether the control applies at all — search on a book with no text, download with no file.
+   * A control that fails this is removed outright, since it will not come back.
+   */
   isVisible?(ctx: ControlContext): boolean;
+  /**
+   * Whether the control has anything to do *right now* — "first page" on the first page.
+   *
+   * Unlike `isVisible` this comes and goes as the reader moves, so on the toolbar the control
+   * keeps its slot while hidden, and the bar does not shrink and reshuffle under the cursor. In
+   * a menu, which is rebuilt on every open, the entry is simply left out.
+   */
+  isAvailable?(ctx: ControlContext): boolean;
   /** Grey out and block the action, e.g. "previous" on the first spread. */
   isDisabled?(ctx: ControlContext): boolean;
   /** Mark as currently on, e.g. fullscreen while engaged. */

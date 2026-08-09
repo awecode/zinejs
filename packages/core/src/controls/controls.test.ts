@@ -320,14 +320,44 @@ describe('controls toolbar', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('disables the end jumps once the book is already there', async () => {
-    const { el } = await mount({ source: new FakeSource(12) });
-    byLabel(el, 'More')!.click();
-    const items = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')];
-    const first = items.find((b) => b.getAttribute('aria-label') === 'First page')!;
-    const last = items.find((b) => b.getAttribute('aria-label') === 'Last page')!;
-    expect(first.disabled).toBe(true); // already on page 1
-    expect(last.disabled).toBe(false);
+  it('leaves out an end jump the book is already at', async () => {
+    const { zine, el } = await mount({ source: new FakeSource(12) });
+    const labels = (): (string | null)[] => {
+      byLabel(el, 'More')!.click();
+      return [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+        b.getAttribute('aria-label'),
+      );
+    };
+
+    expect(labels()).not.toContain('First page'); // already on page 1
+    expect(labels()).toContain('Last page');
+
+    zine.flipTo(11);
+    await flush();
+    expect(labels()).toContain('First page');
+    expect(labels()).not.toContain('Last page');
+  });
+
+  it('keeps an unavailable control’s slot on the bar, so the toolbar does not reshuffle', async () => {
+    // A menu is rebuilt on every open, but the bar is live under the reader's cursor: letting
+    // 'first' collapse away at page 1 would shift every button beside it.
+    const { zine, el } = await mount({
+      source: new FakeSource(12),
+      controls: { items: ['first', 'prev', 'next', 'last'] },
+    });
+    const first = byLabel(el, 'First page')!;
+    expect(first.style.visibility).toBe('hidden'); // invisible…
+    expect(first.style.display).not.toBe('none'); // …but still holding its place
+
+    zine.flipTo(4);
+    await flush();
+    expect(first.style.visibility).not.toBe('hidden');
+  });
+
+  it('removes a control that does not apply to the book at all', async () => {
+    // Unlike the ends of the book, this will not come back, so the space goes with it.
+    const { el } = await mount({ controls: { items: ['prev', 'search', 'next'] } });
+    expect(byLabel(el, 'Search')?.style.display).toBe('none');
   });
 
   it('offers Download PDF in the menu when the source has a file', async () => {

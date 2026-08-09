@@ -177,7 +177,30 @@ const zine = new Zine(book, {
   controls:
     opt.controls === 'off'
       ? false
-      : { position: opt.controls, docked: opt.controlsDock === 'docked' },
+      : {
+          position: opt.controls,
+          docked: opt.controlsDock === 'docked',
+          // ?items=ends puts first/last on the bar itself, to see how a control that comes and
+          // goes behaves out there rather than tucked in the ⋮ menu.
+          ...(q.get('items') === 'ends'
+            ? {
+                items: [
+                  'first',
+                  'prev',
+                  'pageInput',
+                  'next',
+                  'last',
+                  '|',
+                  'zoomOut',
+                  'zoomIn',
+                  'search',
+                  'share',
+                  'menu',
+                  'fullscreen',
+                ],
+              }
+            : {}),
+        },
 });
 
 // Click/double-click diagnostics, on unless ?clickdebug=0. Explains in the console why a

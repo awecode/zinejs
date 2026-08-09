@@ -238,7 +238,7 @@ export class Toolbar {
     for (const child of def.children ?? []) {
       if (child === '|') continue;
       const childDef = resolveControl(child);
-      if (childDef.isVisible && !childDef.isVisible(ctx)) continue;
+      if (!this.#applies(childDef, ctx)) continue;
       const item = this.#button(childDef, 'zine-controls-btn', true);
       item.setAttribute('role', 'menuitem');
       menu.appendChild(item);
@@ -305,8 +305,17 @@ export class Toolbar {
   #refresh(): void {
     const ctx = this.#context();
     for (const { el, def } of this.#buttons) {
-      const visible = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
-      if (visible !== undefined) el.style.display = visible ? '' : 'none';
+      // Does not apply to this book at all: take the space back, it is not coming again.
+      const applies = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
+      if (applies !== undefined) el.style.display = applies ? '' : 'none';
+      // Applies, but has nothing to do just now. On the bar it keeps its slot so the toolbar
+      // does not shrink and reshuffle under the reader's cursor; a menu row simply goes.
+      const available = def.isAvailable?.(ctx);
+      if (available !== undefined) {
+        const inMenu = el.closest('.zine-controls-menu') !== null;
+        if (inMenu) el.style.display = available ? '' : 'none';
+        else el.style.visibility = available ? '' : 'hidden';
+      }
       el.disabled = def.isDisabled?.(ctx) ?? false;
       if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
       if (typeof def.title === 'function') {
@@ -331,9 +340,13 @@ export class Toolbar {
     if (def.isVisible && !def.isVisible(ctx)) return false;
     return (def.children ?? []).some((child) => {
       if (child === '|') return false;
-      const childDef = resolveControl(child);
-      return childDef.isVisible ? childDef.isVisible(ctx) : true;
+      return this.#applies(resolveControl(child), ctx);
     });
+  }
+
+  /** Whether a menu entry is worth listing: it applies to this book, and has something to do. */
+  #applies(def: ControlDef, ctx: ControlContext): boolean {
+    return (def.isVisible?.(ctx) ?? true) && (def.isAvailable?.(ctx) ?? true);
   }
 
   /** Registered lazily by {@link registerWidgets} so the widget can reach this instance. */
