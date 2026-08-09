@@ -58,11 +58,17 @@ class MockRenderer implements Renderer {
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r));
 
+/** Books built by `mount`, torn down after each test so no rail or toolbar outlives it — the
+ *  teardown assertions search the whole document. */
+const mounted: Zine[] = [];
+
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
 });
 afterEach(() => {
+  for (const zine of mounted.splice(0)) zine.destroy();
+  document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
 
@@ -73,16 +79,32 @@ async function mount(opts: Partial<ZineOptions> = {}): Promise<{ zine: Zine; el:
     source: new FakeSource(8),
     renderer: new MockRenderer(),
     spreadMode: 'double',
+    // Land flips immediately: these tests are about what a control does, not how it animates,
+    // and a real duration would need the clock driven frame by frame.
+    flipDuration: 0,
     ...opts,
   });
+  mounted.push(zine);
   await zine.ready;
   await flush(); // the controls chunk is imported after first paint
   return { zine, el };
 }
 
-/** The toolbar is a sibling of the container when docked, a child when floating — search from
- *  whichever ancestor holds both. */
-const scope = (el: HTMLElement): HTMLElement => (el.parentElement ?? el) as HTMLElement;
+/**
+ * The outermost element the library wrapped around the book — the toolbar and the thumbnail rail
+ * both live inside it. Docking wraps the container once, and opening the rail wraps *that* again,
+ * so a fixed number of hops up would miss whichever went on last.
+ */
+function scope(el: HTMLElement): HTMLElement {
+  let node = el;
+  while (
+    node.parentElement?.classList.contains('zine-controls-wrap') ||
+    node.parentElement?.classList.contains('zine-thumbs-wrap')
+  ) {
+    node = node.parentElement;
+  }
+  return node;
+}
 const toolbar = (el: HTMLElement): HTMLElement | null =>
   scope(el).querySelector('.zine-controls');
 const buttons = (el: HTMLElement): HTMLButtonElement[] => [
