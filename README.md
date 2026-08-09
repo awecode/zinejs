@@ -143,8 +143,9 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 
 ### Built-in controls
 
-`prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `thumbnails`,
-`outline`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
+`prev`, `next`, `first`, `last`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`,
+`search`, `thumbnails`, `outline`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in `items`
+draws a separator.
 
 The default layout is:
 
@@ -152,7 +153,8 @@ The default layout is:
 ['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', 'search', 'share', 'menu', 'fullscreen']
 ```
 
-`menu` is the `⋮` overflow, holding `['thumbnails', 'outline', 'download']`.
+`menu` is the `⋮` overflow, holding
+`['first', 'last', 'thumbnails', 'outline', 'download']`.
 
 ### Side panels
 
@@ -211,7 +213,7 @@ new Zine(el, {
 | --- | --- | --- |
 | `id` | `string` | Unique key; how `items` refers to it. Reusing an id replaces that control. |
 | `title` | `string \| (ctx) => string` | Tooltip and accessible name. A function is re-read on every change, so a toggle can say what it will do next. |
-| `icon` | `string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. |
+| `icon` | `string \| (ctx) => string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. A function is re-read on every change, so a glyph can mirror in RTL or follow state. |
 | `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
 | `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
 | `render` | `(ctx) => HTMLElement` | Build a custom widget instead of a button. |

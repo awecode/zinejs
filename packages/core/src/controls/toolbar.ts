@@ -192,15 +192,21 @@ export class Toolbar {
     return typeof def.title === 'function' ? def.title(this.#context()) : def.title;
   }
 
+  /** A control's glyph, which may likewise depend on state (an RTL mirror, say). */
+  #iconOf(def: ControlDef): string | undefined {
+    return typeof def.icon === 'function' ? def.icon(this.#context()) : def.icon;
+  }
+
   #button(def: ControlDef, className: string, withLabel = false): HTMLButtonElement {
     const btn = this.#doc.createElement('button');
     const title = this.#titleOf(def);
+    const icon = this.#iconOf(def);
     btn.type = 'button';
     btn.className = className;
     btn.title = title;
     btn.setAttribute('aria-label', title);
-    if (def.icon) btn.appendChild(createIcon(this.#doc, def.icon));
-    if (withLabel || !def.icon) {
+    if (icon) btn.appendChild(createIcon(this.#doc, icon));
+    if (withLabel || !icon) {
       const label = this.#doc.createElement('span');
       label.className = 'zine-controls-label';
       label.textContent = title;
@@ -309,6 +315,9 @@ export class Toolbar {
         el.setAttribute('aria-label', title);
         const label = el.querySelector('.zine-controls-label');
         if (label) label.textContent = title;
+      }
+      if (typeof def.icon === 'function') {
+        el.querySelector('svg')?.replaceWith(createIcon(this.#doc, def.icon(ctx)));
       }
     }
     if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {

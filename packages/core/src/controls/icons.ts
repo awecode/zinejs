@@ -14,6 +14,10 @@ export const ICONS: Record<string, string> = {
   prev: '<path d="m15 18-6-6 6-6"/>',
   /** chevron-right */
   next: '<path d="m9 18 6-6-6-6"/>',
+  /** chevrons-left */
+  first: '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
+  /** chevrons-right */
+  last: '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
   /** zoom-in */
   zoomIn:
     '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/>',

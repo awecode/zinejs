@@ -26,8 +26,11 @@ export interface ControlDef {
    * can say what it will do next ("Show thumbnails" / "Hide thumbnails").
    */
   readonly title: string | ((ctx: ControlContext) => string);
-  /** Inner SVG markup, drawn inside a 24x24 viewBox. See `./icons`. */
-  readonly icon?: string;
+  /**
+   * Inner SVG markup, drawn inside a 24x24 viewBox. See `./icons`. A function is re-read
+   * whenever the book changes, so a control can mirror its glyph in RTL or swap it for state.
+   */
+  readonly icon?: string | ((ctx: ControlContext) => string);
   /** Nested controls. A control with children opens a submenu instead of acting. */
   readonly children?: readonly ControlItem[];
   /** What the button does. Ignored when `children` is present. */

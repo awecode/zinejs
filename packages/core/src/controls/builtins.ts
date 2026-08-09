@@ -2,6 +2,7 @@ import { ICONS } from './icons';
 import { defineControl } from './registry';
 import type { ControlContext } from './types';
 
+
 /** Zoom step per click: two clicks double the scale. */
 const ZOOM_STEP = Math.SQRT2;
 
@@ -32,6 +33,32 @@ export function registerBuiltins(): void {
     icon: ICONS.next,
     isDisabled: (ctx) => !ctx.zine.canFlipNext(),
     action: (ctx) => ctx.zine.flipNext(),
+  });
+
+  // The chevrons point the way the book travels, which reverses in RTL — same as the page
+  // arrows flanking the book.
+  const rtl = (ctx: ControlContext): boolean => ctx.zine.getDirection() === 'rtl';
+
+  defineControl({
+    id: 'first',
+    title: 'First page',
+    icon: (ctx) => (rtl(ctx) ? ICONS.last : ICONS.first),
+    isDisabled: (ctx) => !ctx.zine.canFlipPrev(),
+    action: (ctx) => {
+      ctx.zine.flipTo(0);
+      ctx.close();
+    },
+  });
+
+  defineControl({
+    id: 'last',
+    title: 'Last page',
+    icon: (ctx) => (rtl(ctx) ? ICONS.first : ICONS.last),
+    isDisabled: (ctx) => !ctx.zine.canFlipNext(),
+    action: (ctx) => {
+      ctx.zine.flipTo(ctx.zine.getPageCount() - 1);
+      ctx.close();
+    },
   });
 
   defineControl({
@@ -99,6 +126,6 @@ export function registerBuiltins(): void {
     title: 'More',
     icon: ICONS.menu,
     // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
-    children: ['thumbnails', 'outline', 'download'],
+    children: ['first', 'last', 'thumbnails', 'outline', 'download'],
   });
 }

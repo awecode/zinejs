@@ -302,6 +302,34 @@ describe('controls toolbar', () => {
     expect(order).toEqual(['Search', 'Share', 'More', 'Fullscreen']);
   });
 
+  it('jumps to the ends of the book from the menu', async () => {
+    const { zine, el } = await mount({ source: new FakeSource(12) });
+    const item = (name: string): HTMLButtonElement => {
+      byLabel(el, 'More')!.click();
+      return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => b.getAttribute('aria-label') === name,
+      )!;
+    };
+
+    item('Last page').click();
+    await flush();
+    expect(zine.getPage()).toBe(10); // the last spread of a 12-page double book
+
+    item('First page').click();
+    await flush();
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('disables the end jumps once the book is already there', async () => {
+    const { el } = await mount({ source: new FakeSource(12) });
+    byLabel(el, 'More')!.click();
+    const items = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')];
+    const first = items.find((b) => b.getAttribute('aria-label') === 'First page')!;
+    const last = items.find((b) => b.getAttribute('aria-label') === 'Last page')!;
+    expect(first.disabled).toBe(true); // already on page 1
+    expect(last.disabled).toBe(false);
+  });
+
   it('offers Download PDF in the menu when the source has a file', async () => {
     const { el } = await mount({ source: new DownloadableSource(8) });
     byLabel(el, 'More')!.click();
