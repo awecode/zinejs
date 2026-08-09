@@ -190,6 +190,8 @@ export class Zine {
   #a11yCleanup: (() => void) | null = null;
   /** Resolved once and reused; see {@link getOutline}. */
   #outline: Promise<OutlineItem[]> | null = null;
+  /** Pages whose content improved while a flip was running, to repaint once it settles. */
+  #pendingUpgrades = new Set<number>();
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
   #ready: Promise<void>;
@@ -464,7 +466,12 @@ export class Zine {
   /** After an animation settles, fire whatever flip was requested mid-turn. */
   #drainQueuedFlip(): void {
     const queued = this.#queuedFlip;
-    if (!queued) return;
+    if (!queued) {
+      // Nothing further to turn to, so this is where the book comes to rest: a good moment to
+      // apply any page content that improved while it was moving.
+      this.#flushPendingUpgrades();
+      return;
+    }
     this.#queuedFlip = null;
     queued();
   }
@@ -1120,13 +1127,34 @@ export class Zine {
     this.#container.style.aspectRatio = ratio;
   }
 
-  /** A source upgraded a page's content (e.g. progressive PDF); repaint if it's on screen and idle. */
+  /**
+   * A source upgraded a page's content (e.g. a progressive PDF swapping in the crisp render).
+   *
+   * Repainting mid-flip would disturb the animation, so an upgrade that lands during one is
+   * noted and applied on settle instead of dropped. Dropping it left the page stuck at low
+   * resolution for good: the upgrade fires once, and jumping straight to a page — from a search
+   * hit, the page field, the outline — is exactly when it tends to arrive.
+   */
   #onPageUpdate(index: number): void {
-    if (this.#machine.state !== 'idle') return; // don't disturb an in-flight flip
+    if (this.#machine.state !== 'idle') {
+      this.#pendingUpgrades.add(index);
+      return;
+    }
     const spread = this.#spreads[this.#current];
     if (spread && (spread.left === index || spread.right === index)) {
       void this.#renderCurrent();
     }
+  }
+
+  /** Apply any upgrade that arrived mid-flip, now that the book has settled. */
+  #flushPendingUpgrades(): void {
+    if (this.#pendingUpgrades.size === 0) return;
+    const spread = this.#spreads[this.#current];
+    const onScreen =
+      spread !== undefined &&
+      [spread.left, spread.right].some((p) => p !== null && this.#pendingUpgrades.has(p));
+    this.#pendingUpgrades.clear();
+    if (onScreen) void this.#renderCurrent();
   }
 
   #observeResize(): void {

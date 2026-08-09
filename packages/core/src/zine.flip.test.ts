@@ -193,6 +193,54 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(starts).not.toHaveBeenCalled();
   });
 
+  it('applies a page upgrade that lands mid-flip once the book settles', async () => {
+    // A progressive PDF paints low-res, then swaps in the crisp render. Jumping straight to a
+    // page — from a search hit, the page field, the outline — puts that swap right in the middle
+    // of the flip, where repainting would disturb the animation. Deferring is fine; dropping it
+    // left the page stuck at low resolution for good, since the upgrade only fires once.
+    const source = new FakeSource(8);
+    let notify: ((index: number) => void) | undefined;
+    (source as Source).onPageUpdate = (handler) => {
+      notify = handler;
+    };
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, { source, renderer, spreadMode: 'double', flipDuration: 500 });
+    await zine.ready;
+
+    zine.flipTo(4); // spread 2 → pages 4 and 5
+    await flush();
+    const painted = renderer.rendered.length;
+    notify!(4); // the crisp page arrives while the flip is still running
+    expect(renderer.rendered.length).toBe(painted); // not repainted mid-flip
+
+    tick(500);
+    await flush();
+    await flush();
+    // The landing paints the spread once; the deferred upgrade paints it again.
+    expect(renderer.rendered.length).toBeGreaterThan(painted + 1);
+    expect(renderer.rendered.at(-1)).toEqual({ left: 4, right: 5 });
+  });
+
+  it('ignores an upgrade for a page that is no longer on screen', async () => {
+    const source = new FakeSource(8);
+    let notify: ((index: number) => void) | undefined;
+    (source as Source).onPageUpdate = (handler) => {
+      notify = handler;
+    };
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, { source, renderer, spreadMode: 'double', flipDuration: 500 });
+    await zine.ready;
+
+    zine.flipTo(4);
+    await flush();
+    notify!(0); // page 0 upgrades, but we are flipping away from it
+    tick(500);
+    await flush();
+    const painted = renderer.rendered.length;
+    await flush();
+    expect(renderer.rendered.length).toBe(painted); // no needless repaint
+  });
+
   it('debug.setFlipProgress seeks without animating or changing state', async () => {
     const { zine, renderer } = await makeZine(4);
     const events = vi.fn();
