@@ -36,6 +36,21 @@ export interface Source {
    * image book is not a single file at all.
    */
   getDownload?(): Promise<DownloadInfo | null>;
+  /**
+   * Optional: the document's table of contents, for an outline panel. Return an empty array when
+   * the document has none — PDFs frequently do not.
+   */
+  getOutline?(): Promise<OutlineItem[]>;
+}
+
+/** One entry in a document's table of contents. */
+export interface OutlineItem {
+  /** The heading text. */
+  title: string;
+  /** Zero-based page it points at, or null when the destination cannot be resolved. */
+  page: number | null;
+  /** Nested entries; empty for a leaf. */
+  children: OutlineItem[];
 }
 
 /** A downloadable original document. */

@@ -191,24 +191,23 @@ export const CSS = `
 .zine-controls-hit small { display: block; opacity: 0.62; font-size: 0.85em; }
 .zine-controls-note { padding: 8px 9px; opacity: 0.66; }
 
-/* Thumbnail rail. Wraps the book (and its docked toolbar) so it sits beside them without
-   shrinking the container the renderer measures. */
-.zine-thumbs-wrap { display: flex; align-items: stretch; gap: 8px; }
+/* Side panels (thumbnails, outline). The rail wraps the book and its docked toolbar so it sits
+   beside them without shrinking the container the renderer measures. */
+.zine-panel-wrap { display: flex; align-items: stretch; gap: 8px; }
 
 /* The holder stretches to the book's height; the rail is absolutely positioned inside it so a
-   long page list scrolls rather than growing the row and running past the bottom of the book. */
-.zine-thumbs-holder {
+   long list scrolls rather than growing the row and running past the bottom of the book. */
+.zine-panel-holder {
   position: relative;
   flex: 0 0 auto;
   align-self: stretch;
   min-height: 0;
 }
-.zine-thumbs {
+.zine-panel {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -224,7 +223,11 @@ export const CSS = `
   user-select: none;
 }
 /* Overlay fallback, used when the container has no parent to wrap. */
-.zine-thumbs-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
+.zine-panel-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
+.zine-panel-active { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
+.zine-panel-note { padding: 8px; opacity: 0.66; line-height: 1.4; }
+
+.zine-thumbs { align-items: center; }
 
 .zine-thumbs-row {
   display: flex;
@@ -246,8 +249,36 @@ export const CSS = `
   outline: 2px solid var(--zine-controls-accent, #7dd3fc);
   outline-offset: -2px;
 }
-.zine-thumbs-active { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
-.zine-thumbs-active .zine-thumbs-cell { outline: 1px solid var(--zine-controls-accent, #7dd3fc); }
+.zine-thumbs-row.zine-panel-active .zine-thumbs-cell {
+  outline: 1px solid var(--zine-controls-accent, #7dd3fc);
+}
+
+/* Outline: a single column of headings, indented by depth. */
+.zine-outline { gap: 1px; }
+.zine-outline-row {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  line-height: 1.35;
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.zine-outline-row:hover:not(:disabled) {
+  background: var(--zine-controls-hover, rgba(255,255,255,0.14));
+}
+.zine-outline-row:focus-visible {
+  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline-offset: -2px;
+}
+/* A heading whose destination could not be resolved: shown, but nothing to click through to. */
+.zine-outline-row:disabled { opacity: 0.5; cursor: default; }
 
 .zine-thumbs-cell {
   flex: 1 1 0;

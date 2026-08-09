@@ -267,3 +267,58 @@ describe('PdfSource — getDownload', () => {
     expect(await new PdfSource(doc).getDownload()).toBeNull();
   });
 });
+
+describe('PdfSource — getOutline', () => {
+  /** pdf.js hands back a tree whose destinations are either a named string or an explicit array
+   *  starting with a page ref; both have to be resolved to a page index. */
+  const outlineDoc = (nodes: unknown[]) =>
+    ({
+      numPages: 10,
+      getPage: async () => ({}),
+      destroy: () => {},
+      getOutline: async () => nodes,
+      getDestination: async (id: string) => (id === 'named' ? [{ num: 7 }] : null),
+      getPageIndex: async (ref: { num: number }) => ref.num,
+    }) as unknown as PdfSrc;
+
+  it('resolves explicit and named destinations, and nests children', async () => {
+    const src = new PdfSource(
+      outlineDoc([
+        {
+          title: 'Introduction',
+          dest: [{ num: 0 }],
+          items: [{ title: 'Background', dest: [{ num: 2 }], items: [] }],
+        },
+        { title: 'Appendix', dest: 'named', items: [] },
+      ]),
+    );
+    await src.open();
+    expect(await src.getOutline()).toEqual([
+      {
+        title: 'Introduction',
+        page: 0,
+        children: [{ title: 'Background', page: 2, children: [] }],
+      },
+      { title: 'Appendix', page: 7, children: [] },
+    ]);
+  });
+
+  it('keeps a heading whose destination cannot be resolved, with a null page', async () => {
+    const src = new PdfSource(outlineDoc([{ title: 'Dangling', dest: 'missing', items: [] }]));
+    await src.open();
+    expect(await src.getOutline()).toEqual([{ title: 'Dangling', page: null, children: [] }]);
+  });
+
+  it('is empty for a document with no outline', async () => {
+    const src = new PdfSource(outlineDoc([]));
+    await src.open();
+    expect(await src.getOutline()).toEqual([]);
+  });
+
+  it('is empty when pdf.js cannot provide outlines at all', async () => {
+    const doc = { numPages: 2, getPage: async () => ({}), destroy: () => {} } as unknown as PdfSrc;
+    const src = new PdfSource(doc);
+    await src.open();
+    expect(await src.getOutline()).toEqual([]);
+  });
+});

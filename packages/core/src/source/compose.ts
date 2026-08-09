@@ -1,5 +1,5 @@
 import type { PageContent } from '../renderer/types';
-import type { DownloadInfo, Source } from './types';
+import type { DownloadInfo, OutlineItem, Source } from './types';
 
 export interface CompositionOptions {
   /** Image URL prepended as a lone front cover (adds a page). */
@@ -44,6 +44,7 @@ class CompositeSource implements Source {
   onPageUpdate?: (handler: (index: number) => void) => void;
   getText?: (index: number) => Promise<string>;
   getDownload?: () => Promise<DownloadInfo | null>;
+  getOutline?: () => Promise<OutlineItem[]>;
 
   constructor(base: Source, options: CompositionOptions) {
     this.#base = base;
@@ -85,6 +86,22 @@ class CompositeSource implements Source {
       // Covers and replacements change what is displayed, not the original document, so the
       // download is the base source's file either way.
       this.getDownload = () => base.getDownload!();
+    }
+
+    if (typeof base.getOutline === 'function') {
+      // The outline points at base pages; a front cover pushes every one of them along by one.
+      this.getOutline = async () => {
+        const items = await base.getOutline!();
+        const offset = this.#front !== null ? 1 : 0;
+        if (offset === 0) return items;
+        const shift = (list: OutlineItem[]): OutlineItem[] =>
+          list.map((item) => ({
+            ...item,
+            page: item.page === null ? null : item.page + offset,
+            children: shift(item.children),
+          }));
+        return shift(items);
+      };
     }
   }
 

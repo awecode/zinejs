@@ -131,7 +131,7 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 ### Built-in controls
 
 `prev`, `next`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`, `search`, `thumbnails`,
-`download`, `share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
+`outline`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in `items` draws a separator.
 
 The default layout is:
 
@@ -139,19 +139,28 @@ The default layout is:
 ['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', 'search', 'share', 'menu', 'fullscreen']
 ```
 
-`menu` is the `⋮` overflow, holding `['thumbnails', 'download']`.
+`menu` is the `⋮` overflow, holding `['thumbnails', 'outline', 'download']`.
 
-`thumbnails` toggles a rail of page thumbnails beside the book. Its rows mirror the book's own
-spread grouping, so it always matches what the reader sees, including the responsive fallback on a
-narrow container:
+### Side panels
+
+`thumbnails` and `outline` each open a rail beside the book. They share that space, so opening one
+closes the other, and both are as tall as the book and scroll internally — a long document never
+runs past the bottom. Both are for documents (a PDF), not image books.
+
+**`thumbnails`** shows the pages. Its rows mirror the book's own spread grouping, so it always
+matches what the reader sees, including the responsive fallback on a narrow container:
 
 - `double` — two pages per row, and the rail is two thumbs wide.
 - `single` — one page per row, and the rail narrows to a single thumb.
 - `cover` / `book` — two columns for the paired interior, with the lone first (and last) page
   centred between them rather than stretched across.
 
-The rail is as tall as the book and scrolls internally, so a long document never runs past it.
 Clicking a row turns to that spread, and pages decode only as they scroll into view.
+
+**`outline`** shows the document's table of contents: one heading per row, nested entries indented,
+in a single column. Clicking a heading turns to its page, and the entry containing the current page
+stays highlighted. A heading whose destination cannot be resolved is still listed, just not
+clickable. PDFs often have no outline at all, in which case the panel says so.
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
@@ -281,6 +290,9 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
 | `canDownload()` | `boolean` | Whether the original document can be saved. |
 | `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
+| `isDocument()` | `boolean` | Whether the book is a document (a PDF) rather than loose images. |
+| `canOutline()` | `boolean` | Whether the source can supply a table of contents. |
+| `getOutline()` | `Promise<OutlineItem[]>` | The table of contents; empty when there is none. |
 | `container` (getter) | `HTMLElement` | The element the flipbook was mounted into. |
 | `setZoom(scale, center?)` | `void` | Zoom to `scale`, keeping container-local `center` `{x, y}` fixed. |
 | `resetZoom()` | `void` | Zoom back to `1`. |

@@ -3,6 +3,7 @@ import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
 import { registerBuiltins } from './builtins';
 import { ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
+import { Outline } from './outline';
 import type {
   ControlContext,
   ControlDef,
@@ -36,7 +37,9 @@ export class Toolbar {
   /** The flex wrapper docked mode inserts around the container; unwound on destroy. */
   #wrap: HTMLElement | null = null;
   #container: HTMLElement;
-  #thumbs: Thumbnails | null = null;
+  /** The side panel currently in the rail. Only one at a time — they share the space. */
+  #panel: Thumbnails | Outline | null = null;
+  #panelKind: 'thumbnails' | 'outline' | null = null;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -126,8 +129,9 @@ export class Toolbar {
     for (const off of this.#unsubscribe) off();
     this.#unsubscribe = [];
     this.#closePopover();
-    this.#thumbs?.destroy();
-    this.#thumbs = null;
+    this.#panel?.destroy();
+    this.#panel = null;
+    this.#panelKind = null;
     this.#root.remove();
     // Put the container back where it was, so destroy() leaves the DOM as it found it.
     const wrap = this.#wrap;
@@ -339,19 +343,27 @@ export class Toolbar {
     return wrap;
   }
 
-  /** Whether the thumbnail rail is currently showing. */
-  thumbnailsOpen(): boolean {
-    return this.#thumbs !== null;
+  /** Which side panel is showing, if any. */
+  openPanel(): 'thumbnails' | 'outline' | null {
+    return this.#panelKind;
   }
 
-  /** Show or hide the page rail. Rebuilt each time it opens so it always matches the current
-   *  spread grouping, which changes with `spreadMode` and the responsive fallback. */
-  toggleThumbnails(): void {
-    if (this.#thumbs) {
-      this.#thumbs.destroy();
-      this.#thumbs = null;
-    } else {
-      this.#thumbs = new Thumbnails(this.#zine, this.#container);
+  /**
+   * Show one of the side panels, or close it if it is already up. They share the rail beside the
+   * book, so opening one closes the other. Rebuilt each time, so the thumbnail rail always
+   * matches the current spread grouping (which `spreadMode` and the responsive fallback change).
+   */
+  togglePanel(kind: 'thumbnails' | 'outline'): void {
+    const wasOpen = this.#panelKind;
+    this.#panel?.destroy();
+    this.#panel = null;
+    this.#panelKind = null;
+    if (wasOpen !== kind) {
+      this.#panel =
+        kind === 'thumbnails'
+          ? new Thumbnails(this.#zine, this.#container)
+          : new Outline(this.#zine, this.#container);
+      this.#panelKind = kind;
     }
     this.#refresh();
   }
@@ -424,11 +436,25 @@ export function registerWidgets(toolbar: Toolbar): void {
   registerBuiltins();
   defineControl({
     id: 'thumbnails',
-    title: () => (toolbar.thumbnailsOpen() ? 'Hide thumbnails' : 'Show thumbnails'),
+    title: () => (toolbar.openPanel() === 'thumbnails' ? 'Hide thumbnails' : 'Show thumbnails'),
     icon: ICONS.thumbnails,
-    isActive: () => toolbar.thumbnailsOpen(),
+    // Documents only, for now: an image book is already a short, flat list of pictures.
+    isVisible: (ctx) => ctx.zine.isDocument(),
+    isActive: () => toolbar.openPanel() === 'thumbnails',
     action: (ctx) => {
-      toolbar.toggleThumbnails();
+      toolbar.togglePanel('thumbnails');
+      ctx.close();
+    },
+  });
+  defineControl({
+    id: 'outline',
+    title: () => (toolbar.openPanel() === 'outline' ? 'Hide outline' : 'Show outline'),
+    icon: ICONS.outline,
+    // Only a source with a table of contents: image books have none.
+    isVisible: (ctx) => ctx.zine.canOutline(),
+    isActive: () => toolbar.openPanel() === 'outline',
+    action: (ctx) => {
+      toolbar.togglePanel('outline');
       ctx.close();
     },
   });

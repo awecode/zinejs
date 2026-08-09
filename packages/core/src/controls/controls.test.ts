@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Zine, type ZineOptions } from '../zine';
 import { defineControl, DEFAULT_ITEMS, resolveControl } from './registry';
-import type { Source } from '../source/types';
+import type { OutlineItem, Source } from '../source/types';
 import type {
   FlipDirection,
   LayoutMetrics,
@@ -39,6 +39,21 @@ class TextSource extends FakeSource {
 class DownloadableSource extends FakeSource {
   async getDownload(): Promise<{ url: string; filename: string }> {
     return { url: '/brochure.pdf', filename: 'brochure.pdf' };
+  }
+}
+
+/** A document-shaped source, as a PDF is: it has text and an outline, so the side panels apply. */
+class DocSource extends FakeSource {
+  #outline: OutlineItem[];
+  constructor(pageCount: number, outline: OutlineItem[] = []) {
+    super(pageCount);
+    this.#outline = outline;
+  }
+  async getText(): Promise<string> {
+    return '';
+  }
+  async getOutline(): Promise<OutlineItem[]> {
+    return this.#outline;
   }
 }
 
@@ -99,7 +114,7 @@ function scope(el: HTMLElement): HTMLElement {
   let node = el;
   while (
     node.parentElement?.classList.contains('zine-controls-wrap') ||
-    node.parentElement?.classList.contains('zine-thumbs-wrap')
+    node.parentElement?.classList.contains('zine-panel-wrap')
   ) {
     node = node.parentElement;
   }
@@ -328,7 +343,7 @@ describe('controls toolbar', () => {
   });
 
   it('toggles the thumbnail rail from the menu', async () => {
-    const { el } = await mount();
+    const { el } = await mount({ source: new DocSource(8) });
     byLabel(el, 'More')!.click();
     expect(thumbsItem(el).getAttribute('aria-label')).toBe('Show thumbnails');
     thumbsItem(el).click();
@@ -342,9 +357,19 @@ describe('controls toolbar', () => {
     expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
   });
 
+  it('offers neither panel on an image book', async () => {
+    const { el } = await mount(); // plain images: no text, no outline
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).not.toContain('Show thumbnails');
+    expect(labels).not.toContain('Show outline');
+  });
+
   it('gives the rail one row per spread, pairing pages as the book does', async () => {
     // 8 pages in 'double' → 4 rows of two.
-    const { el } = await mount({ spreadMode: 'double' });
+    const { el } = await mount({ source: new DocSource(8), spreadMode: 'double' });
     await openThumbs(el);
     const rows = [...scope(el).querySelectorAll('.zine-thumbs-row')];
     expect(rows).toHaveLength(4);
@@ -353,7 +378,7 @@ describe('controls toolbar', () => {
   });
 
   it('gives a single-page book one page per row and a one-page-wide rail', async () => {
-    const { el } = await mount({ spreadMode: 'single' });
+    const { el } = await mount({ source: new DocSource(8), spreadMode: 'single' });
     await openThumbs(el);
     const rail = scope(el).querySelector('.zine-thumbs')!;
     const rows = [...rail.querySelectorAll('.zine-thumbs-row')];
@@ -366,7 +391,7 @@ describe('controls toolbar', () => {
 
   it('centres a lone cover between the two columns a paired book uses', async () => {
     // 'cover': page 1 alone, then pairs — so the rail keeps two columns and singles out row 0.
-    const { el } = await mount({ spreadMode: 'cover' });
+    const { el } = await mount({ source: new DocSource(8), spreadMode: 'cover' });
     await openThumbs(el);
     const rail = scope(el).querySelector('.zine-thumbs')!;
     const rows = [...rail.querySelectorAll('.zine-thumbs-row')];
@@ -377,11 +402,77 @@ describe('controls toolbar', () => {
   });
 
   it('takes the rail down with the book', async () => {
-    const { zine, el } = await mount();
+    const { zine, el } = await mount({ source: new DocSource(8) });
     await openThumbs(el);
     expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
     zine.destroy();
-    expect(document.querySelector('.zine-thumbs')).toBeNull();
+    expect(document.querySelector('.zine-panel')).toBeNull();
+  });
+});
+
+describe('controls outline panel', () => {
+  const toc = (): OutlineItem[] => [
+    { title: 'Introduction', page: 0, children: [{ title: 'Background', page: 1, children: [] }] },
+    { title: 'Results', page: 4, children: [] },
+    { title: 'Broken link', page: null, children: [] },
+  ];
+  const openOutline = async (el: HTMLElement): Promise<void> => {
+    byLabel(el, 'More')!.click();
+    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
+      .find((b) => (b.getAttribute('aria-label') ?? '').includes('outline'))!
+      .click();
+    await flush();
+    await flush(); // the outline resolves asynchronously
+  };
+
+  it('lists every heading, nested ones indented', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openOutline(el);
+    const rows = [...scope(el).querySelectorAll<HTMLElement>('.zine-outline-row')];
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Introduction',
+      'Background',
+      'Results',
+      'Broken link',
+    ]);
+    // The child is indented one level past its parent.
+    expect(rows[1]!.style.paddingLeft).not.toBe(rows[0]!.style.paddingLeft);
+  });
+
+  it('turns to a heading’s page when clicked', async () => {
+    const { zine, el } = await mount({ source: new DocSource(8, toc()) });
+    await openOutline(el);
+    const results = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-outline-row')].find(
+      (r) => r.textContent === 'Results',
+    )!;
+    results.click();
+    await flush();
+    expect(zine.getPage()).toBe(4);
+  });
+
+  it('shows an unresolvable heading but does not let it be clicked', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openOutline(el);
+    const broken = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-outline-row')].find(
+      (r) => r.textContent === 'Broken link',
+    )!;
+    expect(broken.disabled).toBe(true);
+  });
+
+  it('says so when the document has no outline', async () => {
+    const { el } = await mount({ source: new DocSource(8, []) });
+    await openOutline(el);
+    expect(scope(el).querySelector('.zine-panel-note')?.textContent).toMatch(/no outline/i);
+  });
+
+  it('replaces the thumbnail rail rather than stacking beside it', async () => {
+    // Both panels want the same space, so opening one closes the other.
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openThumbs(el);
+    expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
+    await openOutline(el);
+    expect(scope(el).querySelector('.zine-outline')).not.toBeNull();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
   });
 
   it('hides search on a book whose source has no text', async () => {

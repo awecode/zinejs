@@ -1,4 +1,4 @@
-import type { DownloadInfo, PageContent, Source } from '@zinejs/core';
+import type { DownloadInfo, OutlineItem, PageContent, Source } from '@zinejs/core';
 
 /** Minimal shapes of the pdf.js API we rely on (avoids a hard type dependency). */
 interface PdfPageLike {
@@ -7,10 +7,21 @@ interface PdfPageLike {
   /** Optional: absent on scanned PDFs with no text layer, and on hand-rolled document stubs. */
   getTextContent?(): Promise<{ items: { str?: string; hasEOL?: boolean }[] }>;
 }
+/** A pdf.js outline entry. `dest` is either a named destination or an explicit array whose first
+ *  element references the target page. */
+interface PdfOutlineNode {
+  title?: string;
+  dest?: string | unknown[] | null;
+  items?: PdfOutlineNode[];
+}
 interface PdfDocumentLike {
   numPages: number;
   getPage(pageNumber: number): Promise<PdfPageLike>;
   destroy?(): void;
+  /** Optional: absent on documents without a table of contents, and on hand-rolled stubs. */
+  getOutline?(): Promise<PdfOutlineNode[] | null>;
+  getDestination?(id: string): Promise<unknown[] | null>;
+  getPageIndex?(ref: unknown): Promise<number>;
 }
 interface DocParams {
   url?: string;
@@ -175,6 +186,54 @@ export class PdfSource implements Source {
     const pending = this.#extractText(index).catch(() => '');
     this.#textCache.set(index, pending);
     return pending;
+  }
+
+  /**
+   * The document's table of contents, flattened into the shape the outline panel wants.
+   *
+   * Empty when the PDF has no outline, which is common. Destinations are resolved to page
+   * indices here rather than in the UI: doing it once, up front, keeps clicking an entry
+   * instant, and an entry whose destination cannot be resolved is kept with a null page so the
+   * heading still shows.
+   */
+  async getOutline(): Promise<OutlineItem[]> {
+    const doc = this.#doc;
+    if (!doc || typeof doc.getOutline !== 'function') return [];
+    let nodes: PdfOutlineNode[] | null;
+    try {
+      nodes = await doc.getOutline();
+    } catch {
+      return [];
+    }
+    if (!nodes?.length) return [];
+    const convert = async (list: PdfOutlineNode[]): Promise<OutlineItem[]> =>
+      Promise.all(
+        list.map(async (node) => ({
+          title: (node.title ?? '').trim() || 'Untitled',
+          page: await this.#destinationPage(node.dest),
+          children: node.items?.length ? await convert(node.items) : [],
+        })),
+      );
+    return convert(nodes);
+  }
+
+  /** Resolve a pdf.js destination to a zero-based page index, or null if it cannot be. */
+  async #destinationPage(dest: string | unknown[] | null | undefined): Promise<number | null> {
+    const doc = this.#doc;
+    if (!doc || dest == null) return null;
+    try {
+      // A named destination has to be looked up before it yields the usual explicit array.
+      const explicit =
+        typeof dest === 'string' ? await doc.getDestination?.(dest) : (dest as unknown[]);
+      const ref = explicit?.[0];
+      if (ref == null) return null;
+      // Some destinations carry a bare page number instead of a reference.
+      if (typeof ref === 'number') return ref;
+      const index = await doc.getPageIndex?.(ref);
+      return typeof index === 'number' ? index : null;
+    } catch {
+      return null; // a broken destination should not cost us the whole outline
+    }
   }
 
   /**

@@ -1,3 +1,4 @@
+import { Sidebar } from './sidebar';
 import type { Zine } from '../zine';
 
 /** Width of one page thumbnail, in px. A paired rail fits two of these side by side. */
@@ -21,60 +22,26 @@ const CELL_GAP = 2;
 export class Thumbnails {
   #zine: Zine;
   #doc: Document;
-  #root: HTMLElement;
-  /** Stretches to the book's height; the rail scrolls inside it. */
-  #holder: HTMLElement;
+  #bar: Sidebar;
   #rows: { el: HTMLElement; spread: number }[] = [];
   #observer: IntersectionObserver | null = null;
   #unsubscribe: (() => void)[] = [];
-  #wrap: HTMLElement | null = null;
 
   constructor(zine: Zine, container: HTMLElement) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
+    this.#bar = new Sidebar(doc, container, {
+      className: 'zine-thumbs',
+      label: 'Pages',
+      width: THUMB_WIDTH + RAIL_PAD * 2,
+    });
 
-    this.#holder = doc.createElement('div');
-    this.#holder.className = 'zine-thumbs-holder';
-
-    this.#root = doc.createElement('div');
-    this.#root.className = 'zine-thumbs';
-    this.#root.setAttribute('role', 'listbox');
-    this.#root.setAttribute('aria-label', 'Pages');
-    this.#holder.appendChild(this.#root);
-
-    // The rail sits inside the book's container in overlay mode, where the book's own gesture
-    // handlers would otherwise read a click on a thumbnail as a page tap.
-    for (const type of ['pointerdown', 'pointerup', 'pointermove', 'click', 'dblclick', 'wheel']) {
-      this.#root.addEventListener(type, (e) => e.stopPropagation());
-    }
-
-    this.#place(container);
     this.#build();
 
     const onPage = (): void => this.#markCurrent();
     this.#unsubscribe.push(zine.on('pageChanged', onPage));
     this.#markCurrent();
-  }
-
-  /** Insert the rail as a sibling of the book, so it does not shrink the container the renderer
-   *  measures. Falls back to overlaying if the container has no parent to wrap. */
-  #place(container: HTMLElement): void {
-    const parent = container.parentNode;
-    if (!parent) {
-      this.#holder.classList.add('zine-thumbs-overlay');
-      container.appendChild(this.#holder);
-      return;
-    }
-    // A docked toolbar already wrapped the book; wrap that whole assembly so the rail sits
-    // beside book *and* toolbar rather than between them.
-    const existing = container.closest('.zine-controls-wrap');
-    const target = (existing ?? container) as HTMLElement;
-    const wrap = this.#doc.createElement('div');
-    wrap.className = 'zine-thumbs-wrap';
-    target.parentNode!.insertBefore(wrap, target);
-    wrap.append(this.#holder, target);
-    this.#wrap = wrap;
   }
 
   #build(): void {
@@ -83,10 +50,8 @@ export class Thumbnails {
     // Two columns only if the book actually pairs pages somewhere. A wholly single-page book
     // gets a one-page-wide rail rather than a column of half-empty rows.
     const paired = spreads.some((s) => s.left !== null && s.right !== null);
-    this.#root.classList.toggle('zine-thumbs-solo', !paired);
-    this.#holder.style.width = `${
-      (paired ? THUMB_WIDTH * 2 + CELL_GAP : THUMB_WIDTH) + RAIL_PAD * 2
-    }px`;
+    this.#bar.root.classList.toggle('zine-thumbs-solo', !paired);
+    if (paired) this.#bar.setWidth(THUMB_WIDTH * 2 + CELL_GAP + RAIL_PAD * 2);
 
     for (const [index, spread] of spreads.entries()) {
       const row = this.#doc.createElement('button');
@@ -119,10 +84,9 @@ export class Thumbnails {
       row.appendChild(caption);
 
       row.addEventListener('click', () => {
-        const first = pages.length > 0 ? Math.min(...pages) : undefined;
-        if (first !== undefined) this.#zine.flipTo(first);
+        if (pages.length > 0) this.#zine.flipTo(Math.min(...pages));
       });
-      this.#root.appendChild(row);
+      this.#bar.root.appendChild(row);
       this.#rows.push({ el: row, spread: index });
     }
     this.#observeRows();
@@ -130,7 +94,7 @@ export class Thumbnails {
 
   /** Decode a row's pages the first time it comes into view. */
   #observeRows(): void {
-    const cells = [...this.#root.querySelectorAll<HTMLElement>('.zine-thumbs-cell[data-page]')];
+    const cells = [...this.#bar.root.querySelectorAll<HTMLElement>('.zine-thumbs-cell[data-page]')];
     if (typeof IntersectionObserver === 'undefined') {
       for (const cell of cells) void this.#paint(cell);
       return;
@@ -143,7 +107,7 @@ export class Thumbnails {
           void this.#paint(entry.target as HTMLElement);
         }
       },
-      { root: this.#root, rootMargin: '200px' },
+      { root: this.#bar.root, rootMargin: '200px' },
     );
     for (const cell of cells) this.#observer.observe(cell);
   }
@@ -155,8 +119,8 @@ export class Thumbnails {
     const w = (content as { width: number }).width;
     const h = (content as { height: number }).height;
     if (!w || !h) return;
-    // One page's worth of pixels, whatever the rail's column count, so thumbs stay a
-    // consistent size between modes. Scaled by dpr so they are not soft on a retina screen.
+    // One page's worth of pixels, whatever the rail's column count, so thumbs stay a consistent
+    // size between modes. Scaled by dpr so they are not soft on a retina screen.
     const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     const canvas = this.#doc.createElement('canvas');
     canvas.width = Math.max(1, Math.round(THUMB_WIDTH * dpr));
@@ -177,7 +141,7 @@ export class Thumbnails {
     const current = this.#zine.getSpreadIndex();
     for (const { el, spread } of this.#rows) {
       const active = spread === current;
-      el.classList.toggle('zine-thumbs-active', active);
+      el.classList.toggle('zine-panel-active', active);
       el.setAttribute('aria-selected', String(active));
       if (active) el.scrollIntoView?.({ block: 'nearest' });
     }
@@ -188,13 +152,6 @@ export class Thumbnails {
     this.#unsubscribe = [];
     this.#observer?.disconnect();
     this.#observer = null;
-    this.#holder.remove();
-    const wrap = this.#wrap;
-    if (wrap?.parentNode) {
-      // The rail is gone, so what is left is the book; put it back where the wrapper was.
-      while (wrap.firstChild) wrap.parentNode.insertBefore(wrap.firstChild, wrap);
-      wrap.remove();
-    }
-    this.#wrap = null;
+    this.#bar.destroy();
   }
 }

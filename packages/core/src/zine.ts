@@ -13,7 +13,7 @@ import { hitTest } from './geometry/hitTest';
 import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
-import type { Source } from './source/types';
+import type { OutlineItem, Source } from './source/types';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
 
@@ -318,6 +318,34 @@ export class Zine {
   /** Whether the original document can be downloaded — true for a PDF from a URL or bytes. */
   canDownload(): boolean {
     return typeof this.#source.getDownload === 'function';
+  }
+
+  /**
+   * Whether the book is a document rather than a set of loose images — true for a PDF, false for
+   * an `ImageSource`. Document-shaped features (the page rail, the outline) key off this.
+   *
+   * Inferred from the source implementing document-only capabilities, so a custom source opts in
+   * simply by implementing them.
+   */
+  isDocument(): boolean {
+    return typeof this.#source.getOutline === 'function' || typeof this.#source.getText === 'function';
+  }
+
+  /** Whether the source can supply a table of contents. True for PDFs; the document may still
+   *  turn out to have no outline, in which case {@link getOutline} resolves empty. */
+  canOutline(): boolean {
+    return typeof this.#source.getOutline === 'function';
+  }
+
+  /** The document's table of contents, or an empty list when it has none. */
+  async getOutline(): Promise<OutlineItem[]> {
+    const getOutline = this.#source.getOutline;
+    if (typeof getOutline !== 'function') return [];
+    try {
+      return await getOutline.call(this.#source);
+    } catch {
+      return [];
+    }
   }
 
   /**
