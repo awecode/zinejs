@@ -133,6 +133,7 @@ export class Toolbar {
   mount(options: ControlsOptions): void {
     this.#build(options.items ?? DEFAULT_ITEMS);
     this.#refresh();
+    this.#probeOutline();
   }
 
   destroy(): void {
@@ -363,15 +364,26 @@ export class Toolbar {
    * the panel does not pay for it twice.
    */
   hasOutline(): boolean {
-    if (this.#hasOutline === null) {
-      this.#hasOutline = false; // assume not, until we hear otherwise
-      void this.#zine.getOutline().then((items) => {
-        if (items.length === 0) return;
-        this.#hasOutline = true;
-        this.#refresh();
-      });
-    }
-    return this.#hasOutline;
+    return this.#hasOutline === true;
+  }
+
+  /** Ask the document whether it has an outline, and refresh once the answer lands. Started as
+   *  the toolbar mounts so the button settles into place immediately rather than on first use. */
+  #probeOutline(): void {
+    if (this.#hasOutline !== null || !this.#zine.canOutline()) return;
+    this.#hasOutline = false; // assume not, until we hear otherwise
+    void this.#zine.getOutline().then((items) => {
+      if (items.length === 0) return;
+      this.#hasOutline = true;
+      this.#refresh();
+      // The menu may already be open with the entry missing; rebuild it so it appears.
+      const popover = this.#popover;
+      if (popover) {
+        const def = this.#buttons.find((b) => b.el === popover.trigger)?.def;
+        this.#closePopover();
+        if (def) this.#openMenu(def, popover.trigger as HTMLButtonElement);
+      }
+    });
   }
 
   /**

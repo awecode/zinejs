@@ -416,12 +416,20 @@ describe('controls outline panel', () => {
     { title: 'Results', page: 4, children: [] },
     { title: 'Broken link', page: null, children: [] },
   ];
+  /** The outline control only appears once the document is known to have entries, and that
+   *  answer arrives through a chain of promises rather than in a single microtask. */
+  const outlineItem = async (el: HTMLElement): Promise<HTMLButtonElement> => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      byLabel(el, 'More')?.click();
+      const found = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
+        .find((b) => (b.getAttribute('aria-label') ?? '').includes('outline'));
+      if (found) return found;
+      await flush();
+    }
+    throw new Error('the outline control never appeared');
+  };
   const openOutline = async (el: HTMLElement): Promise<void> => {
-    await flush(); // the control only appears once the outline is known to be non-empty
-    byLabel(el, 'More')!.click();
-    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
-      .find((b) => (b.getAttribute('aria-label') ?? '').includes('outline'))!
-      .click();
+    (await outlineItem(el)).click();
     await flush();
     await flush(); // the panel then resolves and renders it
   };
@@ -463,7 +471,7 @@ describe('controls outline panel', () => {
   it('does not offer the outline when the document has none', async () => {
     // A control whose only outcome is reporting its own emptiness is worse than no control.
     const { el } = await mount({ source: new DocSource(8, []) });
-    await flush(); // the outline lookup settles, and the toolbar refreshes
+    for (let i = 0; i < 5; i++) await flush(); // give the lookup every chance to settle
     byLabel(el, 'More')!.click();
     const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
       b.getAttribute('aria-label'),
@@ -474,12 +482,7 @@ describe('controls outline panel', () => {
 
   it('offers the outline once its entries are known', async () => {
     const { el } = await mount({ source: new DocSource(8, toc()) });
-    await flush();
-    byLabel(el, 'More')!.click();
-    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
-      b.getAttribute('aria-label'),
-    );
-    expect(labels).toContain('Show outline');
+    expect(await outlineItem(el)).toBeTruthy();
   });
 
   it('opens search in the same rail, replacing whichever panel was up', async () => {
@@ -494,10 +497,12 @@ describe('controls outline panel', () => {
 
   it('closes search on a second press of its button', async () => {
     const { el } = await mount({ source: new DocSource(8, toc()) });
-    byLabel(el, 'Search')!.click();
+    // The label flips to 'Hide search' once open, so hold the element rather than re-find it.
+    const button = byLabel(el, 'Search')!;
+    button.click();
     await flush();
     expect(scope(el).querySelector('.zine-search')).not.toBeNull();
-    byLabel(el, 'Search')!.click();
+    button.click();
     await flush();
     expect(scope(el).querySelector('.zine-search')).toBeNull();
   });
