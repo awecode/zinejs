@@ -352,6 +352,67 @@ describe('controls toolbar', () => {
     expect(first.disabled).toBe(false);
   });
 
+  it('applies the same state predicates to a custom render widget', async () => {
+    // The predicates live on ControlDef, so honouring them only for buttons would make the same
+    // field mean different things depending on how a control drew itself.
+    defineControl({
+      id: 'test:widget',
+      title: 'Widget',
+      render: () => {
+        const wrap = document.createElement('div');
+        wrap.className = 'test-widget';
+        wrap.appendChild(document.createElement('input'));
+        return wrap;
+      },
+      isDisabled: (ctx) => !ctx.zine.canFlipPrev(),
+    });
+    const { zine, el } = await mount({
+      source: new FakeSource(12),
+      controls: { items: ['test:widget', 'next'] },
+    });
+    const widget = scope(el).querySelector<HTMLElement>('.test-widget')!;
+    const input = widget.querySelector('input')!;
+    expect(input.disabled).toBe(true); // on page 1, nothing to go back to
+    expect(widget.classList.contains('zine-controls-off')).toBe(true);
+
+    zine.flipTo(6);
+    await flush();
+    expect(input.disabled).toBe(false);
+    expect(widget.classList.contains('zine-controls-off')).toBe(false);
+  });
+
+  it('hides a custom widget that does not apply to the book', async () => {
+    defineControl({
+      id: 'test:hidden',
+      title: 'Hidden',
+      render: () => {
+        const el = document.createElement('div');
+        el.className = 'test-hidden';
+        return el;
+      },
+      isVisible: (ctx) => ctx.zine.canSearch(),
+    });
+    const { el } = await mount({ controls: { items: ['test:hidden'] } });
+    expect(scope(el).querySelector<HTMLElement>('.test-hidden')!.style.display).toBe('none');
+  });
+
+  it('draws a custom widget inside a submenu rather than a plain button', async () => {
+    defineControl({
+      id: 'test:menuwidget',
+      title: 'Menu widget',
+      render: () => {
+        const el = document.createElement('div');
+        el.className = 'test-menu-widget';
+        return el;
+      },
+    });
+    const { el } = await mount({
+      controls: { items: [{ id: 'group', title: 'Group', children: ['test:menuwidget'] }] },
+    });
+    byLabel(el, 'Group')!.click();
+    expect(scope(el).querySelector('.test-menu-widget')).not.toBeNull();
+  });
+
   it('removes a control that does not apply to the book at all', async () => {
     // Unlike the ends of the book, this will not come back, so the space goes with it.
     const { el } = await mount({ controls: { items: ['prev', 'search', 'next'] } });

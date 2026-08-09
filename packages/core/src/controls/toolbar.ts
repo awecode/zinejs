@@ -38,7 +38,8 @@ export class Toolbar {
   #doc: Document;
   #root: HTMLElement;
   #bar: HTMLElement;
-  #buttons: { el: HTMLButtonElement; def: ControlDef }[] = [];
+  /** Every control on screen, buttons and `render` widgets alike, so #refresh can reach them. */
+  #buttons: { el: HTMLElement; def: ControlDef }[] = [];
   #popover: Popover | null = null;
   #unsubscribe: (() => void)[] = [];
   #pageInput: HTMLInputElement | null = null;
@@ -178,9 +179,15 @@ export class Toolbar {
         continue;
       }
       const def = resolveControl(item);
-      const el = def.render
-        ? def.render(this.#context())
-        : this.#button(def, 'zine-controls-btn');
+      let el: HTMLElement;
+      if (def.render) {
+        el = def.render(this.#context());
+        // Registered like any button so its predicates are re-read on every change; #button
+        // does this for the controls it builds.
+        this.#buttons.push({ el, def });
+      } else {
+        el = this.#button(def, 'zine-controls-btn');
+      }
       this.#bar.appendChild(el);
     }
   }
@@ -239,7 +246,13 @@ export class Toolbar {
       if (child === '|') continue;
       const childDef = resolveControl(child);
       if (childDef.isVisible && !childDef.isVisible(ctx)) continue;
-      const item = this.#button(childDef, 'zine-controls-btn', true);
+      let item: HTMLElement;
+      if (childDef.render) {
+        item = childDef.render(this.#context());
+        this.#buttons.push({ el: item, def: childDef });
+      } else {
+        item = this.#button(childDef, 'zine-controls-btn', true);
+      }
       item.setAttribute('role', 'menuitem');
       menu.appendChild(item);
     }
@@ -301,14 +314,27 @@ export class Toolbar {
     event.preventDefault();
   }
 
-  /** Re-read every control's state after the book changes. */
+  /**
+   * Re-read every control's state after the book changes.
+   *
+   * Applies to custom widgets built with `render` as well as to plain buttons: the predicates
+   * are on `ControlDef`, so honouring them only for button-shaped controls would make the same
+   * field mean different things depending on how a control chose to draw itself. A widget may be
+   * any element, so each piece of state is applied in whatever way that element supports.
+   */
   #refresh(): void {
     const ctx = this.#context();
     for (const { el, def } of this.#buttons) {
       // Does not apply to this book at all: take the space back, it is not coming again.
       const applies = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
       if (applies !== undefined) el.style.display = applies ? '' : 'none';
-      el.disabled = def.isDisabled?.(ctx) ?? false;
+
+      const disabled = def.isDisabled?.(ctx) ?? false;
+      // A wrapper element cannot be disabled, so mark it and disable the fields inside.
+      for (const field of this.#formFields(el)) field.disabled = disabled;
+      if (!this.#formFields(el).length) el.setAttribute('aria-disabled', String(disabled));
+      el.classList.toggle('zine-controls-off', disabled);
+
       if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
       if (typeof def.title === 'function') {
         const title = def.title(ctx);
@@ -324,6 +350,12 @@ export class Toolbar {
     if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {
       this.#pageInput.value = String(this.#zine.getPage() + 1);
     }
+  }
+
+  /** The element itself if it can be disabled, else any inputs/buttons it wraps. */
+  #formFields(el: HTMLElement): (HTMLButtonElement | HTMLInputElement)[] {
+    if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) return [el];
+    return [...el.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input')];
   }
 
   /** A submenu is only worth showing if something inside it is. Keeps the overflow button from

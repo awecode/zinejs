@@ -87,6 +87,9 @@ export const CSS = `
   outline-offset: 1px;
 }
 .zine-controls-btn:disabled { opacity: 0.38; cursor: default; }
+/* A custom widget cannot always be disabled itself, so it is marked instead and reads the same. */
+.zine-controls-off { opacity: 0.38; }
+.zine-controls-off[aria-disabled='true'] { pointer-events: none; }
 .zine-controls-btn[aria-pressed="true"],
 .zine-controls-btn[aria-expanded="true"] { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
 
