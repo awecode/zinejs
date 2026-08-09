@@ -194,10 +194,21 @@ export const CSS = `
 /* Thumbnail rail. Wraps the book (and its docked toolbar) so it sits beside them without
    shrinking the container the renderer measures. */
 .zine-thumbs-wrap { display: flex; align-items: stretch; gap: 8px; }
-.zine-thumbs {
+
+/* The holder stretches to the book's height; the rail is absolutely positioned inside it so a
+   long page list scrolls rather than growing the row and running past the bottom of the book. */
+.zine-thumbs-holder {
+  position: relative;
   flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 0;
+}
+.zine-thumbs {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -207,6 +218,7 @@ export const CSS = `
   background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
   color: var(--zine-controls-fg, #f4f4f5);
   font: 500 11px/1.2 system-ui, sans-serif;
+  scrollbar-width: thin;
   touch-action: auto;
   -webkit-user-select: none;
   user-select: none;
@@ -217,6 +229,7 @@ export const CSS = `
 .zine-thumbs-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 2px;
   width: 100%;
   padding: 4px;
@@ -245,8 +258,9 @@ export const CSS = `
   border-radius: 2px;
   overflow: hidden;
 }
-/* A lone cover's empty half keeps its column so pages line up as the book shows them. */
-.zine-thumbs-blank { background: transparent; }
+/* A lone page in a book that pairs elsewhere (a cover, a back page) keeps one page's width and
+   centres, instead of stretching across both columns. */
+.zine-thumbs-row-lone .zine-thumbs-cell { flex: 0 0 calc(50% - 1px); }
 .zine-thumbs-img { display: block; width: 100%; height: auto; }
 .zine-thumbs-caption { flex: 1 0 100%; text-align: center; opacity: 0.7; }
 

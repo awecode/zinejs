@@ -91,6 +91,19 @@ const buttons = (el: HTMLElement): HTMLButtonElement[] => [
 const byLabel = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
   buttons(el).find((b) => b.getAttribute('aria-label') === label);
 
+/** The thumbnails entry inside an open ⋮ menu; its label flips with state. */
+const thumbsItem = (el: HTMLElement): HTMLButtonElement =>
+  [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find((b) =>
+    (b.getAttribute('aria-label') ?? '').includes('thumbnails'),
+  )!;
+
+/** Open the ⋮ menu and turn the rail on. */
+async function openThumbs(el: HTMLElement): Promise<void> {
+  byLabel(el, 'More')!.click();
+  thumbsItem(el).click();
+  await flush();
+}
+
 describe('controls registry', () => {
   it('resolves a registered control by id', () => {
     defineControl({ id: 'test:noop', title: 'Noop' });
@@ -294,20 +307,15 @@ describe('controls toolbar', () => {
 
   it('toggles the thumbnail rail from the menu', async () => {
     const { el } = await mount();
-    const open = (): HTMLButtonElement =>
-      [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find((b) =>
-        (b.getAttribute('aria-label') ?? '').includes('thumbnails'),
-      )!;
-
     byLabel(el, 'More')!.click();
-    expect(open().getAttribute('aria-label')).toBe('Show thumbnails');
-    open().click();
+    expect(thumbsItem(el).getAttribute('aria-label')).toBe('Show thumbnails');
+    thumbsItem(el).click();
     await flush();
     expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
 
     byLabel(el, 'More')!.click();
-    expect(open().getAttribute('aria-label')).toBe('Hide thumbnails'); // label follows state
-    open().click();
+    expect(thumbsItem(el).getAttribute('aria-label')).toBe('Hide thumbnails'); // follows state
+    thumbsItem(el).click();
     await flush();
     expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
   });
@@ -315,36 +323,40 @@ describe('controls toolbar', () => {
   it('gives the rail one row per spread, pairing pages as the book does', async () => {
     // 8 pages in 'double' → 4 rows of two.
     const { el } = await mount({ spreadMode: 'double' });
-    (el as HTMLElement).ownerDocument.body.focus();
-    byLabel(el, 'More')!.click();
-    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
-      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
-      .click();
-    await flush();
+    await openThumbs(el);
     const rows = [...scope(el).querySelectorAll('.zine-thumbs-row')];
     expect(rows).toHaveLength(4);
     expect(rows[0]?.getAttribute('aria-label')).toBe('Pages 1–2');
+    expect(rows[0]?.querySelectorAll('.zine-thumbs-cell')).toHaveLength(2);
   });
 
-  it('gives a single-page book one page per row', async () => {
+  it('gives a single-page book one page per row and a one-page-wide rail', async () => {
     const { el } = await mount({ spreadMode: 'single' });
-    byLabel(el, 'More')!.click();
-    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
-      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
-      .click();
-    await flush();
-    const rows = [...scope(el).querySelectorAll('.zine-thumbs-row')];
+    await openThumbs(el);
+    const rail = scope(el).querySelector('.zine-thumbs')!;
+    const rows = [...rail.querySelectorAll('.zine-thumbs-row')];
     expect(rows).toHaveLength(8);
     expect(rows[0]?.getAttribute('aria-label')).toBe('Page 1');
+    // No page pairs anywhere, so the rail is not two thumbs wide.
+    expect(rail.classList.contains('zine-thumbs-solo')).toBe(true);
+    expect(rows.every((r) => r.querySelectorAll('.zine-thumbs-cell').length === 1)).toBe(true);
+  });
+
+  it('centres a lone cover between the two columns a paired book uses', async () => {
+    // 'cover': page 1 alone, then pairs — so the rail keeps two columns and singles out row 0.
+    const { el } = await mount({ spreadMode: 'cover' });
+    await openThumbs(el);
+    const rail = scope(el).querySelector('.zine-thumbs')!;
+    const rows = [...rail.querySelectorAll('.zine-thumbs-row')];
+    expect(rail.classList.contains('zine-thumbs-solo')).toBe(false); // still two columns
+    expect(rows[0]?.classList.contains('zine-thumbs-row-lone')).toBe(true);
+    expect(rows[0]?.querySelectorAll('.zine-thumbs-cell')).toHaveLength(1); // no blank filler
+    expect(rows[1]?.classList.contains('zine-thumbs-row-lone')).toBe(false);
   });
 
   it('takes the rail down with the book', async () => {
     const { zine, el } = await mount();
-    byLabel(el, 'More')!.click();
-    [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')]
-      .find((b) => (b.getAttribute('aria-label') ?? '').includes('thumbnails'))!
-      .click();
-    await flush();
+    await openThumbs(el);
     expect(scope(el).querySelector('.zine-thumbs')).not.toBeNull();
     zine.destroy();
     expect(document.querySelector('.zine-thumbs')).toBeNull();

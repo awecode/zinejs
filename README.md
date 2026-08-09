@@ -142,10 +142,16 @@ The default layout is:
 `menu` is the `⋮` overflow, holding `['thumbnails', 'download']`.
 
 `thumbnails` toggles a rail of page thumbnails beside the book. Its rows mirror the book's own
-spread grouping — two pages per row in `double`, one in `single`, with the lone first/last pages
-of `cover` and `book` keeping their blank half — so it always matches what the reader sees,
-including the responsive fallback on a narrow container. Clicking a row turns to that spread, and
-pages decode only as they scroll into view.
+spread grouping, so it always matches what the reader sees, including the responsive fallback on a
+narrow container:
+
+- `double` — two pages per row, and the rail is two thumbs wide.
+- `single` — one page per row, and the rail narrows to a single thumb.
+- `cover` / `book` — two columns for the paired interior, with the lone first (and last) page
+  centred between them rather than stretched across.
+
+The rail is as tall as the book and scrolls internally, so a long document never runs past it.
+Clicking a row turns to that spread, and pages decode only as they scroll into view.
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
