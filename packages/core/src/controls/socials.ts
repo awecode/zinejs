@@ -25,7 +25,7 @@ export const SOCIALS: readonly Social[] = [
   },
   {
     id: 'x',
-    label: 'X',
+    label: 'X (Twitter)',
     icon: '<path fill="currentColor" stroke="none" d="M17.53 3h3.06l-6.69 7.64L21.75 21h-6.16l-4.82-6.3L5.24 21H2.18l7.15-8.17L2.25 3h6.32l4.36 5.77L17.53 3Zm-1.07 16.17h1.69L7.62 4.73H5.8l10.66 14.44Z"/>',
     href: (url, title) => `https://twitter.com/intent/tweet?url=${e(url)}&text=${e(title)}`,
   },

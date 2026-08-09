@@ -254,7 +254,7 @@ reader followed a link to it.
 ## Share
 
 The `share` control opens a dialog with a QR code for the current page, the link with a copy
-button, and buttons for Facebook, X, LinkedIn, WhatsApp, Pinterest and email.
+button, and buttons for Facebook, X (Twitter), LinkedIn, WhatsApp, Pinterest and email.
 
 The dialog, its brand marks and the QR encoder are a separate lazy chunk, downloaded the first
 time a reader presses Share — a book nobody shares pays nothing for it. The QR is generated
