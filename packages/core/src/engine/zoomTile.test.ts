@@ -19,14 +19,14 @@ describe('planTiles', () => {
     expect(planTiles(spread, { scale: 1, tx: 0, ty: 0 }, viewport)).toEqual([]);
   });
 
-  it('asks each page for the quarter of itself still on screen', () => {
-    // At 2x anchored top-left, the viewport covers the top-left quarter of the spread — which is
-    // the left half of page 0 and nothing of page 1.
+  it('asks only for the part of a page still on screen', () => {
+    // At 2x anchored top-left the viewport shows 400x300 of the spread: the whole width of page 0
+    // (it is 400 wide), the top half of its height, and nothing of page 1.
     const plans = planTiles(spread, { scale: 2, tx: 0, ty: 0 }, viewport);
     expect(plans).toHaveLength(1);
     expect(plans[0]!.index).toBe(0);
-    expect(plans[0]!.request.region).toEqual({ x: 0, y: 0, width: 1, height: 1 });
-    expect(plans[0]!.dest).toEqual({ x: 0, y: 0, width: 400, height: 600 });
+    expect(plans[0]!.request.region).toEqual({ x: 0, y: 0, width: 1, height: 0.5 });
+    expect(plans[0]!.dest).toEqual({ x: 0, y: 0, width: 400, height: 300 });
   });
 
   it('follows the reader across the gutter as they pan', () => {

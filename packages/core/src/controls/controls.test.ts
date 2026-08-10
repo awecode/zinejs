@@ -431,10 +431,12 @@ describe('controls toolbar', () => {
 
   it('switches between one page and two from the menu', async () => {
     const { zine, el } = await mount({ source: new FakeSource(12), spreadMode: 'double' });
+    // The More trigger toggles, so only press it when the menu is actually closed — selecting an
+    // entry closes it too. 'First page' and 'Last page' also say "page", hence the anchored match.
     const entry = (): HTMLButtonElement => {
-      byLabel(el, 'More')!.click();
+      if (!scope(el).querySelector('.zine-controls-menu')) byLabel(el, 'More')!.click();
       return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
-        (b) => (b.getAttribute('aria-label') ?? '').includes('page'),
+        (b) => /^Show (one|two) page/.test(b.getAttribute('aria-label') ?? ''),
       )!;
     };
 
