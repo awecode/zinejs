@@ -82,7 +82,8 @@ new Zine(document.getElementById('book'), {
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
-| `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread; `0` disables the responsive fallback. |
+| `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread. |
+| `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
 | `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
 | `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
@@ -94,6 +95,10 @@ new Zine(document.getElementById('book'), {
 - `single` — one page per spread.
 - `cover` — lone first page, then paired (magazine/catalog cover).
 - `book` — lone first **and** last page.
+
+Below `singlePageThreshold` the container is too narrow for two pages, so the book shows one at a
+time whatever `spreadMode` says. Pass `responsiveSpread: false` to hold the configured mode at
+every width, or change it later with `setResponsiveSpread()`.
 
 ### `zoom` options
 
@@ -339,6 +344,9 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `getSpreads()` | `readonly Spread[]` | How pages are grouped, one entry per spread. Reflects `spreadMode` and the responsive fallback. |
 | `getSpreadIndex()` | `number` | Which spread is on screen; indexes into `getSpreads()`. |
 | `getDirection()` | `'ltr' \| 'rtl'` | Reading direction. |
+| `getResponsiveSpread()` | `boolean` | Whether a narrow container may override `spreadMode`. |
+| `setResponsiveSpread(on)` | `void` | Allow or forbid that override, re-laying out at once. |
+| `isResponsiveSingle()` | `boolean` | Whether one page is showing *because* the container is narrow. |
 | `getPageImage(index)` | `Promise<PageContent \| null>` | One page's raster, for thumbnails or export. `null` if it cannot be decoded. |
 | `getZoom()` | `number` | Current zoom scale (`1` = fit). |
 | `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |

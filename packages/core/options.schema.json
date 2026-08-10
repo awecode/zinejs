@@ -127,6 +127,11 @@
       "default": true,
       "description": "Keep the current page in the URL hash (#page=12), so a link opens where the reader was. Only the 'page' key is touched."
     },
+    "responsiveSpread": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether a narrow container may override spreadMode and show one page at a time. False holds the configured mode at every width."
+    },
     "disableContextMenu": {
       "type": "boolean",
       "default": false,

@@ -119,6 +119,15 @@ export interface ZineOptions {
   /** Container widths below this (px) switch to one page per spread; default 640. */
   singlePageThreshold?: number;
   /**
+   * Whether a narrow container may override `spreadMode` and show one page at a time. Default
+   * true.
+   *
+   * Set false to hold the configured mode at every width — a two-page spread stays two pages on
+   * a phone, however small. (`singlePageThreshold: 0` has the same effect; this says it out
+   * loud, and can be changed at runtime with {@link Zine.setResponsiveSpread}.)
+   */
+  responsiveSpread?: boolean;
+  /**
    * The built-in toolbar. Shown by default; pass `false` to render none, or an object to choose
    * its position and which controls appear.
    */
@@ -165,6 +174,7 @@ export class Zine {
   #singlePageThreshold: number;
   #singlePage = false;
   #narrow = false; // responsive: container currently below singlePageThreshold
+  #responsiveSpread: boolean;
   #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
   #startPageOption: number | undefined;
   #deepLinkEnabled: boolean;
@@ -246,6 +256,7 @@ export class Zine {
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
+    this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
     this.#startPageOption = options.startPage;
     // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
@@ -314,6 +325,41 @@ export class Zine {
   /** Reading direction, which mirrors each spread's left/right sides. */
   getDirection(): Direction {
     return this.#direction;
+  }
+
+  /** Whether a narrow container is allowed to override `spreadMode` with one page at a time. */
+  getResponsiveSpread(): boolean {
+    return this.#responsiveSpread;
+  }
+
+  /**
+   * Whether the book is showing one page at a time *because the container is narrow*, rather
+   * than because it was asked to. False when `responsiveSpread` is off.
+   */
+  isResponsiveSingle(): boolean {
+    return this.#narrow;
+  }
+
+  /**
+   * Allow or forbid the narrow-container override, and re-lay out at once.
+   *
+   * Turning it off holds the configured `spreadMode` at every width; turning it back on
+   * re-measures, so a book on a narrow screen collapses to single again straight away.
+   */
+  setResponsiveSpread(enabled: boolean): void {
+    if (enabled === this.#responsiveSpread) return;
+    this.#responsiveSpread = enabled;
+    if (!enabled) {
+      if (!this.#narrow) return; // nothing was being overridden
+      this.#narrow = false;
+      this.#rebuildSpreads();
+    } else {
+      const width = this.#renderer?.measure().containerWidth;
+      if (width === undefined) return;
+      this.#narrow = false; // let #applySinglePage see a real change and rebuild
+      this.#applySinglePage(width);
+    }
+    void this.#renderCurrent();
   }
 
   /**
@@ -1221,9 +1267,16 @@ export class Zine {
   }
 
   #applySinglePage(containerWidth: number): void {
-    const narrow = shouldSinglePage(containerWidth, this.#singlePageThreshold);
+    const narrow =
+      this.#responsiveSpread && shouldSinglePage(containerWidth, this.#singlePageThreshold);
     if (narrow === this.#narrow) return;
     this.#narrow = narrow;
+    this.#rebuildSpreads();
+  }
+
+  /** Regroup the pages after something changes the layout, keeping the reader on the page they
+   *  were looking at even though its spread index may have moved. */
+  #rebuildSpreads(): void {
     const mode = this.#effectiveMode();
     this.#singlePage = mode === 'single';
     this.#spreads = buildSpreads(this.#source.pageCount, { direction: this.#direction, mode });
@@ -1429,7 +1482,7 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(`Zine: curl must be one of ${CURL_TYPES.join(', ')}; got ${JSON.stringify(curl)}.`);
   }
 
-  for (const flag of ['deepLink', 'disableContextMenu'] as const) {
+  for (const flag of ['deepLink', 'disableContextMenu', 'responsiveSpread'] as const) {
     if (o[flag] !== undefined && typeof o[flag] !== 'boolean') {
       throw new Error(`Zine: ${flag} must be a boolean; got ${typeName(o[flag])}.`);
     }

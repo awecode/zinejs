@@ -30,6 +30,7 @@ describe('options.schema.json', () => {
         'controls',
         'deepLink',
         'disableContextMenu',
+        'responsiveSpread',
       ].sort(),
     );
   });
