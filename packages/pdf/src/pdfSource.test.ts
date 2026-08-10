@@ -246,7 +246,8 @@ describe('PdfSource — getText', () => {
 describe('PdfSource — zoom tiles', () => {
   /** A document whose viewport tracks scale, so a tile's dimensions are meaningful. */
   const zoomDoc = () => {
-    const render = vi.fn(() => ({ promise: Promise.resolve() }));
+    // Typed parameter, not `() =>`: it is what lets the assertions below read back the transform.
+    const render = vi.fn((_opts: { transform?: number[] }) => ({ promise: Promise.resolve() }));
     const page = {
       getViewport: ({ scale }: { scale: number }) => ({ width: 120 * scale, height: 160 * scale }),
       render,
@@ -277,8 +278,7 @@ describe('PdfSource — zoom tiles', () => {
 
     // Without the shift pdf.js would paint the top-left corner and the reader would pan to find
     // the wrong part of the page magnified.
-    const { transform } = render.mock.calls[0]![0] as unknown as { transform: number[] };
-    expect(transform).toEqual([1, 0, 0, 1, -0.25 * 480, -0.5 * 640]);
+    expect(render.mock.calls[0]?.[0].transform).toEqual([1, 0, 0, 1, -0.25 * 480, -0.5 * 640]);
   });
 
   it('caps how far it will rasterize, so a deep zoom cannot run away with memory', async () => {
