@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Zine, type ZineOptions } from '../zine';
 import { defineControl, DEFAULT_ITEMS, resolveControl } from './registry';
+import { CSS } from './styles';
 import type { OutlineItem, Source } from '../source/types';
 import type {
   FlipDirection,
@@ -453,6 +454,74 @@ describe('controls toolbar', () => {
     zine.toggleSpreadMode();
     await flush();
     expect(zine.getSpreadMode()).toBe('cover'); // the lone first page comes back
+  });
+
+  it('offers the way back to two pages even once one page has narrowed the container', async () => {
+    // Regression: a book showing one page is narrower than the same book showing two, so the
+    // container could drop under the responsive threshold *because* of the switch. That read as
+    // "a narrow container is forcing one page", which hid the control and pinned the layout —
+    // stranding the reader with no way back.
+    const renderer = new MockRenderer();
+    let width = 800;
+    renderer.measure = (): LayoutMetrics => ({
+      containerWidth: width,
+      containerHeight: 600,
+      pageWidth: 400,
+      pageHeight: 600,
+    });
+    const { zine, el } = await mount({
+      source: new FakeSource(12),
+      spreadMode: 'cover',
+      renderer,
+      singlePageThreshold: 640,
+    });
+
+    zine.toggleSpreadMode();
+    width = 545; // the same book, half as wide, now under the threshold
+    zine.update();
+    await flush();
+
+    expect(zine.isResponsiveSingle()).toBe(false); // nothing is being overridden: we asked for this
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toContain('Show two pages');
+
+    zine.toggleSpreadMode();
+    await flush();
+    expect(zine.getSpreadMode()).toBe('cover');
+    expect(zine.isSinglePage()).toBe(false); // and it actually took effect
+  });
+
+  it('lets the wrapped book shrink back to a shorter layout', () => {
+    // Regression: switching to one page and back left the extra height behind. The book's
+    // aspect-ratio was restored correctly but ignored, because a flex item's automatic minimum
+    // size floors it at its content and the canvas had already grown. Asserted against the
+    // stylesheet rather than a measured box: the test DOM has no layout engine.
+    for (const wrap of ['.zine-controls-wrap', '.zine-arrows-wrap']) {
+      const rule = CSS.split('\n').find((l) => l.startsWith(`${wrap} > *`));
+      expect(rule, `${wrap} child rule`).toContain('min-height: 0');
+    }
+  });
+
+  it('announces a layout change once, and stays quiet when nothing regrouped', async () => {
+    // Consumers size their own chrome around the book, whose proportions change with the layout.
+    const { zine } = await mount({ source: new FakeSource(12), spreadMode: 'cover' });
+    const seen: Array<{ mode: string; singlePage: boolean }> = [];
+    zine.on('spreadChanged', (e) => seen.push(e));
+
+    zine.toggleSpreadMode();
+    await flush();
+    expect(seen).toEqual([{ mode: 'single', singlePage: true }]);
+
+    zine.setSpreadMode('single'); // already there
+    await flush();
+    expect(seen).toHaveLength(1);
+
+    zine.toggleSpreadMode();
+    await flush();
+    expect(seen[1]).toEqual({ mode: 'cover', singlePage: false });
   });
 
   it('keeps the reader on the same page across a layout change', async () => {

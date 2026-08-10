@@ -183,6 +183,8 @@ export class Zine {
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
   #singlePage = false;
+  /** Last layout announced via `spreadChanged`, so a rebuild that changes nothing stays quiet. */
+  #effectiveModeShown: SpreadMode | null = null;
   #narrow = false; // responsive: container currently below singlePageThreshold
   #responsiveSpread: boolean;
   #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
@@ -359,6 +361,11 @@ export class Zine {
   setSpreadMode(mode: SpreadMode): void {
     if (mode === this.#spreadMode) return;
     this.#spreadMode = mode;
+    // The narrow measurement was taken under the layout we are leaving, and a book showing one
+    // page is narrower than the same book showing two. Holding on to it would let a container
+    // that only shrank *because* of one-page mode veto the way back out. Drop it and let the
+    // next measurement decide afresh.
+    this.#narrow = false;
     this.#rebuildSpreads();
     void this.#renderCurrent();
   }
@@ -387,9 +394,13 @@ export class Zine {
   /**
    * Whether the book is showing one page at a time *because the container is narrow*, rather
    * than because it was asked to. False when `responsiveSpread` is off.
+   *
+   * A book already set to `single` is not being overridden, however narrow it is: asking for one
+   * page makes the book itself narrower, so reporting that as an override would strand the reader
+   * in a layout they could no longer switch out of.
    */
   isResponsiveSingle(): boolean {
-    return this.#narrow;
+    return this.#narrow && this.#spreadMode !== 'single';
   }
 
   /**
@@ -1335,9 +1346,13 @@ export class Zine {
    *  were looking at even though its spread index may have moved. */
   #rebuildSpreads(): void {
     const mode = this.#effectiveMode();
+    const changed = mode !== this.#effectiveModeShown;
+    this.#effectiveModeShown = mode;
     this.#singlePage = mode === 'single';
     this.#spreads = buildSpreads(this.#source.pageCount, { direction: this.#direction, mode });
     this.#current = this.#spreadIndexForPage(this.#currentPage);
+    // The book's proportions change with the layout, so consumers sizing around it need to know.
+    if (changed) this.#emitter.emit('spreadChanged', { mode, singlePage: this.#singlePage });
   }
 
   async #renderCurrent(): Promise<void> {

@@ -21,7 +21,10 @@ export const CSS = `
 /* Side by side: the bar is only as wide as its buttons, and both are vertically centred. */
 .zine-controls-wrap-left,
 .zine-controls-wrap-right { flex-direction: row; align-items: center; }
-.zine-controls-wrap > * { flex: 0 0 auto; min-width: 0; }
+/* min-height:0 matters as much as min-width here. A flex item's automatic minimum size floors it
+   at its content, so once the canvas has grown for a taller layout the book cannot shrink back —
+   its aspect-ratio is restored but ignored, leaving the extra height behind. */
+.zine-controls-wrap > * { flex: 0 0 auto; min-width: 0; min-height: 0; }
 
 .zine-controls {
   position: relative;
@@ -205,7 +208,7 @@ export const CSS = `
   gap: 4px;
   min-width: 0;
 }
-.zine-arrows-wrap > *:not(.zine-arrow) { flex: 1 1 auto; min-width: 0; }
+.zine-arrows-wrap > *:not(.zine-arrow) { flex: 1 1 auto; min-width: 0; min-height: 0; }
 .zine-arrow {
   flex: 0 0 auto;
   display: inline-flex;

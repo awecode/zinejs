@@ -1,3 +1,5 @@
+import type { SpreadMode } from './spread.js';
+
 export type Listener<T> = (payload: T) => void;
 
 /** Events typed as `void` are emitted with no payload argument. */
@@ -46,6 +48,8 @@ export interface ZineEventMap {
   flipStart: { from: number; to: number };
   flipEnd: { page: number };
   pageChanged: { page: number };
+  /** Pages regrouped: the spread mode changed, or a narrow container forced one page. */
+  spreadChanged: { mode: SpreadMode; singlePage: boolean };
   zoomChanged: { scale: number };
   sourceError: { index: number; error: unknown };
   rendererFallback: { from: string; to: string };

@@ -68,10 +68,14 @@ const controlsEl = document.getElementById('controls')!;
 const statusEl = document.getElementById('status')!;
 const debugEl = document.getElementById('debug')!;
 
-// The library sets the container's aspect-ratio to the book once pages load. We only hint
-// the sample aspect here so the CSS can cap the width to keep the height on-screen.
-const sampleAspect = (opt.spreadMode === 'single' ? 1 : 2) * (kind === 'pdf' ? 612 / 792 : 1200 / 1548);
-book.style.setProperty('--book-ar', String(sampleAspect));
+// The library sets the container's aspect-ratio to the book once pages load. We only hint the
+// sample aspect here so the CSS can cap the width to keep the height on-screen. It has to follow
+// the layout: the cap is what stops a one-page book, twice as tall, running off the screen.
+const pageAspect = kind === 'pdf' ? 612 / 792 : 1200 / 1548;
+const hintAspect = (single: boolean): void => {
+  book.style.setProperty('--book-ar', String((single ? 1 : 2) * pageAspect));
+};
+hintAspect(opt.spreadMode === 'single');
 
 // ---- Controls ----------------------------------------------------------------
 function selectControl<T extends string>(
@@ -211,6 +215,9 @@ if (q.get('clickdebug') !== '0') {
 
 zine.on('pageChanged', updateStatus);
 zine.on('zoomChanged', updateStatus);
+// Keep the width cap in step with the layout, however it changed: the toolbar's page-layout
+// switch, or the responsive fallback on a narrow window.
+zine.on('spreadChanged', (e) => hintAspect(e.singlePage));
 zine.on('rendererFallback', (e) => {
   activeRenderer = e.to;
   updateDebug();

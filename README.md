@@ -390,6 +390,7 @@ Subscribe with `zine.on(event, listener)`; it returns an unsubscribe function.
 | `flipStart` | `{ from: number; to: number }` | A page turn begins. |
 | `flipEnd` | `{ page: number }` | A page turn finishes. |
 | `pageChanged` | `{ page: number }` | The current page changes. |
+| `spreadChanged` | `{ mode: SpreadMode; singlePage: boolean }` | Pages regroup, from `setSpreadMode`/`toggleSpreadMode` or a narrow container. Useful for sizing your own chrome, since the book's proportions change with it. |
 | `zoomChanged` | `{ scale: number }` | The zoom scale changes. |
 | `sourceError` | `{ index: number; error: unknown }` | A page fails to load/decode. |
 | `rendererFallback` | `{ from: string; to: string }` | The renderer falls back (e.g. `webgl2` → `css`). |
