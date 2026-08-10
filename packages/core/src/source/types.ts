@@ -13,8 +13,15 @@ export interface Source {
    * synchronously-known page count (e.g. ImageSource) can omit it.
    */
   open?(): Promise<void>;
-  /** Decode/resolve a single page to a raster. */
-  get(index: number): Promise<PageContent>;
+  /**
+   * Decode/resolve a single page to a raster.
+   *
+   * `opts` is a hint, not a contract: it is passed only while the reader is zoomed in, and a
+   * source is free to ignore it and return its normal full-page raster. Sources backed by a
+   * fixed-resolution original (images) have nothing sharper to offer; vector sources (PDF) can
+   * re-rasterize the requested region to recover the detail that magnifying pixels loses.
+   */
+  get(index: number, opts?: PageRequest): Promise<PageContent>;
   /** Hint that these pages will be needed soon; out-of-range indices are ignored. */
   prefetch(indices: number[]): void;
   /** Release any decoded resources. */
@@ -41,6 +48,20 @@ export interface Source {
    * the document has none — PDFs frequently do not.
    */
   getOutline?(): Promise<OutlineItem[]>;
+}
+
+/**
+ * A request for part of a page at a particular magnification, sent when the reader zooms in.
+ *
+ * A source that honours it returns a raster of `region` alone, rendered at `scale` times the
+ * resolution it would normally use. Returning the whole page instead is always valid: the engine
+ * tells the two apart by comparing the raster's aspect against the region's.
+ */
+export interface PageRequest {
+  /** How much sharper than the fit-to-screen raster to render, matching the reader's zoom. */
+  scale: number;
+  /** The visible part of the page, as fractions of its width and height in [0,1]. */
+  region: { x: number; y: number; width: number; height: number };
 }
 
 /** One entry in a document's table of contents. */

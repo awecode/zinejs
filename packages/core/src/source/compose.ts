@@ -1,5 +1,5 @@
 import type { PageContent } from '../renderer/types';
-import type { DownloadInfo, OutlineItem, Source } from './types';
+import type { DownloadInfo, OutlineItem, PageRequest, Source } from './types';
 
 export interface CompositionOptions {
   /** Image URL prepended as a lone front cover (adds a page). */
@@ -109,13 +109,15 @@ class CompositeSource implements Source {
     return this.#base.pageCount + (this.#front !== null ? 1 : 0) + (this.#back !== null ? 1 : 0);
   }
 
-  get(index: number): Promise<PageContent> {
+  get(index: number, opts?: PageRequest): Promise<PageContent> {
     const frontOffset = this.#front !== null ? 1 : 0;
+    // Covers and page overrides are images: they have no detail beyond their own resolution, so
+    // the zoom request has nothing to act on and is dropped rather than forwarded.
     if (this.#front !== null && index === 0) return this.#image(this.#front);
     if (this.#back !== null && index === this.pageCount - 1) return this.#image(this.#back);
     const src = index - frontOffset;
     const override = this.#resolved.get(src);
-    return override !== undefined ? this.#image(override) : this.#base.get(src);
+    return override !== undefined ? this.#image(override) : this.#base.get(src, opts);
   }
 
   prefetch(indices: number[]): void {

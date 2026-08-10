@@ -110,6 +110,28 @@ every width, or change it later with `setResponsiveSpread()`.
 | `doubleClick` | `number[] \| false` | `[1, 2, 4]` | Zoom levels cycled by double-click (wraps); `false` disables. |
 | `doubleClickInFlipZone` | `boolean` | off in `'edge'`, on in `'half'` | Listen for double-click zoom inside click-to-flip zones. Enabling makes clicks wait out `clickFlipDelay`. |
 
+### Sharpness while zoomed
+
+Zooming is a view transform, so by default it magnifies the pixels of a raster made to fit the
+screen. PDFs are vector, so `PdfSource` re-renders the visible region at the magnification being
+viewed and the engine lays that over the page: text stays crisp all the way to `zoom.max`.
+
+Only the part on screen is rasterized, so the cost stays flat however far in you go, and the
+re-render is debounced so a pinch or pan does not rasterize on every frame. Image books are
+already at their source resolution and are unaffected.
+
+A custom `Source` can do the same. `get` takes an optional second argument while the reader is
+zoomed:
+
+```ts
+get(index: number, opts?: PageRequest): Promise<PageContent>
+// PageRequest: { scale: number, region: { x, y, width, height } }  // region in 0..1 of the page
+```
+
+It is a hint. Ignore it and return the whole page as usual, which is what a source backed by a
+fixed-resolution original should do; the engine notices it did not get the region it asked for and
+leaves the normal raster on screen.
+
 ## Controls
 
 A toolbar is rendered below the book by default, in normal flow so it never covers a page.

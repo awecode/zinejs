@@ -22,6 +22,7 @@ import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types'
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { DownloadInfo, OutlineItem, Source } from './source/types';
+import { planTiles, sameTile, ZoomOverlay, type TilePage } from './engine/zoomTile';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
 
@@ -44,6 +45,10 @@ const LONE_PAGE_FLIP_SCALE = 1.55;
 
 /** Characters of surrounding text shown on either side of a search match. */
 const EXCERPT_PAD = 32;
+
+/** Quiet period before re-rendering the zoomed region, so a pinch or pan does not rasterize
+ *  on every frame. Long enough to coalesce a gesture, short enough to feel immediate on release. */
+const ZOOM_TILE_DELAY = 120;
 
 /** One page that matched a {@link Zine.search} query. */
 export interface SearchHit {
@@ -239,6 +244,11 @@ export class Zine {
   #pendingUpgrades = new Set<number>();
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
+  /** Crisp re-renders of the visible region while zoomed in; null until the reader zooms. */
+  #zoomOverlay: ZoomOverlay | null = null;
+  /** Guards against an out-of-date tile landing after the view has already moved on. */
+  #tileGeneration = 0;
+  #tileTimer: ReturnType<typeof setTimeout> | null = null;
   #ready: Promise<void>;
 
   /** Stable seek API: drive the fold to a fixed progress without animating (visual regression). */
@@ -696,6 +706,7 @@ export class Zine {
     this.#tx = tx;
     this.#ty = ty;
     this.#renderer.setViewTransform(s2, tx, ty);
+    this.#refreshZoomTiles();
     this.#emitter.emit('zoomChanged', { scale: s2 });
   }
 
@@ -732,6 +743,10 @@ export class Zine {
     this.#unbindDblClick?.();
     this.#unbindContextMenu?.();
     this.#unbindInput?.();
+    if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
+    this.#tileGeneration++; // strand any tile still resolving
+    this.#zoomOverlay?.destroy();
+    this.#zoomOverlay = null;
     this.#renderer?.destroy();
     this.#renderer = null;
     this.#source.destroy();
@@ -929,6 +944,7 @@ export class Zine {
       this.#tx = tx;
       this.#ty = ty;
       this.#renderer.setViewTransform(this.#scale, tx, ty);
+      this.#refreshZoomTiles();
       return;
     }
     // An armed corner press becomes a real flip once it moves past the threshold.
@@ -1365,6 +1381,9 @@ export class Zine {
   #paintSpread(spread: Spread, content: SpreadContent): void {
     this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
     this.#applyContainerAspect();
+    // Whatever is overlaid was rendered for the pages that just left; drop it and re-request.
+    this.#zoomOverlay?.clear();
+    this.#refreshZoomTiles();
   }
 
   /** Match the container's aspect-ratio to the book so it fits with no letterbox bars.
@@ -1396,6 +1415,92 @@ export class Zine {
     if (spread && (spread.left === index || spread.right === index)) {
       void this.#renderCurrent();
     }
+  }
+
+  /**
+   * Ask the source for a crisp render of whatever is visible, and lay it over the magnified page.
+   *
+   * Zooming is only a view transform, so without this the reader is magnifying the pixels of a
+   * raster made to fit the screen. A vector source can do better; one backed by a fixed-resolution
+   * original cannot, and says so by handing back a whole page, which is dropped.
+   *
+   * Debounced: panning and pinching move the view continuously, and rasterizing a PDF region is
+   * far too slow to do per frame. The blurry page stays up in the meantime, so the delay costs
+   * sharpness briefly rather than showing a gap.
+   */
+  #refreshZoomTiles(): void {
+    if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
+
+    if (this.#scale <= 1) {
+      this.#zoomOverlay?.clear();
+      this.#tileGeneration++; // abandon anything in flight: it is no longer wanted
+      return;
+    }
+    this.#tileTimer = setTimeout(() => {
+      this.#tileTimer = null;
+      void this.#renderZoomTiles();
+    }, ZOOM_TILE_DELAY);
+  }
+
+  async #renderZoomTiles(): Promise<void> {
+    const renderer = this.#renderer;
+    const spread = this.#spreads[this.#current];
+    if (!renderer || !spread || this.#scale <= 1) return;
+
+    const m = renderer.measure();
+    const box = m.content ?? m.book;
+    if (!box) return; // no measured page box: nothing to map screen pixels back onto
+
+    // In a two-page spread each page owns half the box; a lone page owns all of it.
+    const halves: TilePage[] = [];
+    const lone = spread.left === null || spread.right === null;
+    const width = lone ? box.width : box.width / 2;
+    if (spread.left !== null) halves.push({ index: spread.left, rect: { ...box, width } });
+    if (spread.right !== null) {
+      halves.push({ index: spread.right, rect: { ...box, x: box.x + (lone ? 0 : width), width } });
+    }
+
+    const view = { scale: this.#scale, tx: this.#tx, ty: this.#ty };
+    const viewport = { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
+    const plans = planTiles(halves, view, viewport);
+
+    const current = this.#zoomOverlay?.shown ?? [];
+    const unchanged =
+      plans.length === current.length && plans.every((p, i) => sameTile(p, current[i]!));
+    if (unchanged) return;
+
+    const generation = ++this.#tileGeneration;
+    const drawn = await Promise.all(
+      plans.map(async (plan) => {
+        try {
+          const content = await this.#source.get(plan.index, plan.request);
+          // A source free to ignore the request returns the whole page. Its aspect gives it away:
+          // a tile matches the region it was asked for. Drawing a full page into the region's box
+          // would squash it, so treat that as "nothing sharper available".
+          const want = (plan.dest.width / plan.dest.height) * 1;
+          const got = content.width / content.height;
+          if (Math.abs(want - got) / want > 0.02) return null;
+          return { plan, content };
+        } catch (error) {
+          // A tile is an enhancement: the readable, blurry page is still on screen underneath.
+          this.#emitter.emit('sourceError', { index: plan.index, error });
+          return null;
+        }
+      }),
+    );
+    if (generation !== this.#tileGeneration || this.#scale <= 1) return; // the view moved on
+    const tiles = drawn.filter((t): t is NonNullable<typeof t> => t !== null);
+    if (tiles.length === 0) return; // leave whatever is up; clearing would only flicker
+
+    this.#zoomOverlay ??= this.#createZoomOverlay();
+    this.#zoomOverlay?.draw(tiles, view, viewport);
+  }
+
+  #createZoomOverlay(): ZoomOverlay | null {
+    const doc = this.#container.ownerDocument as Document | undefined;
+    // Same guard as #setupA11y: tests mount against bare EventTargets with no real DOM.
+    if (!doc || typeof this.#container.append !== 'function') return null;
+    return new ZoomOverlay(doc, this.#container);
   }
 
   /** Apply any upgrade that arrived mid-flip, now that the book has settled. */

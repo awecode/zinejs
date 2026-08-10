@@ -243,6 +243,76 @@ describe('PdfSource — getText', () => {
   });
 });
 
+describe('PdfSource — zoom tiles', () => {
+  /** A document whose viewport tracks scale, so a tile's dimensions are meaningful. */
+  const zoomDoc = () => {
+    const render = vi.fn(() => ({ promise: Promise.resolve() }));
+    const page = {
+      getViewport: ({ scale }: { scale: number }) => ({ width: 120 * scale, height: 160 * scale }),
+      render,
+    };
+    const getPage = vi.fn(async () => page);
+    return { render, getPage, doc: { numPages: 3, getPage, destroy: () => {} } as unknown as PdfSrc };
+  };
+
+  const tile = { scale: 4, region: { x: 0.25, y: 0.5, width: 0.5, height: 0.25 } };
+
+  it('rasterizes only the visible region, at the magnification being viewed', async () => {
+    const { doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    const canvas = (await src.get(0, tile)) as HTMLCanvasElement;
+    // Page is 120x160 at 1x, so 480x640 at 4x; the region is half its width and a quarter its
+    // height. The tile covers just that: the whole point is that it does not grow with the zoom.
+    expect(canvas.width).toBe(240);
+    expect(canvas.height).toBe(160);
+  });
+
+  it('offsets the page so the requested region lands in the tile', async () => {
+    const { render, doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+    await src.get(0, tile);
+
+    // Without the shift pdf.js would paint the top-left corner and the reader would pan to find
+    // the wrong part of the page magnified.
+    const { transform } = render.mock.calls[0]![0] as unknown as { transform: number[] };
+    expect(transform).toEqual([1, 0, 0, 1, -0.25 * 480, -0.5 * 640]);
+  });
+
+  it('caps how far it will rasterize, so a deep zoom cannot run away with memory', async () => {
+    const { doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    const full = { x: 0, y: 0, width: 1, height: 1 };
+    const at6 = (await src.get(0, { scale: 6, region: full })) as HTMLCanvasElement;
+    const at100 = (await src.get(0, { scale: 100, region: full })) as HTMLCanvasElement;
+    expect(at100.width).toBe(at6.width);
+  });
+
+  it('serves the ordinary cached page when the reader is not zoomed', async () => {
+    const { getPage, doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    await src.get(0);
+    await src.get(0, { scale: 1, region: { x: 0, y: 0, width: 1, height: 1 } });
+    expect(getPage).toHaveBeenCalledTimes(1); // scale 1 is not a zoom: no re-render
+  });
+
+  it('does not cache tiles, which change with every pan', async () => {
+    const { getPage, doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    await src.get(0, tile);
+    await src.get(0, tile);
+    expect(getPage).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('PdfSource — getDownload', () => {
   it('offers the source URL for download, named from its last path segment', async () => {
     const src = new PdfSource('/docs/brochure-2024.pdf');
