@@ -84,6 +84,21 @@ describe('deeplink — binding', () => {
     expect(seen).toEqual([]);
   });
 
+  it('ignores a repeat of the page it is already showing', () => {
+    // Following a link calls back, which turns the page, which pushes again: without this the
+    // echo would be taken for a fresh navigation and turn the page a second time.
+    const win = fakeWindow('#page=1');
+    const seen: number[] = [];
+    const handle = bindDeepLink(win, (page) => {
+      seen.push(page);
+      handle.push(page); // what Zine does once the flip lands
+    });
+    win.location.hash = '#page=7';
+    win.fire('hashchange');
+    win.fire('hashchange'); // the echo from that push
+    expect(seen).toEqual([6]);
+  });
+
   it('stops listening once torn down', () => {
     const win = fakeWindow();
     const seen: number[] = [];

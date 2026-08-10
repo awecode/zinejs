@@ -253,8 +253,11 @@ yoursite.com/brochure#page=12
 
 Only the `page` key is read or written — anything else in the hash is left alone, so an app routing
 on it is unaffected — and updates use `replaceState`, so turning fifty pages does not put fifty
-entries in the reader's history. A page in the URL takes precedence over `startPage`, since the
-reader followed a link to it.
+entries in the reader's history.
+
+A page in the URL opens the book there, unless you passed an explicit `startPage`, which wins: that
+names a page for this particular book, where the hash may have been left by something else on the
+page.
 
 `zine.pageLink(page?)` returns the URL for a page, defaulting to the current one. Pass
 `deepLink: false` if your app owns the hash.

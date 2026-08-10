@@ -55,18 +55,23 @@ export interface DeepLinkHandle {
  * pasted link). `onNavigate` fires only for a page the book is not already on.
  */
 export function bindDeepLink(win: Window, onNavigate: (page: number) => void): DeepLinkHandle {
-  let last: string | null = null;
+  // The page the URL is known to describe. Compared against rather than the hash string itself:
+  // some environments emit `hashchange` for our own replaceState, and a string comparison there
+  // would let the echo through and turn the page a second time.
+  let shown: number | null = null;
   const onHashChange = (): void => {
-    if (win.location.hash === last) return; // our own write coming back to us
     const page = pageFromHash(win.location.hash);
-    if (page !== null) onNavigate(page);
+    if (page === null || page === shown) return; // absent, or already where we are
+    shown = page;
+    onNavigate(page);
   };
   win.addEventListener('hashchange', onHashChange);
   return {
     push(page) {
+      if (page === shown) return;
+      shown = page;
       const hash = hashWithPage(win.location.hash, page);
       if (hash === win.location.hash) return;
-      last = hash;
       // replaceState, not assignment: a reader flipping through fifty pages should not have to
       // press Back fifty times to leave.
       win.history?.replaceState?.(win.history.state, '', hash);
