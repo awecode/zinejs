@@ -14,7 +14,7 @@ import { bindDeepLink, hashWithPage, pageFromHash, type DeepLinkHandle } from '.
 import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
-import type { OutlineItem, Source } from './source/types';
+import type { DownloadInfo, OutlineItem, Source } from './source/types';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
 

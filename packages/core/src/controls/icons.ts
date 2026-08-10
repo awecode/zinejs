@@ -9,7 +9,10 @@
  * `fill="none"` and round caps/joins — {@link createIcon} supplies those, so the strings stay to
  * the geometry.
  */
-export const ICONS: Record<string, string> = {
+// Not annotated `Record<string, string>`: that would make every ICONS.foo possibly-undefined
+// under noUncheckedIndexedAccess, even for names written right here. `satisfies` keeps the
+// literal's exact keys while still checking the values are markup strings.
+export const ICONS = {
   /** chevron-left */
   prev: '<path d="m15 18-6-6 6-6"/>',
   /** chevron-right */
@@ -49,7 +52,7 @@ export const ICONS: Record<string, string> = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   /** x */
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-};
+} satisfies Record<string, string>;
 
 /** Build an `<svg>` for one of the {@link ICONS}, or null if the name is unknown. */
 export function createIcon(doc: Document, markup: string): SVGSVGElement {

@@ -48,8 +48,10 @@ function generator(degree: number): Uint8Array {
   for (let i = 0; i < degree; i++) {
     const next = new Uint8Array(poly.length + 1);
     for (let j = 0; j < poly.length; j++) {
-      next[j] ^= poly[j]!;
-      next[j + 1] ^= mul(poly[j]!, EXP[i]!);
+      // Written as explicit reads: a compound assignment on an indexed element is what
+      // noUncheckedIndexedAccess objects to, since the target is possibly-undefined.
+      next[j] = next[j]! ^ poly[j]!;
+      next[j + 1] = next[j + 1]! ^ mul(poly[j]!, EXP[i]!);
     }
     poly = next;
   }
@@ -65,7 +67,7 @@ function ecBlock(data: Uint8Array, count: number): Uint8Array {
     out.copyWithin(0, 1);
     out[count - 1] = 0;
     if (factor !== 0) {
-      for (let i = 0; i < count; i++) out[i] ^= mul(gen[i + 1]!, factor);
+      for (let i = 0; i < count; i++) out[i] = out[i]! ^ mul(gen[i + 1]!, factor);
     }
   }
   return out;
