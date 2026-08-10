@@ -304,6 +304,8 @@ describe('controls toolbar', () => {
 
   it('jumps to the ends of the book from the menu', async () => {
     const { zine, el } = await mount({ source: new FakeSource(12) });
+    /** Open the menu and pick an entry. Safe to call repeatedly: choosing an entry closes the
+     *  menu, so the next call reopens it rather than toggling it shut. */
     const item = (name: string): HTMLButtonElement => {
       byLabel(el, 'More')!.click();
       return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
@@ -322,20 +324,27 @@ describe('controls toolbar', () => {
 
   it('disables an end jump the book is already at', async () => {
     const { zine, el } = await mount({ source: new FakeSource(12) });
-    const item = (name: string): HTMLButtonElement => {
+    /** Open the menu and read every entry's state, then close it so the next read reopens
+     *  rather than toggling shut. */
+    const ends = (): Record<string, boolean> => {
       byLabel(el, 'More')!.click();
-      return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
-        (b) => b.getAttribute('aria-label') === name,
-      )!;
+      const state = Object.fromEntries(
+        [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].map((b) => [
+          b.getAttribute('aria-label'),
+          b.disabled,
+        ]),
+      );
+      byLabel(el, 'More')!.click();
+      return state;
     };
 
-    expect(item('First page').disabled).toBe(true); // already on page 1
-    expect(item('Last page').disabled).toBe(false);
+    expect(ends()['First page']).toBe(true); // already on page 1
+    expect(ends()['Last page']).toBe(false);
 
     zine.flipTo(11);
     await flush();
-    expect(item('First page').disabled).toBe(false);
-    expect(item('Last page').disabled).toBe(true);
+    expect(ends()['First page']).toBe(false);
+    expect(ends()['Last page']).toBe(true);
   });
 
   it('disables an end jump on the bar rather than moving its neighbours', async () => {

@@ -257,6 +257,9 @@ export class Toolbar {
       menu.appendChild(item);
     }
     this.#showPopover(menu, trigger);
+    // The entries were only just built, so nothing has evaluated their state yet: without this
+    // a menu opens with every entry enabled until the next page turn happens to refresh it.
+    this.#refresh();
     menu.querySelector('button')?.focus();
   }
 

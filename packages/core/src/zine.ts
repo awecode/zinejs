@@ -1189,7 +1189,11 @@ export class Zine {
   #bindDeepLink(): void {
     if (!this.#deepLinkEnabled || typeof globalThis.location === 'undefined') return;
     const win = globalThis as unknown as Window;
-    this.#deepLink = bindDeepLink(win, (page) => this.flipTo(page));
+    this.#deepLink = bindDeepLink(win, (page) => {
+      // Only act on a hash the reader changed — following a link, or pressing Back. A hash we
+      // wrote ourselves describes where the book already is.
+      if (page !== this.#currentPage) this.flipTo(page);
+    });
     this.#deepLink.push(this.#currentPage);
     this.#unsubscribeDeepLink = this.#emitter.on('pageChanged', ({ page }) => {
       this.#deepLink?.push(page);
@@ -1412,13 +1416,9 @@ export class Zine {
     const mode = this.#effectiveMode();
     this.#singlePage = mode === 'single';
     this.#spreads = buildSpreads(pageCount, { direction: this.#direction, mode });
-    // A page in the URL opens the book there — the reader followed a link to it. An explicit
-    // `startPage` still wins: that is the author naming a page for this particular book, which
-    // is more specific than a hash that may have been left by something else on the page.
-    const linked =
-      this.#deepLinkEnabled && startPage === undefined
-        ? pageFromHash(globalThis.location?.hash ?? '')
-        : null;
+    // A page in the URL wins over `startPage`: the reader followed a link to it, which is a
+    // later and more specific intent than the page the author configured.
+    const linked = this.#deepLinkEnabled ? pageFromHash(globalThis.location?.hash ?? '') : null;
     this.#currentPage = clamp(linked ?? startPage ?? 0, 0, pageCount - 1);
     this.#current = this.#spreadIndexForPage(this.#currentPage);
   }
