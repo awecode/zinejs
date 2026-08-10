@@ -428,6 +428,53 @@ describe('controls toolbar', () => {
     expect(byLabel(el, 'Search')?.style.display).toBe('none');
   });
 
+  it('switches between one page and two from the menu', async () => {
+    const { zine, el } = await mount({ source: new FakeSource(12), spreadMode: 'double' });
+    const entry = (): HTMLButtonElement => {
+      byLabel(el, 'More')!.click();
+      return [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => (b.getAttribute('aria-label') ?? '').includes('page'),
+      )!;
+    };
+
+    // The label names the action, not the current state.
+    expect(entry().getAttribute('aria-label')).toBe('Show one page');
+    entry().click();
+    await flush();
+    expect(zine.isSinglePage()).toBe(true);
+    expect(entry().getAttribute('aria-label')).toBe('Show two pages');
+  });
+
+  it('returns a cover book to its cover layout, not to plain double', async () => {
+    const { zine } = await mount({ source: new FakeSource(12), spreadMode: 'cover' });
+    zine.toggleSpreadMode();
+    await flush();
+    expect(zine.getSpreadMode()).toBe('single');
+    zine.toggleSpreadMode();
+    await flush();
+    expect(zine.getSpreadMode()).toBe('cover'); // the lone first page comes back
+  });
+
+  it('keeps the reader on the same page across a layout change', async () => {
+    // A page's spread index moves when the grouping changes; the page itself must not.
+    const { zine } = await mount({ source: new FakeSource(12), spreadMode: 'double' });
+    zine.flipTo(6);
+    await flush();
+    zine.toggleSpreadMode();
+    await flush();
+    expect(zine.getPage()).toBe(6);
+  });
+
+  it('hides the page-layout switch while a narrow container is forcing one page', async () => {
+    // Pressing it could not honour two pages, so there is nothing to offer.
+    const { el } = await mount({ source: new FakeSource(12), singlePageThreshold: 10_000 });
+    byLabel(el, 'More')!.click();
+    const labels = [...scope(el).querySelectorAll('.zine-controls-menu button')].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).not.toContain('Show two pages');
+  });
+
   it('offers Print only when there is an original document', async () => {
     const { el } = await mount({ source: new DownloadableSource(8) });
     byLabel(el, 'More')!.click();

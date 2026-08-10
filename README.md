@@ -149,8 +149,8 @@ absolutely positioned, and lets clicks through everywhere except the buttons the
 ### Built-in controls
 
 `prev`, `next`, `first`, `last`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`,
-`search`, `thumbnails`, `outline`, `print`, `download`, `share`, `fullscreen`, `menu`. A `'|'` in
-`items` draws a separator.
+`search`, `thumbnails`, `outline`, `spread`, `print`, `download`, `share`, `fullscreen`, `menu`. A
+`'|'` in `items` draws a separator.
 
 The default layout is:
 
@@ -159,7 +159,12 @@ The default layout is:
 ```
 
 `menu` is the `⋮` overflow, holding
-`['first', 'last', 'thumbnails', 'outline', 'print', 'download']`.
+`['first', 'last', 'spread', 'thumbnails', 'outline', 'print', 'download']`.
+
+`spread` switches between one page and two — reading "Show one page" or "Show two pages"
+accordingly. Returning to two restores the layout the book was built with, so a `cover` book gets
+its lone first page back rather than becoming a plain `double`. It hides itself while a narrow
+container is already forcing one page, where it could not honour two.
 
 ### Side panels
 
@@ -348,6 +353,10 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `getSpreads()` | `readonly Spread[]` | How pages are grouped, one entry per spread. Reflects `spreadMode` and the responsive fallback. |
 | `getSpreadIndex()` | `number` | Which spread is on screen; indexes into `getSpreads()`. |
 | `getDirection()` | `'ltr' \| 'rtl'` | Reading direction. |
+| `getSpreadMode()` | `SpreadMode` | The configured grouping, ignoring any narrow-container override. |
+| `setSpreadMode(mode)` | `void` | Regroup the pages, keeping the reader on the same page. |
+| `toggleSpreadMode()` | `void` | Switch between one page and two; back restores the configured mode. |
+| `isSinglePage()` | `boolean` | Whether one page is showing, for whatever reason. |
 | `getResponsiveSpread()` | `boolean` | Whether a narrow container may override `spreadMode`. |
 | `setResponsiveSpread(on)` | `void` | Allow or forbid that override, re-laying out at once. |
 | `isResponsiveSingle()` | `boolean` | Whether one page is showing *because* the container is narrow. |

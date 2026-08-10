@@ -172,6 +172,9 @@ export class Zine {
   #machine = new FlipMachine();
   #direction: Direction;
   #spreadMode: SpreadMode;
+  /** The mode the book was built with, so toggling away from one page can return to it — a
+   *  `cover` book comes back as `cover`, keeping its lone first page, not as plain `double`. */
+  #configuredMode: SpreadMode;
   #curl: CurlType;
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
@@ -261,6 +264,7 @@ export class Zine {
     this.#deepLinkEnabled = (options.deepLink ?? true) && claimHash();
     this.#disableContextMenu = options.disableContextMenu ?? false;
     this.#spreadMode = options.spreadMode ?? 'cover';
+    this.#configuredMode = this.#spreadMode;
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
@@ -334,6 +338,45 @@ export class Zine {
   /** Reading direction, which mirrors each spread's left/right sides. */
   getDirection(): Direction {
     return this.#direction;
+  }
+
+  /** How pages are grouped: the configured mode, not what a narrow container may be forcing. */
+  getSpreadMode(): SpreadMode {
+    return this.#spreadMode;
+  }
+
+  /** Whether the book is showing one page at a time, for whatever reason. */
+  isSinglePage(): boolean {
+    return this.#singlePage;
+  }
+
+  /**
+   * Regroup the pages, keeping the reader on the page they are looking at.
+   *
+   * A narrow container may still override this with one page at a time; see
+   * {@link setResponsiveSpread}.
+   */
+  setSpreadMode(mode: SpreadMode): void {
+    if (mode === this.#spreadMode) return;
+    this.#spreadMode = mode;
+    this.#rebuildSpreads();
+    void this.#renderCurrent();
+  }
+
+  /**
+   * Switch between one page and two, and back again.
+   *
+   * Returning to two pages restores the mode the book was built with, so a `cover` book gets its
+   * lone first page back rather than becoming a plain `double`.
+   */
+  toggleSpreadMode(): void {
+    this.setSpreadMode(
+      this.#spreadMode === 'single'
+        ? this.#configuredMode === 'single'
+          ? 'double' // built as single: there is no other mode to return to
+          : this.#configuredMode
+        : 'single',
+    );
   }
 
   /** Whether a narrow container is allowed to override `spreadMode` with one page at a time. */

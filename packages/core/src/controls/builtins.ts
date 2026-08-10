@@ -122,6 +122,20 @@ export function registerBuiltins(): void {
   });
 
   defineControl({
+    id: 'spread',
+    // Says what pressing it will do, not what the book is doing now, and in the reader's terms —
+    // "spread mode" is the library's word for it, not theirs.
+    title: (ctx) => (ctx.zine.isSinglePage() ? 'Show two pages' : 'Show one page'),
+    icon: (ctx) => (ctx.zine.isSinglePage() ? ICONS.twoPages : ICONS.onePage),
+    // Hidden while a narrow container is forcing one page: pressing it could not honour two.
+    isVisible: (ctx) => !ctx.zine.isResponsiveSingle(),
+    action: (ctx) => {
+      ctx.zine.toggleSpreadMode();
+      ctx.close();
+    },
+  });
+
+  defineControl({
     id: 'print',
     title: 'Print',
     icon: ICONS.print,
@@ -138,6 +152,6 @@ export function registerBuiltins(): void {
     title: 'More',
     icon: ICONS.menu,
     // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
-    children: ['first', 'last', 'thumbnails', 'outline', 'print', 'download'],
+    children: ['first', 'last', 'spread', 'thumbnails', 'outline', 'print', 'download'],
   });
 }
