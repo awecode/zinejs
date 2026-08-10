@@ -1,6 +1,6 @@
 {
   "name": "@zinejs/pdf",
-  "version": "0.4.2",
+  "version": "0.6.0",
   "description": "PDF content source for zinejs, powered by pdf.js.",
   "type": "module",
   "sideEffects": false,
