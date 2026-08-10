@@ -259,6 +259,10 @@ reader followed a link to it.
 `zine.pageLink(page?)` returns the URL for a page, defaulting to the current one. Pass
 `deepLink: false` if your app owns the hash.
 
+Only one book per page can own the hash — with two on a page they would overwrite each other, and
+the second to load would open on the first one's page. The first claims it; the rest work
+normally, they just do not appear in the address bar.
+
 ## Share
 
 The `share` control opens a dialog with a QR code for the current page, the link with a copy

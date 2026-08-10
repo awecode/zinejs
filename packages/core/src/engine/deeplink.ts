@@ -7,6 +7,27 @@
  */
 const KEY = 'page';
 
+/**
+ * Whether some book on this page already owns the hash.
+ *
+ * Two books sharing one URL would each overwrite the other's page, and the second to load would
+ * open on the first one's page. Only the first claims it; the rest still work, they just do not
+ * appear in the address bar.
+ */
+let claimed = false;
+
+/** Take the hash if it is going, and report whether this caller got it. */
+export function claimHash(): boolean {
+  if (claimed) return false;
+  claimed = true;
+  return true;
+}
+
+/** Give the hash back, so a book that replaces this one can own it. */
+export function releaseHash(): void {
+  claimed = false;
+}
+
 /** Read the 1-based page from a hash, as a 0-based index. Null when it carries no page. */
 export function pageFromHash(hash: string): number | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''));

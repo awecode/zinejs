@@ -792,16 +792,19 @@ describe('Zine.print', () => {
     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
       get() {
-        return { focus: () => {}, print: () => printed.push((this as HTMLIFrameElement).src) };
+        const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
+        return { focus: () => {}, print: () => printed.push(src) };
       },
     });
     try {
       const done = zine.print();
+      await flush(); // the source file is looked up before the frame is created
       const frame = document.querySelector('iframe')!;
-      expect(frame.src).toContain('/brochure.pdf');
+      expect(frame.getAttribute('src')).toContain('/brochure.pdf');
       frame.dispatchEvent(new Event('load'));
       expect(await done).toBe(true);
-      expect(printed).toEqual(['/brochure.pdf']);
+      expect(printed).toEqual(['/brochure.pdf']); // the document itself, not the host page
+      frame.remove(); // happy-dom would otherwise keep fetching the fake URL
     } finally {
       if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
     }

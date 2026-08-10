@@ -10,7 +10,14 @@ import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
 import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
 import { hitTest } from './geometry/hitTest';
-import { bindDeepLink, hashWithPage, pageFromHash, type DeepLinkHandle } from './engine/deeplink';
+import {
+  bindDeepLink,
+  claimHash,
+  hashWithPage,
+  pageFromHash,
+  releaseHash,
+  type DeepLinkHandle,
+} from './engine/deeplink';
 import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
@@ -249,7 +256,9 @@ export class Zine {
     const direction = options.direction ?? 'ltr';
     this.#direction = direction;
     // Set before the spread model is built: that is where a page in the URL is honoured.
-    this.#deepLinkEnabled = options.deepLink ?? true;
+    // Claimed before the spread model is built, which is where the hash is read: a second book
+    // on the same page must not open on the first one's page.
+    this.#deepLinkEnabled = (options.deepLink ?? true) && claimHash();
     this.#disableContextMenu = options.disableContextMenu ?? false;
     this.#spreadMode = options.spreadMode ?? 'cover';
     this.#curl = options.curl ?? DEFAULT_CURL;
@@ -662,6 +671,7 @@ export class Zine {
     this.#deepLink?.stop();
     this.#deepLink = null;
     this.#unsubscribeDeepLink?.();
+    if (this.#deepLinkEnabled) releaseHash(); // a later book may own it now
     this.#controlsCleanup?.();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
