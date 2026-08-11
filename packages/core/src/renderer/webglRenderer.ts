@@ -1,11 +1,8 @@
-import {
-  CURLS,
-  createPageMesh,
-  DEFAULT_CURL,
-  type CurlAnchor,
-  type CurlType,
-  type PageMesh,
-} from '../geometry/curls';
+// Imported from the leaf modules, not the barrel: the barrel pulls in every curl, which would
+// defeat the point of only bundling the two the engine can name.
+import { createPageMesh, type PageMesh } from '../geometry/curls/mesh';
+import { BUNDLED_CURLS, resolveCurl } from '../geometry/curls/bundled';
+import { DEFAULT_CURL, type CurlAnchor, type CurlModel, type CurlSpec } from '../geometry/curls/types';
 import type { Spread } from '../engine/spread';
 import type {
   FlipDirection,
@@ -190,7 +187,7 @@ export class WebglRenderer implements Renderer {
   #fill = false;
   #flip: FlipState | null = null;
   #flipT = 0;
-  #curlType: CurlType = DEFAULT_CURL;
+  #curlModel: CurlModel = BUNDLED_CURLS[DEFAULT_CURL];
   #anchor: CurlAnchor = { y: 0.5 };
   // A lone page (cover / book front-back) sits on one half; these center it by shifting
   // the view a quarter-width, interpolated across a flip so the open/close doesn't jump.
@@ -280,7 +277,7 @@ export class WebglRenderer implements Renderer {
   ): void {
     const fill = options?.fill ?? false;
     this.#flipT = 0;
-    if (options?.curl) this.#curlType = options.curl;
+    if (options?.curl) this.#curlModel = resolveCurl(options.curl);
     if (options?.anchor) this.#anchor = options.anchor;
     this.#fromShiftUnit = fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = fill ? 0 : shiftUnit(to);
@@ -568,7 +565,7 @@ export class WebglRenderer implements Renderer {
     // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, {
+    this.#curlModel.deform(this.#mesh, leafW, h, this.#flipT, {
       y: this.#anchor.y,
       fill: flip.fill,
     });
@@ -593,7 +590,7 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
-    gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlType === 'simple' ? 0 : 1); // flat curl = no shine
+    gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlModel.gloss === false ? 0 : 1);
     gl.uniform1f(this.#curlU.uAlpha ?? null, flip.fill ? this.#fillFade() : 1);
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
   }
@@ -602,10 +599,7 @@ export class WebglRenderer implements Renderer {
    *  dissolving to 0 as it lands, so the turn resolves into the destination page rather
    *  than onto blank space. The fade eases so opacity hangs longer then finishes cleanly. */
   #fillFade(): number {
-    const start =
-      this.#curlType === 'roll' || this.#curlType === 'simple'
-        ? FILL_FADE_START_ROLL
-        : FILL_FADE_START_CURL;
+    const start = this.#curlModel.flat ? FILL_FADE_START_ROLL : FILL_FADE_START_CURL;
     const over = (this.#flipT - start) / (1 - start);
     if (over <= 0) return 1;
     if (over >= 1) return 0;

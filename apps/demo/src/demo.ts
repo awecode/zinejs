@@ -1,5 +1,8 @@
 import './demo.css';
-import { Zine, ImageSource, CURL_TYPES, type CurlType, type Source } from '@zinejs/core';
+import { Zine, ImageSource, CURL_TYPES, IMPORTABLE_CURLS, type CurlSpec, type Source } from '@zinejs/core';
+// The demo offers every curl, so it imports the four that are not bundled. A real book names
+// the one it wants and carries only that.
+import { roll, leaf, flick, silk } from '@zinejs/core/curls';
 import { PdfSource } from '@zinejs/pdf';
 import { installClickDebug } from './clickDebug';
 
@@ -23,7 +26,7 @@ const q = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (q.has(k) ? Number(q.get(k)) : d);
 const opt = {
   spreadMode: (q.get('spreadMode') ?? 'cover') as 'double' | 'single' | 'cover' | 'book',
-  curl: (q.get('curl') ?? (renderer === 'webgl2' ? 'cone' : 'roll')) as CurlType,
+  curl: q.get('curl') ?? (renderer === 'webgl2' ? 'cone' : 'roll'),
   direction: (q.get('direction') ?? 'ltr') as 'ltr' | 'rtl',
   clickToFlip: (q.get('clickToFlip') ?? 'edge') as 'edge' | 'half' | 'off',
   flipDuration: num('flipDuration', 800),
@@ -32,6 +35,12 @@ const opt = {
   controls: (q.get('controls') ?? 'bottom') as 'bottom' | 'top' | 'left' | 'right' | 'off',
   controlsDock: (q.get('dock') ?? 'docked') as 'docked' | 'floating',
 };
+
+// Bundled names first, then the importable ones, so the dropdown reads in that order.
+const ALL_CURLS = [...CURL_TYPES, ...IMPORTABLE_CURLS];
+const IMPORTED: Record<string, CurlSpec> = { roll, leaf, flick, silk };
+/** A bundled curl passes through as its name; the rest resolve to the model we imported. */
+const curlSpec = (name: string): CurlSpec => IMPORTED[name] ?? (name as CurlSpec);
 
 const imageUrls = Array.from(
   { length: 20 },
@@ -138,7 +147,7 @@ controlsEl.append(
   selectControl('spreadMode', 'spreadMode', ['double', 'single', 'cover', 'book'] as const, opt.spreadMode),
 );
 if (renderer === 'webgl2') {
-  controlsEl.append(selectControl('curl', 'curl', CURL_TYPES, opt.curl));
+  controlsEl.append(selectControl('curl', 'curl', ALL_CURLS, opt.curl));
 }
 controlsEl.append(
   selectControl('direction', 'direction', ['ltr', 'rtl'] as const, opt.direction),
@@ -172,7 +181,7 @@ const zine = new Zine(book, {
   source: makeSource(),
   renderer,
   spreadMode: opt.spreadMode,
-  ...(renderer === 'webgl2' ? { curl: opt.curl } : {}),
+  ...(renderer === 'webgl2' ? { curl: curlSpec(opt.curl) } : {}),
   direction: opt.direction,
   clickToFlip: opt.clickToFlip,
   flipDuration: opt.flipDuration,

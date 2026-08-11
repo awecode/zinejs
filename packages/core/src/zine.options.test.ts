@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Zine } from './zine';
+import { silk } from './geometry/curls';
 import type { Source } from './source/types';
 import type { LayoutMetrics, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { Spread } from './engine/spread';
@@ -62,6 +63,40 @@ describe('Zine option validation', () => {
   it('rejects an invalid direction', () => {
     expect(() => new Zine(fakeContainer(), { source: src(), direction: 'up' as any })).toThrow(
       /direction/,
+    );
+  });
+
+  // The accepting cases have to get past validation into #init, so unlike the rejecting ones
+  // they need a renderer that will not reach for a real document.
+  const accepts = (curl: unknown): Zine =>
+    new Zine(fakeContainer(), { source: src(), renderer: new MockRenderer(), curl: curl as any });
+
+  it('accepts a bundled curl by name', () => {
+    expect(() => accepts('simple').destroy()).not.toThrow();
+  });
+
+  it('accepts an imported curl model, and any custom model of the same shape', () => {
+    expect(() => accepts(silk).destroy()).not.toThrow();
+    expect(() => accepts({ deform: () => {}, anchored: false }).destroy()).not.toThrow();
+  });
+
+  it('tells a caller naming an unbundled curl how to import it', () => {
+    // The curl is real, just not bundled — an "invalid value" message would send them hunting
+    // for a typo instead of to the import.
+    expect(() => new Zine(fakeContainer(), { source: src(), curl: 'silk' as any })).toThrow(
+      /not bundled.*@zinejs\/core\/curls/s,
+    );
+  });
+
+  it('rejects a model that could not be deformed with', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), curl: { anchored: true } as any })).toThrow(
+      /deform/,
+    );
+  });
+
+  it('rejects a curl that is neither bundled nor importable', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), curl: 'origami' as any })).toThrow(
+      /curl must be/,
     );
   });
 

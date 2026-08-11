@@ -21,5 +21,6 @@ export type { Renderer, SpreadContent, PageContent, FlipDirection, LayoutMetrics
 
 export type { ZineEventMap } from './engine/emitter';
 export type { Direction, Spread } from './engine/spread';
-export { CURL_TYPES } from './geometry/curls/types';
-export type { CurlType, CurlAnchor } from './geometry/curls/types';
+export { CURL_TYPES, IMPORTABLE_CURLS } from './geometry/curls/types';
+export type { CurlType, CurlSpec, CurlModel, CurlDeform, CurlAnchor } from './geometry/curls/types';
+export type { PageMesh } from './geometry/curls/mesh';

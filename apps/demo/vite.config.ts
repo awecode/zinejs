@@ -6,6 +6,9 @@ const root = (p: string) => new URL(p, import.meta.url).pathname;
 export default defineConfig({
   resolve: {
     alias: {
+      // Subpaths first: a bare '@zinejs/core' rule would otherwise match the prefix of
+      // '@zinejs/core/curls' and append '/curls' to the index file's path.
+      '@zinejs/core/curls': root('../../packages/core/src/geometry/curls/index.ts'),
       '@zinejs/core': root('../../packages/core/src/index.ts'),
       '@zinejs/pdf': root('../../packages/pdf/src/index.ts'),
     },

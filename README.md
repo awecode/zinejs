@@ -69,7 +69,7 @@ new Zine(document.getElementById('book'), {
 | --- | --- | --- | --- |
 | `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** |
 | `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. |
-| `curl` | `'roll' \| 'cone' \| 'leaf' \| 'flick' \| 'silk' \| 'simple'` | `'cone'` | Page-curl model (WebGL2 only — see [Curl models](#curl-models)). |
+| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls` — see [Curl models](#curl-models). |
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
@@ -347,14 +347,52 @@ when `url` came from `URL.createObjectURL` so it is released after the save.
 
 The WebGL2 renderer bends the turning leaf with one of six models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
 
-| `curl` | Motion | Anchored to tap? |
-| --- | --- | --- |
-| `cone` (default) | Natural conical curl (PARC / iBooks-style): stiff paper wraps a breathing cone, then settles flat. | Yes |
-| `roll` | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
-| `leaf` | Traveling smooth-curvature wave: flat paper bends without stretching, then leaves as a flat turned flap. | Yes |
-| `flick` | Inertial follow-through: the sheet trails the accelerating turn, swings through vertical, then overtakes and settles as it brakes. | Yes |
-| `silk` | Hand-turned S-curve: spine-driven rotation with a true inflection (body bend + free-edge reverse curl), early peel lead, corner lag. | Yes |
-| `simple` | Plain flat page turn: a rigid spine rotation, edge-on at the midpoint, no bend. | No |
+Two are bundled and named by string. The other four are shipped as importable models, so a book
+carries only the curl it actually uses:
+
+```ts
+import { silk } from '@zinejs/core/curls';
+
+new Zine(el, { source, curl: silk });   // imported model
+new Zine(el, { source, curl: 'cone' }); // bundled, by name
+```
+
+| `curl` | How to use | Motion | Anchored to tap? |
+| --- | --- | --- | --- |
+| `cone` (default) | bundled: `curl: 'cone'` | Natural conical curl (PARC / iBooks-style): stiff paper wraps a breathing cone, then settles flat. | Yes |
+| `simple` | bundled: `curl: 'simple'` | Plain flat page turn: a rigid spine rotation, edge-on at the midpoint, no bend. | No |
+| `roll` | `import { roll }` | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
+| `leaf` | `import { leaf }` | Traveling smooth-curvature wave: flat paper bends without stretching, then leaves as a flat turned flap. | Yes |
+| `flick` | `import { flick }` | Inertial follow-through: the sheet trails the accelerating turn, swings through vertical, then overtakes and settles as it brakes. | Yes |
+| `silk` | `import { silk }` | Hand-turned S-curve: spine-driven rotation with a true inflection (body bend + free-edge reverse curl), early peel lead, corner lag. | Yes |
+
+Passing an unbundled name as a string (`curl: 'silk'`) throws with the import line to use. Only the
+bundled names are valid in JSON config, which is why `options.schema.json` lists just those two.
+
+### Custom curls
+
+A curl model is a plain object, so your own needs no registration:
+
+```ts
+import type { CurlModel } from '@zinejs/core';
+
+const fold: CurlModel = {
+  deform(mesh, W, H, t, anchor) { /* write mesh.positions, then computeNormals(mesh) */ },
+  anchored: false,  // true to fold from the tapped corner (anchor.y)
+  flat: true,       // sheet is flat by mid-turn: a lone page may dissolve earlier
+  gloss: false,     // no specular highlight (for a sheet that never bends)
+};
+
+new Zine(el, { source, curl: fold });
+```
+
+`computeNormals` and `createPageMesh` are exported from `@zinejs/core/curls` for this.
+
+### Reduced motion
+
+Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short fixed duration,
+whatever `curl` and `flipDuration` say. Motion is reduced rather than removed: a page that swapped
+instantly would leave no cue as to which way the book moved.
 
 For anchored models (`cone`, `leaf`, `flick`, `silk`), the fold originates at the corner nearest where the reader taps/grabs.
 

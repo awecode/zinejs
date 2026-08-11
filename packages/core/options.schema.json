@@ -48,9 +48,9 @@
     },
     "curl": {
       "type": "string",
-      "enum": ["roll", "cone", "leaf", "flick", "silk", "simple"],
+      "enum": ["cone", "simple"],
       "default": "cone",
-      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'cone' (natural conical curl, PARC/iBooks-style, anchored at tap; default), 'leaf' (traveling smooth-curvature wave with flat paper before and after the bend, anchored at tap), 'flick' (inertial follow-through: the sheet trails the turn, then swings past and settles, anchored at tap), 'silk' (hand-turned S-curve: spine-driven rotation with body bend + free-edge reverse curl forming a true inflection, early peel lead, anchored at tap), 'simple' (plain flat page turn, no bend)."
+      "description": "Page-curl model for the WebGL2 renderer. Only the bundled names are valid JSON: 'cone' (natural conical curl, PARC/iBooks-style, anchored at tap; default) and 'simple' (plain flat page turn, no bend). Four more are shipped as importable models rather than names, so a book carries only the curl it uses: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'leaf' (traveling smooth-curvature wave with flat paper before and after the bend, anchored at tap), 'flick' (inertial follow-through: the sheet trails the turn, then swings past and settles, anchored at tap), 'silk' (hand-turned S-curve: spine-driven rotation with body bend + free-edge reverse curl forming a true inflection, early peel lead, anchored at tap). In code, import one from '@zinejs/core/curls' and pass the model; a custom model of the same shape works too."
     },
     "frontCover": {
       "type": "string",

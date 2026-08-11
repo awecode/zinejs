@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { CURLS, CURL_TYPES, createPageMesh, type CurlType, type PageMesh } from './index';
+import {
+  cone,
+  simple,
+  roll,
+  leaf,
+  flick,
+  silk,
+  CURL_TYPES,
+  IMPORTABLE_CURLS,
+  createPageMesh,
+  type CurlModel,
+  type PageMesh,
+} from './index';
+
+/** Every model, bundled or importable. The engine can only name the bundled two; these tests
+ *  exercise the math of all of them, which is reachable here by importing each directly. */
+const CURLS = { cone, simple, roll, leaf, flick, silk } satisfies Record<string, CurlModel>;
+type CurlName = keyof typeof CURLS;
 
 const COLS = 40;
 const ROWS = 40;
@@ -7,7 +24,7 @@ const W = 400;
 const H = 560;
 const ANCHOR = { y: 1 };
 
-function deformed(type: CurlType, t: number): PageMesh {
+function deformed(type: CurlName, t: number): PageMesh {
   const mesh = createPageMesh(COLS, ROWS);
   CURLS[type].deform(mesh, W, H, t, ANCHOR);
   return mesh;
@@ -25,10 +42,16 @@ function maxAbsZ(mesh: PageMesh): number {
 }
 
 describe('curl registry', () => {
-  it('registers a model for every curl type', () => {
-    expect(CURL_TYPES.sort()).toEqual(['cone', 'flick', 'leaf', 'roll', 'silk', 'simple']);
-    for (const type of CURL_TYPES) {
-      expect(typeof CURLS[type].deform).toBe('function');
+  it('bundles only the curls the engine can name, and offers the rest for import', () => {
+    // Keeping these lists apart is what keeps the unnamed curls out of everyone's bundle.
+    expect([...CURL_TYPES].sort()).toEqual(['cone', 'simple']);
+    expect([...IMPORTABLE_CURLS].sort()).toEqual(['flick', 'leaf', 'roll', 'silk']);
+  });
+
+  it('exports a working model for every curl, bundled or not', () => {
+    expect(Object.keys(CURLS).sort()).toEqual([...CURL_TYPES, ...IMPORTABLE_CURLS].sort());
+    for (const model of Object.values(CURLS)) {
+      expect(typeof model.deform).toBe('function');
     }
   });
 });
@@ -66,7 +89,7 @@ describe.each(CURL_TYPES)('curl model: %s', (type) => {
   });
 });
 
-describe.each(['roll', 'simple', 'cone', 'leaf', 'flick', 'silk'] as CurlType[])('symmetric curl lands flat: %s', (type) => {
+describe.each(['roll', 'simple', 'cone', 'leaf', 'flick', 'silk'] as CurlName[])('symmetric curl lands flat: %s', (type) => {
   it('mirrors flat onto the far side at t=1', () => {
     const mesh = deformed(type, 1);
     for (let i = 0; i <= COLS; i++) {

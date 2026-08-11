@@ -23,13 +23,17 @@
       "import": "./dist/index.js",
       "require": "./dist/index.umd.js"
     },
+    "./curls": {
+      "types": "./dist/geometry/curls/index.d.ts",
+      "import": "./dist/curls.js"
+    },
     "./options.schema.json": "./options.schema.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
+    "build": "vite build && UMD=1 vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm typecheck && vitest run",
     "size": "pnpm build && size-limit",
@@ -52,6 +56,12 @@
       "name": "WebGL2 renderer chunk (lazy, gzip)",
       "path": "dist/webglRenderer-*.js",
       "limit": "12 kB",
+      "gzip": true
+    },
+    {
+      "name": "all importable curls (opt-in, gzip)",
+      "path": "dist/curls.js",
+      "limit": "2.5 kB",
       "gzip": true
     },
     {

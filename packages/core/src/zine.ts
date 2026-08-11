@@ -18,7 +18,13 @@ import {
   releaseHash,
   type DeepLinkHandle,
 } from './engine/deeplink';
-import { CURL_TYPES, DEFAULT_CURL, type CurlType } from './geometry/curls/types';
+import {
+  CURL_TYPES,
+  DEFAULT_CURL,
+  IMPORTABLE_CURLS,
+  type CurlSpec,
+  type CurlType,
+} from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { DownloadInfo, OutlineItem, Source } from './source/types';
@@ -49,6 +55,10 @@ const EXCERPT_PAD = 32;
 /** Quiet period before re-rendering the zoomed region, so a pinch or pan does not rasterize
  *  on every frame. Long enough to coalesce a gesture, short enough to feel immediate on release. */
 const ZOOM_TILE_DELAY = 120;
+
+/** Flip time under `prefers-reduced-motion`. Short enough not to read as animation, long enough
+ *  to show which way the page went — an instant swap leaves the reader guessing. */
+const REDUCED_MOTION_DURATION = 120;
 
 /** One page that matched a {@link Zine.search} query. */
 export interface SearchHit {
@@ -97,8 +107,20 @@ export interface ZineOptions {
   source: Source;
   /** Renderer selection; default 'auto'. */
   renderer?: RendererOption;
-  /** Page-curl model for the WebGL2 renderer: 'roll' | 'cone' | 'leaf' | 'flick' | 'silk' | 'simple'. Default 'cone'. */
-  curl?: CurlType;
+  /**
+   * Page-curl model for the WebGL2 renderer. Default `'cone'`.
+   *
+   * `'cone'` and `'simple'` are bundled and can be named directly. The others are imported and
+   * passed as models, so a book that never uses them never carries their math:
+   *
+   * ```ts
+   * import { silk } from '@zinejs/core/curls';
+   * new Zine(el, { source, curl: silk });
+   * ```
+   *
+   * Any object of the same shape works, so a custom curl needs no registration.
+   */
+  curl?: CurlSpec;
   /** Fixed container width in px; omit to let the container/CSS drive the size. */
   width?: number;
   /** Fixed container height in px; omit to let the container/CSS drive the size. */
@@ -180,7 +202,7 @@ export class Zine {
   /** The mode the book was built with, so toggling away from one page can return to it — a
    *  `cover` book comes back as `cover`, keeping its lone first page, not as plain `double`. */
   #configuredMode: SpreadMode;
-  #curl: CurlType;
+  #curl: CurlSpec;
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
   #clickZoneSize: number;
@@ -788,7 +810,7 @@ export class Zine {
     if (generation !== this.#flipGeneration) return;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
-      curl: this.#curl,
+      curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
     this.#animateProgress(0, 1, direction, () => this.#commit(targetIndex, toPage, toContent));
@@ -923,7 +945,7 @@ export class Zine {
     this.#drag.toContent = toContent;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
-      curl: this.#curl,
+      curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
     this.#renderer?.setFlipProgress(this.#drag.t, direction);
@@ -1334,8 +1356,15 @@ export class Zine {
   }
 
   #effectiveDuration(): number {
-    if (this.#reducedMotion) return 0;
+    // Reduced motion still turns the page, just briefly and flat (see #effectiveCurl): a page
+    // that teleports gives the reader no sense of which way the book moved.
+    if (this.#reducedMotion) return REDUCED_MOTION_DURATION;
     return this.#flipDuration * (this.#singlePage ? LONE_PAGE_FLIP_SCALE : 1);
+  }
+
+  /** The curl to turn with: reduced motion flattens the sheet, whatever the book asked for. */
+  #effectiveCurl(): CurlSpec {
+    return this.#reducedMotion ? 'simple' : this.#curl;
   }
 
   /** Re-measure and re-render; call after the container resizes. */
@@ -1655,8 +1684,25 @@ function validateOptions(container: unknown, options: unknown): void {
   }
 
   const curl = o.curl;
-  if (curl !== undefined && !CURL_TYPES.includes(curl as CurlType)) {
-    throw new Error(`Zine: curl must be one of ${CURL_TYPES.join(', ')}; got ${JSON.stringify(curl)}.`);
+  if (curl !== undefined) {
+    if (typeof curl === 'object' && curl !== null) {
+      // An imported or custom model. Check the one member the renderer calls every frame, so a
+      // wrong shape fails here rather than as an undefined call mid-flip.
+      if (typeof (curl as { deform?: unknown }).deform !== 'function') {
+        throw new Error('Zine: a curl model must have a deform() function.');
+      }
+    } else if (IMPORTABLE_CURLS.includes(curl as string)) {
+      // A real curl, just not bundled: say how to get it rather than calling it invalid.
+      throw new Error(
+        `Zine: the '${String(curl)}' curl is not bundled. Import it and pass the model: ` +
+          `import { ${String(curl)} } from '@zinejs/core/curls'  →  curl: ${String(curl)}`,
+      );
+    } else if (!CURL_TYPES.includes(curl as CurlType)) {
+      throw new Error(
+        `Zine: curl must be ${CURL_TYPES.join(' or ')}, or a model imported from ` +
+          `'@zinejs/core/curls' (${IMPORTABLE_CURLS.join(', ')}); got ${JSON.stringify(curl)}.`,
+      );
+    }
   }
 
   for (const flag of ['deepLink', 'disableContextMenu', 'responsiveSpread'] as const) {

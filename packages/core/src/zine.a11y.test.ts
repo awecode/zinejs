@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Zine } from './zine';
 import type { Source } from './source/types';
-import type { LayoutMetrics, PageContent, Renderer, SpreadContent } from './renderer/types';
+import type { LayoutMetrics, PageContent, Renderer } from './renderer/types';
 
 class FakeSource implements Source {
   readonly pageCount: number;
@@ -96,11 +96,39 @@ describe('Zine — accessibility (1.7)', () => {
     expect(live?.textContent).toBe('Page 1 of 6');
   });
 
-  it('reduced motion swaps pages without animating (no rAF needed)', async () => {
+  it('reduced motion turns the page flat and briefly, rather than not at all', async () => {
+    // A page that teleports leaves the reader no cue which way the book moved. Reduced motion
+    // means less motion, not none: a short, flat turn instead of the curl sweep.
     vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => {} }));
-    const { zine } = await makeZine();
+    vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void) => setTimeout(() => cb(1e9), 0));
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+
+    const curls: unknown[] = [];
+    const spy: Renderer = {
+      mount: () => Promise.resolve(),
+      destroy: () => {},
+      renderSpread: () => {},
+      setFlipProgress: () => {},
+      setViewTransform: () => {},
+      measure: () => ({ containerWidth: 800, containerHeight: 600, pageWidth: 400, pageHeight: 600 }),
+      beginFlip: (_f, _t, _d, options) => {
+        curls.push(options?.curl);
+      },
+    };
+    const el = container();
+    const zine = new Zine(el, {
+      source: new FakeSource(6),
+      renderer: spy,
+      spreadMode: 'double',
+      curl: 'cone', // asked for a curl, but reduced motion overrides it
+    });
+    await zine.ready;
+
     zine.flipNext();
-    await flush();
-    expect(zine.getPage()).toBe(2); // committed immediately, no frames ticked
+    await flush(); // content resolves, then the flip starts
+    await flush(); // the stubbed frame fires; its large timestamp lands it at once
+    // The book asked for 'cone' and got a flat turn, which is the whole point.
+    expect(curls).toEqual(['simple']);
+    expect(zine.getPage()).toBe(2);
   });
 });
