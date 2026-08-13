@@ -30,8 +30,8 @@ import type { FlipDirection, PageContent, Renderer, SpreadContent } from './rend
 import type { DownloadInfo, OutlineItem, Source } from './source/types';
 import {
   planTiles,
+  sameView,
   ZoomOverlay,
-  type Rect,
   type TilePage,
   type TilePlan,
   type View,
@@ -1460,9 +1460,11 @@ export class Zine {
    * raster made to fit the screen. A vector source can do better; one backed by a fixed-resolution
    * original cannot, and says so by handing back a whole page, which is dropped.
    *
-   * Debounced: panning and pinching move the view continuously, and rasterizing a PDF region is
-   * far too slow to do per frame. The blurry page stays up in the meantime, so the delay costs
-   * sharpness briefly rather than showing a gap.
+   * Debounced, and hidden while the view moves. A tile is crisp for one view only, so during a
+   * pan it is stale by definition; showing it anyway puts two versions of the same text on screen
+   * at once. Hiding leaves the reader with the uniformly magnified page an image book already
+   * shows, which is smooth because there is nothing to disagree with it. The tile returns once
+   * the view settles.
    */
   #refreshZoomTiles(): void {
     if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
@@ -1472,11 +1474,14 @@ export class Zine {
       this.#tileGeneration++; // abandon anything in flight: it is no longer wanted
       return;
     }
-    // Move the tiles already painted to where the page has just gone. Re-rasterizing is too slow
-    // to do per frame, but the page tracks the reader's finger — an overlay that held still on
-    // top of it would look like the page had stopped moving until the next tile landed.
-    const box = this.#viewportBox();
-    if (box) this.#zoomOverlay?.track(this.#view(), box);
+    const overlay = this.#zoomOverlay;
+    if (overlay?.matches(this.#view())) {
+      // Back exactly where these pixels were painted, so they are crisp again with no work: a
+      // pinch that lands where it started, or a pan clamped against the edge of the book.
+      overlay.show();
+      return;
+    }
+    overlay?.hide();
     this.#tileTimer = setTimeout(() => {
       this.#tileTimer = null;
       void this.#renderZoomTiles();
@@ -1485,11 +1490,6 @@ export class Zine {
 
   #view(): View {
     return { scale: this.#scale, tx: this.#tx, ty: this.#ty };
-  }
-
-  #viewportBox(): Rect | null {
-    const m = this.#renderer?.measure();
-    return m ? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight } : null;
   }
 
   async #renderZoomTiles(): Promise<void> {
@@ -1512,9 +1512,6 @@ export class Zine {
 
     const view = this.#view();
     const viewport = { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
-    // Still inside the reserve, at the resolution it was rendered for: those pixels are sharp and
-    // simply slid into place, so re-rendering would spend the margin for nothing.
-    if (this.#zoomOverlay && !this.#zoomOverlay.isStale(view, viewport)) return;
     const plans = planTiles(halves, view, viewport);
 
     const generation = ++this.#tileGeneration;
@@ -1541,7 +1538,10 @@ export class Zine {
         }
       }),
     );
-    if (generation !== this.#tileGeneration || this.#scale <= 1) return; // the view moved on
+    // Rasterizing is slow, and the reader may have moved on while it ran. The generation catches
+    // a newer request; comparing the view catches a gesture that started after this one began,
+    // whose tiles would be crisp for somewhere the reader is no longer looking.
+    if (generation !== this.#tileGeneration || !sameView(view, this.#view())) return;
     // All or nothing: one page upgraded beside another left magnified is the same visible seam
     // that a part-page tile creates, only down the gutter instead.
     if (drawn.length === 0 || drawn.some((t) => t === null)) return;

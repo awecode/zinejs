@@ -234,7 +234,7 @@ describe('Zine — zoom tiles', () => {
     destroy(): void {}
   }
 
-  const overlay = (el: HTMLElement): HTMLElement | null => el.querySelector('.zine-zoom-clip');
+  const overlay = (el: HTMLElement): HTMLElement | null => el.querySelector('.zine-zoom-overlay');
 
   it('paints no tiles for a source with nothing sharper to give', async () => {
     // Regression: the check compared aspect ratios, so a full page whose shape happened to match
