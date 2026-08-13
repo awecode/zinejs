@@ -721,7 +721,13 @@ export class Zine {
     if (!this.#renderer || !this.#zoomEnabled) return;
     const s2 = clamp(scale, 1, this.#maxZoom);
     const m = this.#renderer.measure();
-    const focal = center ?? { x: m.containerWidth / 2, y: m.containerHeight / 2 };
+    // Default to the middle of the pages, not of the container: on a lone page those differ, and
+    // zooming toward the container centre would drift the page off toward the gutter.
+    const box = m.screenAt?.(this.#scale);
+    const focal = center ??
+      (box
+        ? { x: box.x + this.#tx + box.width / 2, y: box.y + this.#ty + box.height / 2 }
+        : null) ?? { x: m.containerWidth / 2, y: m.containerHeight / 2 };
     const s1 = this.#scale;
     // Solve for the translate that keeps the focal screen point fixed as s1→s2.
     let tx = s2 === 1 ? 0 : focal.x - (s2 / s1) * (focal.x - this.#tx);
@@ -740,14 +746,35 @@ export class Zine {
   }
 
   #clampPan(tx: number, ty: number, scale: number, w: number, h: number): [number, number] {
-    // Keep the scaled content covering the viewport (transform-origin is 0,0).
-    const cx = clamp(tx, w * (1 - scale), 0);
-    const cy = clamp(ty, h * (1 - scale), 0);
+    // Bound the pan by where the pages actually are, not by the container. A lone page (a cover,
+    // or the back of a book-mode spread) is painted in the middle half, and letterboxing insets
+    // the book on any container whose aspect differs; clamping to the container would let the
+    // reader drag the page off to one side and stare at the space beside it.
+    //
+    // `screen` is where the renderer says the pages are under the *current* view, so the offset
+    // between it and the translate that produced it converts a wanted translate into a page
+    // position. The renderers place a lone page differently (one shifts outside the view scale,
+    // one inside), which is why this asks rather than deriving it.
     // Land on whole device pixels. A fractional offset makes every screen pixel a different
     // bilinear blend of the same texels, so as the page slides the strokes of each glyph thicken
     // and thin: the text appears to shimmer and change weight rather than simply move.
     const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
-    return [Math.round(cx * dpr) / dpr, Math.round(cy * dpr) / dpr];
+    // `|| 0` normalises -0, which Object.is and strict deep-equality treat as distinct from 0.
+    const snap = (v: number): number => Math.round(v * dpr) / dpr || 0;
+
+    // Asked for `scale` rather than read from the current view, because setZoom clamps before it
+    // commits and would otherwise be bounded by the scale it is leaving.
+    // Falls back to the container, which is what the pages fill on a renderer that does not
+    // report a box: keeps a bare Renderer implementation clamped rather than free to pan away.
+    const box = this.#renderer?.measure().screenAt?.(scale) ?? {
+      x: 0,
+      y: 0,
+      width: w * scale,
+      height: h * scale,
+    };
+    const [minX, maxX] = axisPanRange(box.x, box.width, w);
+    const [minY, maxY] = axisPanRange(box.y, box.height, h);
+    return [snap(clamp(tx, minX, maxX)), snap(clamp(ty, minY, maxY))];
   }
 
   on<K extends keyof ZineEventMap>(
@@ -1624,6 +1651,23 @@ export class Zine {
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
+}
+
+/**
+ * The translate range that keeps content within the viewport along one axis.
+ *
+ * `pos`/`size` are where the pages sit with no pan applied, so the view puts them at `pos + t`.
+ * When they are larger than the viewport the range spans from their far edge to their near one,
+ * so the reader can reach every part. When smaller there is nothing to explore, so the range
+ * collapses to the single value that centres them: a lone page at 2x fills the width exactly, and
+ * any freedom there would only let it drift off to one side.
+ */
+function axisPanRange(pos: number, size: number, viewport: number): [min: number, max: number] {
+  if (size <= viewport) {
+    const centered = (viewport - size) / 2 - pos;
+    return [centered, centered];
+  }
+  return [viewport - (pos + size), -pos];
 }
 
 /** Quadratic ease-in-out. Deliberately gentler than a cubic: a cubic leaves the page nearly

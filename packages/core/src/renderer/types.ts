@@ -34,6 +34,16 @@ export interface LayoutMetrics {
    *  full spread, but the centered half for a lone page (cover / book front-back). This is the
    *  region the engine hit-tests against so taps track the visible page. Omit to fall back. */
   content?: { x: number; y: number; width: number; height: number };
+  /**
+   * Where `content` would land at zoom `scale` with no pan, in container px.
+   *
+   * Reported by the renderer rather than derived by the engine because the two place a lone page
+   * differently: WebGL2 offsets it outside the view scale, so the offset is fixed in screen space,
+   * while CSS applies it inside and it magnifies. The engine adds the translate to this to bound
+   * panning; without it a lone page can be dragged until its content is off screen. Omit to fall
+   * back to the container.
+   */
+  screenAt?(scale: number): { x: number; y: number; width: number; height: number };
 }
 
 /**

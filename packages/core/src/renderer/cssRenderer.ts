@@ -251,7 +251,25 @@ export class CssRenderer implements Renderer {
     const known = this.#pageAspect > 0;
     const book = known ? this.#bookBox() : undefined;
     const content = known ? this.#contentBox() : undefined;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book, content };
+    // The shift lives on #book, inside the scaled #viewport, so unlike the WebGL2 renderer it
+    // magnifies along with everything else and the whole box simply scales.
+    const screenAt = content
+      ? (scale: number): { x: number; y: number; width: number; height: number } => ({
+          x: content.x * scale,
+          y: content.y * scale,
+          width: content.width * scale,
+          height: content.height * scale,
+        })
+      : undefined;
+    return {
+      containerWidth: w,
+      containerHeight: h,
+      pageWidth: w / 2,
+      pageHeight: h,
+      book,
+      content,
+      screenAt,
+    };
   }
 
   #makeCanvas(doc: Document, className: string, extra: string): HTMLCanvasElement {

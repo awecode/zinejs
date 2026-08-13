@@ -274,3 +274,82 @@ describe('Zine — zoom tiles', () => {
     }
   });
 });
+
+describe('Zine — zooming a lone page', () => {
+  /** A cover/back spread: the page is painted in the middle half of the container. */
+  class LoneRenderer extends MockRenderer {
+    override measure(): LayoutMetrics {
+      const content = { x: 200, y: 0, width: 400, height: 600 };
+      return {
+        containerWidth: 800,
+        containerHeight: 600,
+        pageWidth: 400,
+        pageHeight: 600,
+        book: { x: 0, y: 0, width: 800, height: 600 },
+        content,
+        // WebGL2's lone-page shift sits outside the view scale, so it stays a fixed 200px
+        // offset however far the reader zooms. Mirrored here because that asymmetry is
+        // exactly what the clamp has to respect.
+        screenAt: (scale: number) => ({
+          x: (content.x - 200) * scale + 200,
+          y: content.y * scale,
+          width: content.width * scale,
+          height: content.height * scale,
+        }),
+      };
+    }
+  }
+
+  const makeLone = async (): Promise<{ zine: Zine; renderer: LoneRenderer; el: HTMLElement }> => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const renderer = new LoneRenderer();
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, zoom: { max: 4 } });
+    await zine.ready;
+    return { zine, renderer, el };
+  };
+
+  it('keeps the page filling the viewport rather than sliding off to one side', async () => {
+    // At 2x the page spans 200..1000 with no pan: 800 wide in an 800 viewport, so there is
+    // nothing to explore horizontally and the only valid translate is the one that seats it.
+    // Clamping to the container would allow slack and let the reader drag it half off screen.
+    const { zine, renderer, el } = await makeLone();
+    zine.setZoom(2);
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 });
+    fire(el, 'pointermove', { pointerId: 1, clientX: 900, clientY: 300 }); // hard drag right
+    await flush();
+
+    expect(renderer.views.at(-1)![1]).toBe(-200); // pinned flush against the viewport
+  });
+
+  it('lets the reader reach the left edge of a lone page', async () => {
+    // The bug this covers: text cut off at the left with empty space at the right, and no way
+    // to pan any further. The shift is fixed in screen space, so the page spans 200..1800 at
+    // 4x and its left edge needs tx = -200 to reach the viewport's.
+    const { zine, renderer, el } = await makeLone();
+    zine.setZoom(4);
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 });
+    fire(el, 'pointermove', { pointerId: 1, clientX: 4000, clientY: 300 }); // drag hard right
+    await flush();
+
+    expect(renderer.views.at(-1)![1]).toBe(-200);
+  });
+
+  it('lets the reader reach the right edge of a lone page', async () => {
+    const { zine, renderer, el } = await makeLone();
+    zine.setZoom(4);
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 });
+    fire(el, 'pointermove', { pointerId: 1, clientX: -4000, clientY: 300 }); // drag hard left
+    await flush();
+
+    // Right edge sits at 1800 with no pan; the viewport ends at 800, so tx = -1000.
+    expect(renderer.views.at(-1)![1]).toBe(-1000);
+  });
+
+  it('still centres the page when zoom returns to 1', async () => {
+    const { zine, renderer } = await makeLone();
+    zine.setZoom(3);
+    zine.setZoom(1);
+    expect(renderer.views.at(-1)).toEqual([1, 0, 0]);
+  });
+});

@@ -335,7 +335,28 @@ export class WebglRenderer implements Renderer {
     const known = this.#pageAspect > 0;
     const book = known ? this.#bookBox() : undefined;
     const content = known ? this.#contentBox() : undefined;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book, content };
+    const screenAt = content
+      ? (scale: number): { x: number; y: number; width: number; height: number } => {
+          // The shader applies `px * scale + view.t + shiftX`, so the lone-page shift sits
+          // *outside* the scale: a fixed screen offset, not part of the magnified geometry.
+          const shiftCss = this.#shiftX / this.#dpr;
+          return {
+            x: (content.x - shiftCss) * scale + shiftCss,
+            y: content.y * scale,
+            width: content.width * scale,
+            height: content.height * scale,
+          };
+        }
+      : undefined;
+    return {
+      containerWidth: w,
+      containerHeight: h,
+      pageWidth: w / 2,
+      pageHeight: h,
+      book,
+      content,
+      screenAt,
+    };
   }
 
   /** The fitted book rect in container CSS px (letterbox aware) — a stable 2-page area. */
