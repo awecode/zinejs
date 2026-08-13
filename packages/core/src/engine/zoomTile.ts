@@ -20,7 +20,22 @@ export interface View {
 export interface TilePage {
   index: number;
   rect: Rect;
+  /** Which edge of this page meets the spine: +1 right, -1 left, 0 for a lone page. */
+  gutterSide: -1 | 0 | 1;
 }
+
+/**
+ * The gutter shadow the WebGL renderer bakes into every page: the inner tenth darkens toward the
+ * spine, so a spread reads as a bound book rather than two flat panels.
+ *
+ * The overlay has to reproduce it. A tile is a raw page raster with no shading of its own, so
+ * without this the shadow vanishes wherever the overlay covers the page and returns the moment it
+ * hides, which reads as a shadow flickering on and off along the spine as the reader pans.
+ *
+ * Kept in step with FLAT_FRAG in renderer/webglRenderer.ts.
+ */
+export const GUTTER_DEPTH = 0.72;
+export const GUTTER_WIDTH = 0.1;
 
 /** What to draw: a page's raster region, and the container-space box it belongs in. */
 export interface TilePlan {
@@ -28,6 +43,10 @@ export interface TilePlan {
   request: PageRequest;
   /** Where the tile lands on screen, in *untransformed* container pixels. */
   dest: Rect;
+  /** The whole page's box, so the gutter shading spans the page and not just this tile. */
+  page: Rect;
+  /** Which edge of the page meets the spine; see {@link TilePage}. */
+  gutterSide: -1 | 0 | 1;
 }
 
 /** Intersection of two rectangles, or null when they do not overlap. */
@@ -88,6 +107,8 @@ export function planTiles(pages: TilePage[], view: View, viewport: Rect): TilePl
         },
       },
       dest: hit,
+      page: page.rect,
+      gutterSide: page.gutterSide,
     });
   }
   return plans;
@@ -195,6 +216,7 @@ export class ZoomOverlay {
       for (const { plan, content } of tiles) {
         const d = plan.dest;
         ctx.drawImage(content, d.x, d.y, d.width, d.height);
+        this.#shadeGutter(ctx, plan);
       }
     }
 
@@ -203,6 +225,40 @@ export class ZoomOverlay {
     this.#paintedFor = { ...view };
     this.#visible = false; // force show() past its no-op guard
     this.show();
+  }
+
+  /**
+   * Darken a tile toward the spine, matching the shading the renderer bakes into the page.
+   *
+   * The gradient spans the whole page, not the tile: the tile is whatever part happens to be on
+   * screen, so measuring from its edge would drag the shadow around as the reader pans.
+   */
+  #shadeGutter(ctx: CanvasRenderingContext2D, plan: TilePlan): void {
+    if (plan.gutterSide === 0) return;
+    const p = plan.page;
+    const band = p.width * GUTTER_WIDTH;
+    // From the spine edge inward, so the darkest point sits exactly on the fold.
+    const spineX = plan.gutterSide > 0 ? p.x + p.width : p.x;
+    const innerX = plan.gutterSide > 0 ? spineX - band : spineX + band;
+
+    const d = plan.dest;
+    const overlap = Math.min(d.x + d.width, Math.max(spineX, innerX)) - Math.max(d.x, Math.min(spineX, innerX));
+    if (overlap <= 0) return; // this tile does not reach the gutter
+
+    const gradient = ctx.createLinearGradient(spineX, 0, innerX, 0);
+    // The renderer multiplies the page by mix(GUTTER_DEPTH, 1, smoothstep(d)), so paint the
+    // complement in black. Sampled rather than a two-stop ramp because a linear fade against a
+    // smoothstep one is visibly different where they meet, along the length of the spine.
+    const STEPS = 8;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      const s = t * t * (3 - 2 * t); // smoothstep(0, 1, t)
+      gradient.addColorStop(t, `rgba(0, 0, 0, ${(1 - GUTTER_DEPTH) * (1 - s)})`);
+    }
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(d.x, d.y, d.width, d.height);
+    ctx.restore();
   }
 
   destroy(): void {

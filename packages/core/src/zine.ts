@@ -1505,9 +1505,21 @@ export class Zine {
     const halves: TilePage[] = [];
     const lone = spread.left === null || spread.right === null;
     const width = lone ? box.width : box.width / 2;
-    if (spread.left !== null) halves.push({ index: spread.left, rect: { ...box, width } });
+    // A lone page is standalone and centered, so it has no spine to shade against; matches the
+    // renderer's own rule in #drawSpread.
+    if (spread.left !== null) {
+      halves.push({
+        index: spread.left,
+        rect: { ...box, width },
+        gutterSide: spread.right !== null ? 1 : 0,
+      });
+    }
     if (spread.right !== null) {
-      halves.push({ index: spread.right, rect: { ...box, x: box.x + (lone ? 0 : width), width } });
+      halves.push({
+        index: spread.right,
+        rect: { ...box, x: box.x + (lone ? 0 : width), width },
+        gutterSide: spread.left !== null ? -1 : 0,
+      });
     }
 
     const view = this.#view();

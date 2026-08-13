@@ -1,11 +1,18 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { planTiles, sameView, ZoomOverlay, type TilePage, type TilePlan } from './zoomTile';
+import {
+  planTiles,
+  sameView,
+  GUTTER_DEPTH,
+  ZoomOverlay,
+  type TilePage,
+  type TilePlan,
+} from './zoomTile';
 
 /** A two-page spread filling an 800x600 container, each page 400 wide. */
 const spread: TilePage[] = [
-  { index: 0, rect: { x: 0, y: 0, width: 400, height: 600 } },
-  { index: 1, rect: { x: 400, y: 0, width: 400, height: 600 } },
+  { index: 0, rect: { x: 0, y: 0, width: 400, height: 600 }, gutterSide: 1 },
+  { index: 1, rect: { x: 400, y: 0, width: 400, height: 600 }, gutterSide: -1 },
 ];
 const viewport = { x: 0, y: 0, width: 800, height: 600 };
 
@@ -74,6 +81,8 @@ describe('ZoomOverlay', () => {
       index: 0,
       request: { scale: 2, region: { x: 0, y: 0, width: 1, height: 0.5 } },
       dest: { x: 0, y: 0, width: 400, height: 300 },
+      page: { x: 0, y: 0, width: 400, height: 600 },
+      gutterSide: 1,
     },
     content: document.createElement('canvas'),
   });
@@ -146,6 +155,82 @@ describe('ZoomOverlay', () => {
     overlay.draw([], view, viewport);
     expect(el.style.opacity).toBe('0');
     expect(overlay.matches(view)).toBe(false);
+  });
+});
+
+describe('gutter shadow', () => {
+  /** Record the gradient stops and fills the overlay asks a 2D context for. */
+  const spy = (): { overlay: ZoomOverlay; stops: number[]; fills: number } => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const stops: number[] = [];
+    let fills = 0;
+    const proto = window.HTMLCanvasElement.prototype as unknown as { getContext: () => unknown };
+    const original = proto.getContext;
+    proto.getContext = () =>
+      ({
+        setTransform: () => {},
+        clearRect: () => {},
+        translate: () => {},
+        scale: () => {},
+        drawImage: () => {},
+        save: () => {},
+        restore: () => {},
+        fillRect: () => {
+          fills++;
+        },
+        createLinearGradient: () => ({
+          addColorStop: (_o: number, c: string) => stops.push(Number(/([\d.]+)\)$/.exec(c)![1])),
+        }),
+      }) as unknown as CanvasRenderingContext2D;
+    const overlay = new ZoomOverlay(document, host);
+    proto.getContext = original;
+    return { overlay, stops, fills };
+  };
+
+  const view = { scale: 4, tx: -400, ty: -300 };
+  const plan = (gutterSide: -1 | 0 | 1, dest = { x: 0, y: 0, width: 400, height: 600 }): TilePlan => ({
+    index: 0,
+    request: { scale: 2, region: { x: 0, y: 0, width: 1, height: 1 } },
+    dest,
+    page: { x: 0, y: 0, width: 400, height: 600 },
+    gutterSide,
+  });
+
+  it('darkens a tile toward the spine, as the renderer does to the page', () => {
+    // A tile is a raw page raster with no shading of its own, so without this the spine shadow
+    // disappears wherever the overlay covers the page and returns the instant it hides.
+    const { overlay, stops, fills } = spy();
+    overlay.draw([{ plan: plan(1), content: document.createElement('canvas') }], view, viewport);
+
+    expect(fills).toBe(1);
+    expect(stops[0]).toBeCloseTo(1 - GUTTER_DEPTH); // darkest on the fold
+    expect(stops[stops.length - 1]).toBe(0); // clear at the inner edge
+  });
+
+  it('eases the shadow rather than ramping it linearly', () => {
+    // The renderer uses smoothstep; a linear fade beside it is visibly different along the spine.
+    const { overlay, stops } = spy();
+    overlay.draw([{ plan: plan(1), content: document.createElement('canvas') }], view, viewport);
+
+    const mid = stops[Math.floor(stops.length / 2)]!;
+    expect(mid).toBeCloseTo((1 - GUTTER_DEPTH) * 0.5); // smoothstep(0.5) = 0.5
+    const quarter = stops[Math.floor(stops.length / 4)]!;
+    expect(quarter).toBeGreaterThan((1 - GUTTER_DEPTH) * 0.75); // eased, not straight
+  });
+
+  it('leaves a lone page unshaded, which has no spine to shade against', () => {
+    const { overlay, fills } = spy();
+    overlay.draw([{ plan: plan(0), content: document.createElement('canvas') }], view, viewport);
+    expect(fills).toBe(0);
+  });
+
+  it('skips a tile too far from the spine to reach the gutter', () => {
+    // Panned deep into the outer edge of the page: no part of the band is on screen.
+    const { overlay, fills } = spy();
+    const far = plan(1, { x: 0, y: 0, width: 100, height: 600 });
+    overlay.draw([{ plan: far, content: document.createElement('canvas') }], view, viewport);
+    expect(fills).toBe(0);
   });
 });
 
