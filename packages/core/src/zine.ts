@@ -28,14 +28,6 @@ import {
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { DownloadInfo, OutlineItem, Source } from './source/types';
-import {
-  planTiles,
-  sameView,
-  ZoomOverlay,
-  type TilePage,
-  type TilePlan,
-  type View,
-} from './engine/zoomTile';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
 
@@ -59,9 +51,13 @@ const LONE_PAGE_FLIP_SCALE = 1.55;
 /** Characters of surrounding text shown on either side of a search match. */
 const EXCERPT_PAD = 32;
 
-/** Quiet period before re-rendering the zoomed region, so a pinch or pan does not rasterize
- *  on every frame. Long enough to coalesce a gesture, short enough to feel immediate on release. */
-const ZOOM_TILE_DELAY = 120;
+/** Quiet period before re-rasterizing at a new zoom, so a pinch does not rasterize every frame. */
+const ZOOM_TILE_DELAY = 60;
+
+/** Ceiling on the zoomed page raster. Memory grows with the square of this, so a letter page at
+ *  4x would run past 100 MB; 2.5x keeps a deep zoom far sharper than fit-to-screen for a
+ *  fraction of that. */
+const MAX_PAGE_UPGRADE = 2.5;
 
 /** Flip time under `prefers-reduced-motion`. Short enough not to read as animation, long enough
  *  to show which way the page went — an instant swap leaves the reader guessing. */
@@ -273,8 +269,8 @@ export class Zine {
   #pendingUpgrades = new Set<number>();
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
-  /** Crisp re-renders of the visible region while zoomed in; null until the reader zooms. */
-  #zoomOverlay: ZoomOverlay | null = null;
+  /** Resolution multiplier the current spread is rasterized at; 1 while not zoomed. */
+  #zoomedAt = 1;
   /** Guards against an out-of-date tile landing after the view has already moved on. */
   #tileGeneration = 0;
   #tileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -745,7 +741,13 @@ export class Zine {
 
   #clampPan(tx: number, ty: number, scale: number, w: number, h: number): [number, number] {
     // Keep the scaled content covering the viewport (transform-origin is 0,0).
-    return [clamp(tx, w * (1 - scale), 0), clamp(ty, h * (1 - scale), 0)];
+    const cx = clamp(tx, w * (1 - scale), 0);
+    const cy = clamp(ty, h * (1 - scale), 0);
+    // Land on whole device pixels. A fractional offset makes every screen pixel a different
+    // bilinear blend of the same texels, so as the page slides the strokes of each glyph thicken
+    // and thin: the text appears to shimmer and change weight rather than simply move.
+    const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    return [Math.round(cx * dpr) / dpr, Math.round(cy * dpr) / dpr];
   }
 
   on<K extends keyof ZineEventMap>(
@@ -773,9 +775,7 @@ export class Zine {
     this.#unbindContextMenu?.();
     this.#unbindInput?.();
     if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
-    this.#tileGeneration++; // strand any tile still resolving
-    this.#zoomOverlay?.destroy();
-    this.#zoomOverlay = null;
+    this.#tileGeneration++; // strand any raster still resolving
     this.#renderer?.destroy();
     this.#renderer = null;
     this.#source.destroy();
@@ -1417,8 +1417,8 @@ export class Zine {
   #paintSpread(spread: Spread, content: SpreadContent): void {
     this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
     this.#applyContainerAspect();
-    // Whatever is overlaid was rendered for the pages that just left; drop it and re-request.
-    this.#zoomOverlay?.clear();
+    // These pages were resolved at fit-to-screen; if the reader is zoomed, ask for them sharper.
+    this.#zoomedAt = 1;
     this.#refreshZoomTiles();
   }
 
@@ -1466,108 +1466,76 @@ export class Zine {
    * shows, which is smooth because there is nothing to disagree with it. The tile returns once
    * the view settles.
    */
+  /**
+   * Re-rasterize the visible pages at the magnification being viewed, and hand them to the
+   * renderer as ordinary page content.
+   *
+   * Zoom is a view transform, so the renderer magnifies a raster made to fit the screen and text
+   * goes soft. Giving it a sharper raster for the same page fixes that at the root: panning stays
+   * a pure view transform over crisp pixels, which is why an image book pans smoothly and why an
+   * overlay painted only between gestures never could.
+   *
+   * Debounced, since rasterizing a PDF page is far too slow to do per frame.
+   */
   #refreshZoomTiles(): void {
     if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
-
-    if (this.#scale <= 1) {
-      this.#zoomOverlay?.clear();
+    const wanted = this.#upgradeScale();
+    if (wanted === this.#zoomedAt) return; // already showing this resolution
+    if (wanted === 1) {
       this.#tileGeneration++; // abandon anything in flight: it is no longer wanted
+      this.#zoomedAt = 1;
+      void this.#renderCurrent(); // back to the fit-to-screen raster
       return;
     }
-    const overlay = this.#zoomOverlay;
-    if (overlay?.matches(this.#view())) {
-      // Back exactly where these pixels were painted, so they are crisp again with no work: a
-      // pinch that lands where it started, or a pan clamped against the edge of the book.
-      overlay.show();
-      return;
-    }
-    overlay?.hide();
     this.#tileTimer = setTimeout(() => {
       this.#tileTimer = null;
       void this.#renderZoomTiles();
     }, ZOOM_TILE_DELAY);
   }
 
-  #view(): View {
-    return { scale: this.#scale, tx: this.#tx, ty: this.#ty };
+  /**
+   * The resolution multiplier to rasterize the visible pages at.
+   *
+   * Capped because a page costs the square of this in memory: at 4x a letter page is over 100 MB,
+   * which would dwarf the source's whole cache. The cap keeps a deep zoom sharper than the
+   * fit-to-screen raster without trying to match it pixel for pixel.
+   */
+  #upgradeScale(): number {
+    if (this.#scale <= 1) return 1;
+    return Math.min(Math.ceil(this.#scale * 2) / 2, MAX_PAGE_UPGRADE);
   }
 
   async #renderZoomTiles(): Promise<void> {
-    const renderer = this.#renderer;
     const spread = this.#spreads[this.#current];
-    if (!renderer || !spread || this.#scale <= 1) return;
-
-    const m = renderer.measure();
-    const box = m.content ?? m.book;
-    if (!box) return; // no measured page box: nothing to map screen pixels back onto
-
-    // In a two-page spread each page owns half the box; a lone page owns all of it.
-    const halves: TilePage[] = [];
-    const lone = spread.left === null || spread.right === null;
-    const width = lone ? box.width : box.width / 2;
-    // A lone page is standalone and centered, so it has no spine to shade against; matches the
-    // renderer's own rule in #drawSpread.
-    if (spread.left !== null) {
-      halves.push({
-        index: spread.left,
-        rect: { ...box, width },
-        gutterSide: spread.right !== null ? 1 : 0,
-      });
-    }
-    if (spread.right !== null) {
-      halves.push({
-        index: spread.right,
-        rect: { ...box, x: box.x + (lone ? 0 : width), width },
-        gutterSide: spread.left !== null ? -1 : 0,
-      });
-    }
-
-    const view = this.#view();
-    const viewport = { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
-    const plans = planTiles(halves, view, viewport);
+    if (!this.#renderer || !spread) return;
+    const scale = this.#upgradeScale();
+    if (scale === 1 || scale === this.#zoomedAt) return;
 
     const generation = ++this.#tileGeneration;
-    const drawn = await Promise.all(
-      plans.map(async (plan) => {
+    const whole = { x: 0, y: 0, width: 1, height: 1 };
+    const pages = await Promise.all(
+      [spread.left, spread.right].map(async (index) => {
+        if (index === null) return null;
         try {
-          const content = await this.#source.get(plan.index, plan.request);
-          // A source free to ignore the hint hands back its ordinary full-page raster — the very
-          // object already on screen. Identity says so exactly; comparing aspects only guesses,
-          // and guesses wrong whenever the visible region happens to match the page's shape.
-          const asPainted =
-            plan.index === spread.left ? this.#currentContent.left : this.#currentContent.right;
-          if (content === asPainted) return null;
-          // A source that rebuilds its full page per call returns a new object every time, so
-          // identity cannot catch it. A tile has the shape of the region it was asked for.
-          const want = plan.dest.width / plan.dest.height;
-          const got = content.width / content.height;
-          if (Math.abs(want - got) / want > 0.02) return null;
-          return { plan, content };
+          return await this.#source.get(index, { scale, region: whole });
         } catch (error) {
-          // A tile is an enhancement: the readable, blurry page is still on screen underneath.
-          this.#emitter.emit('sourceError', { index: plan.index, error });
+          // An upgrade is an enhancement: the readable, softer page stays on screen.
+          this.#emitter.emit('sourceError', { index, error });
           return null;
         }
       }),
     );
-    // Rasterizing is slow, and the reader may have moved on while it ran. The generation catches
-    // a newer request; comparing the view catches a gesture that started after this one began,
-    // whose tiles would be crisp for somewhere the reader is no longer looking.
-    if (generation !== this.#tileGeneration || !sameView(view, this.#view())) return;
-    // All or nothing: one page upgraded beside another left magnified is the same visible seam
-    // that a part-page tile creates, only down the gutter instead.
-    if (drawn.length === 0 || drawn.some((t) => t === null)) return;
-    const tiles = drawn as { plan: TilePlan; content: PageContent }[];
+    // Rasterizing is slow and the reader may have moved on, or zoomed somewhere else entirely.
+    if (generation !== this.#tileGeneration || this.#upgradeScale() !== scale) return;
+    const left = pages[0] ?? null;
+    const right = pages[1] ?? null;
+    // Nothing sharper came back: a source with a fixed-resolution original hands over the raster
+    // already on screen, and repainting it would be pure churn.
+    if (left === this.#currentContent.left && right === this.#currentContent.right) return;
 
-    this.#zoomOverlay ??= this.#createZoomOverlay();
-    this.#zoomOverlay?.draw(tiles, view, viewport);
-  }
-
-  #createZoomOverlay(): ZoomOverlay | null {
-    const doc = this.#container.ownerDocument as Document | undefined;
-    // Same guard as #setupA11y: tests mount against bare EventTargets with no real DOM.
-    if (!doc || typeof this.#container.append !== 'function') return null;
-    return new ZoomOverlay(doc, this.#container);
+    this.#zoomedAt = scale;
+    this.#currentContent = { left, right };
+    this.#renderer.renderSpread(spread, this.#currentContent, { fill: this.#singlePage });
   }
 
   /** Apply any upgrade that arrived mid-flip, now that the book has settled. */

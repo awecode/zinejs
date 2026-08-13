@@ -61,6 +61,15 @@ const PROGRESSIVE_LOW_RATIO = 0.35;
 // detail than the reader can resolve, and rasterizing further only costs memory and time.
 const MAX_ZOOM_RENDER_SCALE = 6;
 
+/** Free a canvas's backing store. Safari in particular holds the memory until the surface is
+ *  resized away, and a zoomed page is large enough for that to matter. */
+function releaseCanvas(content: PageContent): void {
+  if (typeof HTMLCanvasElement !== 'undefined' && content instanceof HTMLCanvasElement) {
+    content.width = 0;
+    content.height = 0;
+  }
+}
+
 interface CacheEntry {
   promise: Promise<PageContent>;
   bytes: number; // 0 until the render resolves and its size is known
@@ -116,6 +125,10 @@ export class PdfSource implements Source {
   #cache = new Map<number, CacheEntry>();
   #cachedBytes = 0;
   #onUpdate: ((index: number) => void) | null = null;
+  /** Zoomed page rasters keyed `index@scale`, apart from #cache: one is worth many normal pages
+   *  and would evict the whole spread from a byte cap sized for fit-to-screen. */
+  #zoomCache = new Map<string, Promise<PageContent>>();
+
   /** Extracted page text, kept apart from #cache: text is scale-independent and negligible next
    *  to a raster, so it has no place in the byte budget that evicts bitmaps. */
   #textCache = new Map<number, Promise<string>>();
@@ -168,9 +181,10 @@ export class PdfSource implements Source {
 
   get(index: number, opts?: PageRequest): Promise<PageContent> {
     // A zoomed request wants detail the fit-to-screen raster never had. PDF pages are vector, so
-    // re-render the visible part at the magnification being viewed. Deliberately uncached: the
-    // region changes as the reader pans, and these rasters are far too large to keep around.
-    if (opts && opts.scale > 1) return this.#renderTile(index, opts);
+    // re-render at the magnification being viewed. Memoized per zoom level, not in the byte-capped
+    // page cache: a zoomed page is many times the size of a normal one and would evict the whole
+    // spread, and a reader who zooms out and back in should not pay to render it twice.
+    if (opts && opts.scale > 1) return this.#renderZoomed(index, opts.scale);
 
     const decoded = this.#renderPage(index);
     for (let d = 1; d <= this.#preload; d++) {
@@ -285,6 +299,10 @@ export class PdfSource implements Source {
   destroy(): void {
     this.#doc?.destroy?.();
     this.#cache.clear();
+    for (const pending of this.#zoomCache.values()) {
+      void pending.then(releaseCanvas).catch(() => {});
+    }
+    this.#zoomCache.clear();
     this.#textCache.clear();
     this.#cachedBytes = 0;
     this.#doc = null;
@@ -347,32 +365,34 @@ export class PdfSource implements Source {
   }
 
   /**
-   * Render just the visible part of a page at zoom magnification.
+   * Render a whole page at zoom magnification, memoized by page and zoom level.
    *
-   * The tile covers `region` of the page and is sized to the pixels actually on screen, so its
-   * cost stays flat however far the reader zooms in — a full-page re-render would grow with the
-   * square of the scale and dwarf the whole page cache.
+   * Whole-page rather than a crop of what is visible: the renderer draws a page as one texture, so
+   * a partial raster cannot be handed to it, and a crop would have to be re-rendered on every pan
+   * anyway. Held apart from the byte-capped page cache, which is sized for fit-to-screen rasters.
    */
-  async #renderTile(index: number, req: PageRequest): Promise<PageContent> {
-    if (this.#doc === null) throw new Error('PdfSource: use after open() — the document is not loaded.');
-    const page = await this.#doc.getPage(index + 1); // pdf.js pages are 1-indexed
+  #renderZoomed(index: number, zoom: number): Promise<PageContent> {
+    const scale = Math.min(zoom, MAX_ZOOM_RENDER_SCALE);
+    const key = `${index}@${scale}`;
+    const cached = this.#zoomCache.get(key);
+    if (cached) return cached;
 
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const base = this.#renderScale * dpr;
-    // The tile is only ever as many pixels as the region occupies on screen, so clamping the
-    // scale bounds its size no matter how deep the zoom goes.
-    const scale = base * Math.min(req.scale, MAX_ZOOM_RENDER_SCALE);
-    const full = page.getViewport({ scale });
-
-    const r = req.region;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.ceil(full.width * r.width));
-    canvas.height = Math.max(1, Math.ceil(full.height * r.height));
-    // Shift the page under the canvas so the region lands at the origin; pdf.js has no crop of
-    // its own, and rendering full-size into a small canvas would just clip the top-left corner.
-    const transform = [1, 0, 0, 1, -full.width * r.x, -full.height * r.y];
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: full, transform }).promise;
-    return canvas;
+    const promise = this.#rasterize(index, this.#renderScale * dpr * scale).catch(
+      (error: unknown) => {
+        this.#zoomCache.delete(key); // let a later zoom retry
+        throw error;
+      },
+    );
+    // One zoom level at a time, but both pages of the spread at that level.
+    for (const [k, pending] of this.#zoomCache) {
+      if (!k.endsWith(`@${scale}`)) {
+        this.#zoomCache.delete(k);
+        void pending.then(releaseCanvas).catch(() => {});
+      }
+    }
+    this.#zoomCache.set(key, promise);
+    return promise;
   }
 
   async #rasterize(index: number, scale: number): Promise<PageContent> {

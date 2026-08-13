@@ -185,6 +185,23 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(renderer.begun).toEqual([]); // never started a flip
   });
 
+  it('lands a pan on whole device pixels', async () => {
+    // A fractional offset makes every screen pixel a different bilinear blend of the same texels,
+    // so as the page slides the strokes of each glyph thicken and thin: text that shimmers and
+    // seems to change weight rather than simply moving.
+    vi.stubGlobal('devicePixelRatio', 2);
+    const { zine, renderer, el } = await makeZine();
+    zine.setZoom(2); // tx=-400, ty=-300
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 });
+    fire(el, 'pointermove', { pointerId: 1, clientX: 410.3, clientY: 320.9 });
+    await flush();
+
+    const [, tx, ty] = renderer.views.at(-1)!;
+    expect(tx * 2).toBe(Math.round(tx * 2)); // whole device pixels at dpr 2
+    expect(ty * 2).toBe(Math.round(ty * 2));
+    expect(tx).toBeCloseTo(-389.5, 5); // -400 + 10.3 snapped to the half-pixel grid
+  });
+
   it('clamps a pan so content keeps covering the viewport', async () => {
     const { zine, renderer, el } = await makeZine();
     zine.setZoom(2);

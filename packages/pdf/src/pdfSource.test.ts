@@ -243,42 +243,62 @@ describe('PdfSource — getText', () => {
   });
 });
 
-describe('PdfSource — zoom tiles', () => {
-  /** A document whose viewport tracks scale, so a tile's dimensions are meaningful. */
+describe('PdfSource — zoomed pages', () => {
+  /** A document whose viewport tracks scale, so a raster's dimensions are meaningful. */
   const zoomDoc = () => {
-    // Typed parameter, not `() =>`: it is what lets the assertions below read back the transform.
-    const render = vi.fn((_opts: { transform?: number[] }) => ({ promise: Promise.resolve() }));
     const page = {
       getViewport: ({ scale }: { scale: number }) => ({ width: 120 * scale, height: 160 * scale }),
-      render,
+      render: () => ({ promise: Promise.resolve() }),
     };
     const getPage = vi.fn(async () => page);
-    return { render, getPage, doc: { numPages: 3, getPage, destroy: () => {} } as unknown as PdfSrc };
+    return { getPage, doc: { numPages: 3, getPage, destroy: () => {} } as unknown as PdfSrc };
   };
+  const whole = { x: 0, y: 0, width: 1, height: 1 };
 
-  const tile = { scale: 4, region: { x: 0.25, y: 0.5, width: 0.5, height: 0.25 } };
-
-  it('rasterizes only the visible region, at the magnification being viewed', async () => {
+  it('rasterizes the page at the magnification being viewed', async () => {
     const { doc } = zoomDoc();
     const src = new PdfSource(doc, { preload: 0 });
     await src.open();
 
-    const canvas = (await src.get(0, tile)) as HTMLCanvasElement;
-    // Page is 120x160 at 1x, so 480x640 at 4x; the region is half its width and a quarter its
-    // height. The tile covers just that: the whole point is that it does not grow with the zoom.
-    expect(canvas.width).toBe(240);
-    expect(canvas.height).toBe(160);
+    const canvas = (await src.get(0, { scale: 2.5, region: whole })) as HTMLCanvasElement;
+    // 120x160 at 1x, so 300x400 at 2.5x: the detail a 2.5x view actually needs.
+    expect(canvas.width).toBe(300);
+    expect(canvas.height).toBe(400);
   });
 
-  it('offsets the page so the requested region lands in the tile', async () => {
-    const { render, doc } = zoomDoc();
+  it('memoizes a zoom level, so panning does not re-render the page', async () => {
+    // The whole point of upgrading the page rather than cropping to the viewport: panning is then
+    // a pure view transform and costs no rasterizing at all.
+    const { getPage, doc } = zoomDoc();
     const src = new PdfSource(doc, { preload: 0 });
     await src.open();
-    await src.get(0, tile);
 
-    // Without the shift pdf.js would paint the top-left corner and the reader would pan to find
-    // the wrong part of the page magnified.
-    expect(render.mock.calls[0]?.[0].transform).toEqual([1, 0, 0, 1, -0.25 * 480, -0.5 * 640]);
+    await src.get(0, { scale: 2, region: whole });
+    await src.get(0, { scale: 2, region: whole });
+    expect(getPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps both pages of a spread at the same zoom', async () => {
+    const { doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    const left = await src.get(0, { scale: 2, region: whole });
+    const right = await src.get(1, { scale: 2, region: whole });
+    // Requesting the second must not have evicted the first, or the spread would flicker.
+    expect(await src.get(0, { scale: 2, region: whole })).toBe(left);
+    expect(await src.get(1, { scale: 2, region: whole })).toBe(right);
+  });
+
+  it('drops an old zoom level when the reader zooms somewhere else', async () => {
+    const { getPage, doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    await src.get(0, { scale: 2, region: whole });
+    await src.get(0, { scale: 4, region: whole }); // evicts the 2x raster
+    await src.get(0, { scale: 2, region: whole }); // so this renders again
+    expect(getPage).toHaveBeenCalledTimes(3);
   });
 
   it('caps how far it will rasterize, so a deep zoom cannot run away with memory', async () => {
@@ -286,9 +306,8 @@ describe('PdfSource — zoom tiles', () => {
     const src = new PdfSource(doc, { preload: 0 });
     await src.open();
 
-    const full = { x: 0, y: 0, width: 1, height: 1 };
-    const at6 = (await src.get(0, { scale: 6, region: full })) as HTMLCanvasElement;
-    const at100 = (await src.get(0, { scale: 100, region: full })) as HTMLCanvasElement;
+    const at6 = (await src.get(0, { scale: 6, region: whole })) as HTMLCanvasElement;
+    const at100 = (await src.get(0, { scale: 100, region: whole })) as HTMLCanvasElement;
     expect(at100.width).toBe(at6.width);
   });
 
@@ -298,17 +317,18 @@ describe('PdfSource — zoom tiles', () => {
     await src.open();
 
     await src.get(0);
-    await src.get(0, { scale: 1, region: { x: 0, y: 0, width: 1, height: 1 } });
+    await src.get(0, { scale: 1, region: whole });
     expect(getPage).toHaveBeenCalledTimes(1); // scale 1 is not a zoom: no re-render
   });
 
-  it('does not cache tiles, which change with every pan', async () => {
+  it('keeps zoomed rasters out of the page cache, which is sized for fit-to-screen', async () => {
     const { getPage, doc } = zoomDoc();
-    const src = new PdfSource(doc, { preload: 0 });
+    const src = new PdfSource(doc, { maxCacheBytes: 100_000, preload: 0 });
     await src.open();
 
-    await src.get(0, tile);
-    await src.get(0, tile);
+    await src.get(0); // 120*160*4 = 76,800 bytes, fits
+    await src.get(0, { scale: 4, region: whole }); // many times larger
+    await src.get(0); // must still be cached, not evicted by the zoomed one
     expect(getPage).toHaveBeenCalledTimes(2);
   });
 });
