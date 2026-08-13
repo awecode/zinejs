@@ -28,7 +28,14 @@ import {
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { DownloadInfo, OutlineItem, Source } from './source/types';
-import { planTiles, sameTile, ZoomOverlay, type TilePage } from './engine/zoomTile';
+import {
+  planTiles,
+  ZoomOverlay,
+  type Rect,
+  type TilePage,
+  type TilePlan,
+  type View,
+} from './engine/zoomTile';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
 
@@ -1468,11 +1475,21 @@ export class Zine {
     // Move the tiles already painted to where the page has just gone. Re-rasterizing is too slow
     // to do per frame, but the page tracks the reader's finger — an overlay that held still on
     // top of it would look like the page had stopped moving until the next tile landed.
-    this.#zoomOverlay?.track({ scale: this.#scale, tx: this.#tx, ty: this.#ty });
+    const box = this.#viewportBox();
+    if (box) this.#zoomOverlay?.track(this.#view(), box);
     this.#tileTimer = setTimeout(() => {
       this.#tileTimer = null;
       void this.#renderZoomTiles();
     }, ZOOM_TILE_DELAY);
+  }
+
+  #view(): View {
+    return { scale: this.#scale, tx: this.#tx, ty: this.#ty };
+  }
+
+  #viewportBox(): Rect | null {
+    const m = this.#renderer?.measure();
+    return m ? { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight } : null;
   }
 
   async #renderZoomTiles(): Promise<void> {
@@ -1493,14 +1510,12 @@ export class Zine {
       halves.push({ index: spread.right, rect: { ...box, x: box.x + (lone ? 0 : width), width } });
     }
 
-    const view = { scale: this.#scale, tx: this.#tx, ty: this.#ty };
+    const view = this.#view();
     const viewport = { x: 0, y: 0, width: m.containerWidth, height: m.containerHeight };
+    // Still inside the reserve, at the resolution it was rendered for: those pixels are sharp and
+    // simply slid into place, so re-rendering would spend the margin for nothing.
+    if (this.#zoomOverlay && !this.#zoomOverlay.isStale(view, viewport)) return;
     const plans = planTiles(halves, view, viewport);
-
-    const current = this.#zoomOverlay?.shown ?? [];
-    const unchanged =
-      plans.length === current.length && plans.every((p, i) => sameTile(p, current[i]!));
-    if (unchanged) return;
 
     const generation = ++this.#tileGeneration;
     const drawn = await Promise.all(
@@ -1527,8 +1542,10 @@ export class Zine {
       }),
     );
     if (generation !== this.#tileGeneration || this.#scale <= 1) return; // the view moved on
-    const tiles = drawn.filter((t): t is NonNullable<typeof t> => t !== null);
-    if (tiles.length === 0) return; // leave whatever is up; clearing would only flicker
+    // All or nothing: one page upgraded beside another left magnified is the same visible seam
+    // that a part-page tile creates, only down the gutter instead.
+    if (drawn.length === 0 || drawn.some((t) => t === null)) return;
+    const tiles = drawn as { plan: TilePlan; content: PageContent }[];
 
     this.#zoomOverlay ??= this.#createZoomOverlay();
     this.#zoomOverlay?.draw(tiles, view, viewport);
