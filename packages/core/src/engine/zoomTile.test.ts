@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { planTiles, sameTile, type TilePage, type TilePlan } from './zoomTile';
+import { planTiles, sameTile, ZoomOverlay, type TilePage, type TilePlan } from './zoomTile';
 
 /** A two-page spread filling an 800x600 container, each page 400 wide. */
 const spread: TilePage[] = [
@@ -70,6 +71,77 @@ describe('planTiles', () => {
   it('skips a lone page that is scrolled entirely off screen', () => {
     const plans = planTiles(spread, { scale: 4, tx: -3000, ty: 0 }, viewport);
     expect(plans.every((p) => p.index === 1)).toBe(true);
+  });
+});
+
+describe('ZoomOverlay.track', () => {
+  const viewport = { x: 0, y: 0, width: 800, height: 600 };
+  const tile = (): { plan: TilePlan; content: HTMLCanvasElement } => ({
+    plan: {
+      index: 0,
+      request: { scale: 2, region: { x: 0, y: 0, width: 1, height: 0.5 } },
+      dest: { x: 0, y: 0, width: 400, height: 300 },
+    },
+    content: document.createElement('canvas'),
+  });
+
+  const mount = (): { overlay: ZoomOverlay; el: HTMLCanvasElement; clip: HTMLElement } => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const overlay = new ZoomOverlay(document, host);
+    return {
+      overlay,
+      el: host.querySelector('canvas')!,
+      clip: host.querySelector('.zine-zoom-clip')!,
+    };
+  };
+
+  it('clips the tiles to the book, so a pan cannot carry them outside it', () => {
+    // The canvas is transformed to follow the pan; without a clipping wrapper those pixels spill
+    // across the page, since the container itself does not clip.
+    const { clip } = mount();
+    expect(clip.style.overflow).toBe('hidden');
+  });
+
+  it('shifts painted tiles to follow a pan, without waiting for a re-render', () => {
+    // The bug this covers: the page slides under the reader's finger while a fresh tile is still
+    // being rasterized. An overlay that stayed put read as the page having frozen mid-drag.
+    const { overlay, el } = mount();
+    overlay.draw([tile()], { scale: 2, tx: 0, ty: 0 }, viewport);
+    expect(el.style.transform).toBe('');
+
+    overlay.track({ scale: 2, tx: -120, ty: -40 });
+    expect(el.style.transform).toBe('translate(-120px, -40px) scale(1)');
+  });
+
+  it('scales as well as shifts, so a pinch keeps the tiles registered', () => {
+    const { overlay, el } = mount();
+    overlay.draw([tile()], { scale: 2, tx: -100, ty: 0 }, viewport);
+
+    // Painted at 2x/-100; now showing 4x/-300. Pixels at 2p-100 must land at 4p-300, so they
+    // scale by 2 and shift by -300 - 2*(-100) = -100.
+    overlay.track({ scale: 4, tx: -300, ty: 0 });
+    expect(el.style.transform).toBe('translate(-100px, 0px) scale(2)');
+  });
+
+  it('spends the tracking shift when a fresh tile is painted', () => {
+    const { overlay, el } = mount();
+    overlay.draw([tile()], { scale: 2, tx: 0, ty: 0 }, viewport);
+    overlay.track({ scale: 2, tx: -120, ty: 0 });
+    overlay.draw([tile()], { scale: 2, tx: -120, ty: 0 }, viewport);
+    // The new pixels are already in the right place; keeping the shift would double it.
+    expect(el.style.transform).toBe('');
+  });
+
+  it('does nothing before anything is painted, and drops the shift on clear', () => {
+    const { overlay, el } = mount();
+    overlay.track({ scale: 3, tx: -50, ty: -50 });
+    expect(el.style.transform).toBe(''); // no pixels to move
+
+    overlay.draw([tile()], { scale: 2, tx: 0, ty: 0 }, viewport);
+    overlay.track({ scale: 2, tx: -60, ty: 0 });
+    overlay.clear();
+    expect(el.style.transform).toBe('');
   });
 });
 

@@ -107,25 +107,58 @@ export function sameTile(a: TilePlan, b: TilePlan): boolean {
  * over the pixels they replace and simply disappear when the reader zooms out.
  */
 export class ZoomOverlay {
+  #clip: HTMLDivElement;
   #canvas: HTMLCanvasElement;
   #ctx: CanvasRenderingContext2D | null;
   #shown: TilePlan[] = [];
+  /** The view the pixels on the canvas were painted for; null while nothing is painted. */
+  #paintedUnder: View | null = null;
 
   constructor(doc: Document, container: HTMLElement) {
+    // The canvas is transformed to follow a pan, which would carry it outside the book — the
+    // renderers clip against their own element, and the container itself does not clip at all.
+    // A wrapper holds the clip so the transform has something to be cut against.
+    this.#clip = doc.createElement('div');
+    this.#clip.className = 'zine-zoom-clip';
+    this.#clip.style.cssText =
+      'position:absolute;inset:0;overflow:hidden;pointer-events:none;' +
+      'opacity:0;transition:opacity 120ms linear;';
+
     this.#canvas = doc.createElement('canvas');
     this.#canvas.className = 'zine-zoom-overlay';
-    // pointer-events:none keeps every gesture reaching the container underneath.
-    this.#canvas.style.cssText =
-      'position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 120ms linear;';
-    container.append(this.#canvas);
+    // transform-origin 0 0 matches the renderer, which scales about the container origin.
+    this.#canvas.style.cssText = 'position:absolute;inset:0;transform-origin:0 0;';
+    this.#clip.append(this.#canvas);
+    container.append(this.#clip);
     this.#ctx = this.#canvas.getContext('2d');
+  }
+
+  /**
+   * Follow a view change immediately, without re-rasterizing.
+   *
+   * Re-rendering a tile takes long enough to be debounced, but the page underneath moves with the
+   * reader's finger. Left alone the overlay would sit still on top of it, freezing the page until
+   * a fresh tile landed. Shifting the painted pixels by the same amount keeps them registered
+   * over the page, so the pan tracks the cursor and the crisper tile just arrives afterwards.
+   */
+  track(view: View): void {
+    const base = this.#paintedUnder;
+    if (!base) return;
+    // Painted pixels sit at base.scale * p + base.t; they need to sit at view.scale * p + view.t.
+    const a = view.scale / base.scale;
+    const bx = view.tx - a * base.tx;
+    const by = view.ty - a * base.ty;
+    this.#canvas.style.transform =
+      a === 1 && bx === 0 && by === 0 ? '' : `translate(${bx}px, ${by}px) scale(${a})`;
   }
 
   /** Drop every tile and hide the overlay, revealing the renderer's own pixels again. */
   clear(): void {
     if (this.#shown.length === 0) return;
     this.#shown = [];
-    this.#canvas.style.opacity = '0';
+    this.#paintedUnder = null;
+    this.#clip.style.opacity = '0';
+    this.#canvas.style.transform = '';
     const ctx = this.#ctx;
     if (ctx) ctx.clearRect(0, 0, this.#canvas.width, this.#canvas.height);
   }
@@ -140,37 +173,43 @@ export class ZoomOverlay {
    * not resampled a second time on the way to the screen.
    */
   draw(tiles: { plan: TilePlan; content: PageContent }[], view: View, viewport: Rect): void {
-    const ctx = this.#ctx;
-    if (!ctx) return;
     if (tiles.length === 0) {
       this.clear();
       return;
     }
 
-    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const w = Math.max(1, Math.ceil(viewport.width * dpr));
-    const h = Math.max(1, Math.ceil(viewport.height * dpr));
-    if (this.#canvas.width !== w || this.#canvas.height !== h) {
-      this.#canvas.width = w;
-      this.#canvas.height = h;
+    const ctx = this.#ctx;
+    if (ctx) {
+      const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+      const w = Math.max(1, Math.ceil(viewport.width * dpr));
+      const h = Math.max(1, Math.ceil(viewport.height * dpr));
+      if (this.#canvas.width !== w || this.#canvas.height !== h) {
+        this.#canvas.width = w;
+        this.#canvas.height = h;
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, viewport.width, viewport.height);
+      // Match the renderer: scale about the container origin, then translate.
+      ctx.translate(view.tx, view.ty);
+      ctx.scale(view.scale, view.scale);
+      for (const { plan, content } of tiles) {
+        const d = plan.dest;
+        ctx.drawImage(content, d.x, d.y, d.width, d.height);
+      }
     }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, viewport.width, viewport.height);
-    // Match the renderer: scale about the container origin, then translate.
-    ctx.translate(view.tx, view.ty);
-    ctx.scale(view.scale, view.scale);
-    for (const { plan, content } of tiles) {
-      const d = plan.dest;
-      ctx.drawImage(content, d.x, d.y, d.width, d.height);
-    }
-
+    // Recorded whether or not the paint happened: the bookkeeping is what lets a later pan move
+    // these pixels, and skipping it on a context-less canvas would strand them.
     this.#shown = tiles.map((t) => t.plan);
-    this.#canvas.style.opacity = '1';
+    // Freshly painted for this view, so any tracking shift from an earlier pan is spent.
+    this.#paintedUnder = { ...view };
+    this.#canvas.style.transform = '';
+    this.#clip.style.opacity = '1';
   }
 
   destroy(): void {
-    this.#canvas.remove();
+    this.#clip.remove();
     this.#ctx = null;
   }
 }

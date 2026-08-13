@@ -1465,6 +1465,10 @@ export class Zine {
       this.#tileGeneration++; // abandon anything in flight: it is no longer wanted
       return;
     }
+    // Move the tiles already painted to where the page has just gone. Re-rasterizing is too slow
+    // to do per frame, but the page tracks the reader's finger — an overlay that held still on
+    // top of it would look like the page had stopped moving until the next tile landed.
+    this.#zoomOverlay?.track({ scale: this.#scale, tx: this.#tx, ty: this.#ty });
     this.#tileTimer = setTimeout(() => {
       this.#tileTimer = null;
       void this.#renderZoomTiles();
@@ -1503,10 +1507,15 @@ export class Zine {
       plans.map(async (plan) => {
         try {
           const content = await this.#source.get(plan.index, plan.request);
-          // A source free to ignore the request returns the whole page. Its aspect gives it away:
-          // a tile matches the region it was asked for. Drawing a full page into the region's box
-          // would squash it, so treat that as "nothing sharper available".
-          const want = (plan.dest.width / plan.dest.height) * 1;
+          // A source free to ignore the hint hands back its ordinary full-page raster — the very
+          // object already on screen. Identity says so exactly; comparing aspects only guesses,
+          // and guesses wrong whenever the visible region happens to match the page's shape.
+          const asPainted =
+            plan.index === spread.left ? this.#currentContent.left : this.#currentContent.right;
+          if (content === asPainted) return null;
+          // A source that rebuilds its full page per call returns a new object every time, so
+          // identity cannot catch it. A tile has the shape of the region it was asked for.
+          const want = plan.dest.width / plan.dest.height;
           const got = content.width / content.height;
           if (Math.abs(want - got) / want > 0.02) return null;
           return { plan, content };

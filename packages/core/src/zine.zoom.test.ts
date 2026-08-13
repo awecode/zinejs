@@ -205,3 +205,55 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(renderer.begun).toEqual(['forward']);
   });
 });
+
+describe('Zine — zoom tiles', () => {
+  /** A renderer that reports where the spread is painted, so tiles can be planned against it. */
+  class BoxRenderer extends MockRenderer {
+    override measure(): LayoutMetrics {
+      return {
+        containerWidth: 800,
+        containerHeight: 600,
+        pageWidth: 400,
+        pageHeight: 600,
+        book: { x: 0, y: 0, width: 800, height: 600 },
+        content: { x: 0, y: 0, width: 800, height: 600 },
+      };
+    }
+  }
+
+  /** A source that ignores the zoom hint, as any image-backed source does. */
+  class FixedSource implements Source {
+    readonly pageCount = 4;
+    calls = 0;
+    #page = { width: 800, height: 600 } as unknown as PageContent;
+    async get(): Promise<PageContent> {
+      this.calls++;
+      return this.#page; // the same object every time, hint or no hint
+    }
+    prefetch(): void {}
+    destroy(): void {}
+  }
+
+  const overlay = (el: HTMLElement): HTMLElement | null => el.querySelector('.zine-zoom-clip');
+
+  it('paints no tiles for a source with nothing sharper to give', async () => {
+    // Regression: the check compared aspect ratios, so a full page whose shape happened to match
+    // the visible region passed as a tile. It was then drawn over the book and, once panned,
+    // dragged outside it. The page a source hands back unchanged is not an upgrade.
+    vi.useFakeTimers();
+    try {
+      const el = document.createElement('div');
+      document.body.append(el);
+      const source = new FixedSource();
+      const zine = new Zine(el, { source, renderer: new BoxRenderer(), zoom: { max: 4 } });
+      await zine.ready;
+
+      zine.setZoom(2);
+      await vi.advanceTimersByTimeAsync(200); // past the re-render debounce
+      expect(overlay(el)).toBeNull(); // nothing drawn, so no overlay was ever created
+      zine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
