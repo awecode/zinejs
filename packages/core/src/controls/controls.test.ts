@@ -277,6 +277,43 @@ describe('controls toolbar', () => {
     expect(zine.getPage()).toBe(4);
   });
 
+  it('does not snap back when Enter blurs the focused page input', async () => {
+    // The real-browser sequence: the reader focuses the field, types, and presses Enter. Enter
+    // commits then blurs, and the blur would commit a second time — reading the still-animating
+    // getPage() and turning the book back to the page in the URL. Both commits must not fight.
+    const { zine, el } = await mount();
+    const input = scope(el).querySelector<HTMLInputElement>('.zine-controls-page input')!;
+    // Dispatch focus/blur as explicit events rather than .focus()/.blur() so the sequence does not
+    // depend on the test DOM's focus semantics — only the listeners the control actually binds.
+    input.dispatchEvent(new Event('focus'));
+    input.value = '5';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input.dispatchEvent(new Event('blur'));
+    await flush();
+    expect(zine.getPage()).toBe(4);
+    expect(input.value).toBe('5'); // and the field settled on the page it navigated to
+  });
+
+  it('jumps again on a second, separate edit', async () => {
+    // The commit guard is per editing session, so it must re-arm on focus or only the first jump
+    // of the book's life would work.
+    const { zine, el } = await mount();
+    const input = scope(el).querySelector<HTMLInputElement>('.zine-controls-page input')!;
+    input.dispatchEvent(new Event('focus'));
+    input.value = '5';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input.dispatchEvent(new Event('blur'));
+    await flush();
+    expect(zine.getPage()).toBe(4);
+
+    input.dispatchEvent(new Event('focus'));
+    input.value = '3';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input.dispatchEvent(new Event('blur'));
+    await flush();
+    expect(zine.getPage()).toBe(2);
+  });
+
   it('opens a submenu and closes it again on a second press', async () => {
     const { el } = await mount({ source: new DownloadableSource(8) });
     const menu = byLabel(el, 'More')!;

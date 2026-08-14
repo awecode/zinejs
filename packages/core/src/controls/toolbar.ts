@@ -385,11 +385,28 @@ export class Toolbar {
     const total = this.#doc.createElement('span');
     total.textContent = `/ ${this.#zine.getPageCount()}`;
 
+    // Enter commits and then blurs, and the blur commits again; a click-away blur commits on its
+    // own. Guard so only the first call per editing session navigates: flipTo animates, so a
+    // second commit right after would read the still-old getPage() and turn the book back to it —
+    // the page that is (still) in the URL hash. Re-armed on focus for the next edit.
+    let committed = false;
     const commit = (): void => {
+      if (committed) return;
+      committed = true;
       const n = Number(input.value);
-      if (Number.isFinite(n)) this.#zine.flipTo(Math.round(n) - 1);
-      input.value = String(this.#zine.getPage() + 1);
+      const last = Math.max(0, this.#zine.getPageCount() - 1);
+      const target = Number.isFinite(n)
+        ? Math.min(Math.max(Math.round(n) - 1, 0), last)
+        : this.#zine.getPage();
+      if (target !== this.#zine.getPage()) {
+        this.#zine.flipTo(target); // #refresh (pageChanged/flipEnd) resyncs the field once it lands
+      } else {
+        input.value = String(this.#zine.getPage() + 1); // no navigation: restore the display now
+      }
     };
+    input.addEventListener('focus', () => {
+      committed = false;
+    });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         commit();
