@@ -520,7 +520,10 @@ describe('Zine — display-aware base raster', () => {
       expect(renderer.paints).toBe(paintsMidFlip); // deferred: no mid-flip repaint, curl intact
       expect(source.requests.length).toBe(requestsMidFlip); // and no wasted rasterize while animating
 
-      await vi.advanceTimersByTimeAsync(500); // land the flip (commit paints the landed spread)
+      // Land the flip (the fold began at ~1ms, so 400ms more clears its 500ms duration) but stop
+      // short of the 60ms upgrade the commit re-schedules at settle: the baseline must capture the
+      // landing paint alone, so the deferred upgrade is observable as a *further* paint below.
+      await vi.advanceTimersByTimeAsync(400);
       const paintsAfterLanding = renderer.paints;
       await vi.advanceTimersByTimeAsync(120); // now idle: the upgrade re-scheduled at settle applies
       expect(source.requests.some((s) => s !== undefined && s > 1)).toBe(true); // sharper raster asked
