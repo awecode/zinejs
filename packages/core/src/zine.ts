@@ -1048,14 +1048,13 @@ export class Zine {
     // A tap barely moves; anything more was a drag we already ignored.
     if (Math.abs(gesture.dx) > DRAG_THRESHOLD || Math.abs(gesture.dy) > DRAG_THRESHOLD) return;
     const direction = this.#clickFlipDirection(this.#press);
-    if (!direction) return;
-    const step = direction === 'forward' ? 1 : -1;
-    if (this.#current + step < 0 || this.#current + step >= this.#spreads.length) return;
+    if (!direction || !this.#canFlip(direction)) return;
     // Anchor the fold at the tapped height (cone/leaf/flick curl from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
     // Read `#current` lazily: interrupting commits the running turn first, so this steps on
     // from wherever the book actually landed — one spread back from there is the neighbour
     // the reader is looking at, not the spread they tapped on two turns ago.
+    const step = direction === 'forward' ? 1 : -1;
     const flip = (): void => this.#startFlip(this.#current + step);
     this.#clearPendingClickFlip();
     if (this.#clickFlipDelayValue <= 0) {
@@ -1104,6 +1103,14 @@ export class Zine {
     if (!side) return null;
     const forwardSide = this.#direction === 'rtl' ? 'left' : 'right';
     return side === forwardSide ? 'forward' : 'backward';
+  }
+
+  /** Whether a flip in `direction` has somewhere to land: false at the first spread going back
+   *  and the last spread going forward. A flip zone that fails this is dead, so a double-click
+   *  there should zoom rather than defer to a turn that can never happen. */
+  #canFlip(direction: FlipDirection): boolean {
+    const target = this.#current + (direction === 'forward' ? 1 : -1);
+    return target >= 0 && target < this.#spreads.length;
   }
 
   #clearPendingClickFlip(): void {
@@ -1184,7 +1191,10 @@ export class Zine {
       // unless we're honoring double-click zoom there.
       if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
         const local = this.#toBookPoint(event.clientX, event.clientY);
-        if (this.#clickFlipDirection(local) !== null) return; // in a flip zone → leave it to click-to-flip
+        const dir = this.#clickFlipDirection(local);
+        // Yield only to a zone that can actually turn: at the first/last spread the outer zone
+        // is dead, so a double-click there zooms instead of deferring to a flip that can't happen.
+        if (dir !== null && this.#canFlip(dir)) return;
       }
       // A double-click means the single-click flip we may have queued was really a zoom.
       this.#clearPendingClickFlip();

@@ -169,6 +169,31 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     await flush();
     expect(zine.getZoom()).toBe(2);
   });
+
+  it('zooms on a double-click in the dead back zone of the first spread', async () => {
+    // Left edge at the first spread: the zone is real but the flip has nowhere to land,
+    // so it must zoom rather than defer to a turn that can never happen.
+    const { zine, el } = await makeZine(0);
+    doubleClick(el, 10, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('zooms on a double-click in the dead forward zone of the last spread', async () => {
+    // 4 pages, double mode → spreads [0,1] [2,3]; start on the last one.
+    const { zine, el } = await makeZine(2);
+    expect(zine.getPage()).toBe(2);
+    doubleClick(el, 790, 300); // right edge with no next spread → dead → zoom
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('still leaves a live forward zone to the flip (no zoom) on the first spread', async () => {
+    const { zine, el } = await makeZine(0);
+    doubleClick(el, 790, 300); // right edge, next spread exists → flip zone, not zoom
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
 });
 
 // A book narrower than its container is letterboxed, so container x and book x differ.
@@ -190,10 +215,12 @@ class LetterboxedRenderer extends MockRenderer {
 describe('Zine — click zones on a letterboxed book', () => {
   const letterboxed = { renderer: new LetterboxedRenderer() } as Partial<ZineOptions>;
 
-  it('zooms on a double-click in the dead zone near a letterbox bar', async () => {
-    const { zine, el } = await makeZine(0, letterboxed);
+  it('leaves the flip zones near a letterbox bar to the flip, not zoom', async () => {
+    // 6 pages, double mode → spreads [0,1] [2,3] [4,5]; start on the middle one so both
+    // edge zones have somewhere to turn (otherwise a dead zone would zoom, tested elsewhere).
+    const { zine, el } = await makeZine(2, { ...letterboxed, source: new FakeSource(6) });
     // x=110 is 10px into the book: inside the left bar's shadow, but the book's own
-    // left edge zone ends at 100+64=164, so this IS a flip zone → must not zoom.
+    // left edge zone ends at 100+64=164, so this IS a live flip zone → must not zoom.
     doubleClick(el, 110, 300);
     await flush();
     expect(zine.getZoom()).toBe(1);
@@ -253,11 +280,13 @@ describe('Zine — click to flip (config overrides)', () => {
   });
 
   it('clickFlipDelay 0 flips instantly and suppresses double-click zoom in flip zones (even half)', async () => {
-    const { zine, el } = await makeZine(0, { clickToFlip: 'half', clickFlipDelay: 0 });
+    // 6 pages so the forward zone still has somewhere to turn after the first flip; a dead
+    // zone would zoom regardless of the delay, which is a separate rule tested elsewhere.
+    const { zine, el } = await makeZine(0, { clickToFlip: 'half', clickFlipDelay: 0, source: new FakeSource(6) });
     tap(el, 500, 300);
     await settleInstant();
     expect(zine.getPage()).toBe(2); // instant, no delay
-    doubleClick(el, 500, 300); // whole area is a flip zone → suppressed
+    doubleClick(el, 500, 300); // live flip zone (spread 1 of 3) → suppressed
     await flush();
     expect(zine.getZoom()).toBe(1);
   });
