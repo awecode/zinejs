@@ -924,19 +924,28 @@ export class Zine {
     // on release it decides which way to turn. Leaving the previous press in place made that
     // release repeat the last flip's direction instead of honouring the side just tapped.
     this.#press = point; // remembered for tap classification / click-to-flip zone
-    // Only the drag machinery needs an idle book — a fold is already on screen, so there is
-    // nothing to grab. The tap itself is handled on release, which queues or interrupts.
-    if (this.#machine.state !== 'idle') {
-      this.#pendingGrab = null;
-      return;
-    }
     // Grabbable along the whole outer band of each side edge, not just the corners: a drag
     // from the vertical middle should peel and follow the finger too, the way a corner does.
     // The fold then anchors at the grabbed height, so mid-edge grabs curl from the middle.
     const edgeBand = Math.min(b.width, b.height) * CORNER_FRACTION;
     const insidePage = point.x >= 0 && point.x <= b.width && point.y >= 0 && point.y <= b.height;
     const nearSideEdge = point.x <= edgeBand || point.x >= b.width - edgeBand;
-    if (!insidePage || !nearSideEdge) {
+    const wantsGrab = insidePage && nearSideEdge;
+    // A fold may already be mid-flight when this press lands.
+    if (this.#machine.state !== 'idle') {
+      // Only an edge grab that can land the running turn takes it over. A live finger drag has
+      // no animation to cut short (#activeAnim null), and a non-grab press (centre tap, or an
+      // edge *tap* handled on release) must leave the animation to play out — so both bail here.
+      // A flip's async content-staging also has #activeAnim null, so that window bails too.
+      if (!this.#activeAnim || !wantsGrab) {
+        this.#pendingGrab = null;
+        return;
+      }
+      // Commit the running turn now so this grab peels straight on from where the book lands,
+      // exactly the way repeated taps interrupt-and-advance. #current updates before we target.
+      this.#finishActiveAnim();
+    }
+    if (!wantsGrab) {
       return; // not near a side edge — no drag; a tap here may still click-to-flip on release
     }
     this.#anchorY = clamp(point.y / b.height, 0, 1); // fold anchors at the grabbed point

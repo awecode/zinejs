@@ -175,15 +175,18 @@ describe('Zine — slice 3 (drag to flip)', () => {
     expect(start).not.toHaveBeenCalled();
   });
 
-  it('ignores a corner grab while a flip is already animating', async () => {
+  it('lands an animating flip when a new grab presses in, without starting a spurious flip', async () => {
     const { zine, el } = await makeZine(6);
     const start = vi.fn();
     zine.on('flipStart', start);
 
-    zine.flipNext(); // programmatic flip → animating
+    zine.flipNext(); // programmatic flip → animating toward spread 1
     await flush();
-    fire(el, 'pointerdown', { pointerId: 1, clientX: 790, clientY: 10 }); // busy → ignored
+    // Pressing in mid-animation now lands that flip at once (so a chained grab can carry on
+    // from there), rather than being ignored. The press alone must not fire a second flipStart.
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 790, clientY: 10 });
     expect(start).toHaveBeenCalledTimes(1);
+    expect(zine.getPage()).toBe(2); // the running flip was committed, not left mid-turn
   });
 });
 
@@ -206,6 +209,19 @@ describe('Zine — slice 3 (peel/swipe to flip from a side edge)', () => {
 
     expect(renderer.begun).toEqual(['backward']);
     expect(zine.getPage()).toBe(0);
+  });
+
+  it('chains a second flick that lands during the first flick\'s settle', async () => {
+    const { zine, renderer, el } = await makeZine(6); // spreads [0,1] [2,3] [4,5]
+    await swipe(el, 300, 760, 360); // forward flick → settling toward spread 1
+    // Do NOT tick the settle: fire the next flick while the first is still animating. Its
+    // pointerdown must land the running settle and chain straight on, the way repeat taps do.
+    await swipe(el, 300, 760, 360); // second forward flick, on from where the first landed
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward', 'forward']);
+    expect(zine.getPage()).toBe(4); // advanced two spreads, not stuck on one
   });
 
   it('does not flip on a flick from the middle of the page', async () => {
