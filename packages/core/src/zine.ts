@@ -1686,6 +1686,12 @@ export class Zine {
     if (!this.#renderer || !spread) return;
     const scale = this.#upgradeScale();
     if (scale === 1 || scale === this.#zoomedAt) return;
+    // An upgrade repaints through renderSpread, which clears the renderer's turning leaf. If a flip
+    // is animating (rapid edge clicks queue a settle-time upgrade whose debounce fires mid-next-turn)
+    // painting now would wipe the curl and the leaf would snap flat. Skip: the flip's own settle
+    // repaints and re-requests this once the book is idle, the defer rule #onPageUpdate follows too.
+    // Checked here, before the slow rasterize, so a turn in progress costs nothing.
+    if (this.#machine.state !== 'idle') return;
 
     const generation = ++this.#tileGeneration;
     const whole = { x: 0, y: 0, width: 1, height: 1 };
@@ -1701,8 +1707,16 @@ export class Zine {
         }
       }),
     );
-    // Rasterizing is slow and the reader may have moved on, or zoomed somewhere else entirely.
-    if (generation !== this.#tileGeneration || this.#upgradeScale() !== scale) return;
+    // Rasterizing is slow and the reader may have moved on, zoomed elsewhere, or begun a flip while
+    // it resolved (the slow-source race the entry check cannot catch). Any of those and this raster
+    // is stale; drop it and let the settle re-request.
+    if (
+      generation !== this.#tileGeneration ||
+      this.#upgradeScale() !== scale ||
+      this.#machine.state !== 'idle'
+    ) {
+      return;
+    }
     const left = pages[0] ?? null;
     const right = pages[1] ?? null;
     // Nothing sharper came back: a source with a fixed-resolution original hands over the raster

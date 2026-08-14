@@ -488,6 +488,48 @@ describe('Zine — display-aware base raster', () => {
       vi.useRealTimers();
     }
   });
+
+  it('defers a fit-raster upgrade whose debounce fires mid-flip', async () => {
+    // Regression: the debounced fit upgrade renders through renderSpread, which clears the
+    // renderer's turning leaf. A vector source's upgrade is scheduled on every paint (60ms
+    // debounce); starting a flip before it fires — exactly what rapid edge clicks do — used to let
+    // it repaint mid-turn, wiping the curl so the page snapped flat. It must wait for the book to be
+    // idle, the same defer-until-settle rule a progressive page update already follows.
+    // Faking rAF + performance too lets one clock drive both the flip and the upgrade debounce.
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'Date'],
+    });
+    try {
+      const el = document.createElement('div');
+      document.body.append(el);
+      const source = new VectorSource(100); // raster far smaller than the 800px box → upgrade wanted
+      const renderer = new ContentRenderer(800);
+      const zine = new Zine(el, { source, renderer, spreadMode: 'double', flipDuration: 500, zoom: { max: 4 } });
+      await zine.ready; // first paint schedules the fit upgrade (60ms debounce); do NOT let it fire yet
+
+      zine.flipNext();
+      await vi.advanceTimersByTimeAsync(1); // resolve destination staging → beginFlip; fold now animating
+      expect(renderer.begun.length).toBe(1);
+      const paintsMidFlip = renderer.paints;
+      const requestsMidFlip = source.requests.length;
+
+      // The upgrade debounce (60ms) elapses while the fold is still turning (500ms flip). It must
+      // neither rasterize nor repaint — that repaint is what wiped the curl.
+      await vi.advanceTimersByTimeAsync(120);
+      expect(renderer.begun.length).toBe(1); // still the same turn, no restage
+      expect(renderer.paints).toBe(paintsMidFlip); // deferred: no mid-flip repaint, curl intact
+      expect(source.requests.length).toBe(requestsMidFlip); // and no wasted rasterize while animating
+
+      await vi.advanceTimersByTimeAsync(500); // land the flip (commit paints the landed spread)
+      const paintsAfterLanding = renderer.paints;
+      await vi.advanceTimersByTimeAsync(120); // now idle: the upgrade re-scheduled at settle applies
+      expect(source.requests.some((s) => s !== undefined && s > 1)).toBe(true); // sharper raster asked
+      expect(renderer.paints).toBeGreaterThan(paintsAfterLanding); // and painted, at rest
+      zine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('Zine — zooming a lone page', () => {
