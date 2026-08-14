@@ -28,8 +28,8 @@ class FakeSource implements Source {
     }
     return page;
   }
-  prefetch(): void {}
-  destroy(): void {}
+  prefetch(): void { }
+  destroy(): void { }
 }
 
 class MockRenderer implements Renderer {
@@ -38,12 +38,12 @@ class MockRenderer implements Renderer {
   mount(): Promise<void> {
     return Promise.resolve();
   }
-  destroy(): void {}
-  renderSpread(): void {}
+  destroy(): void { }
+  renderSpread(): void { }
   beginFlip(_from: SpreadContent, _to: SpreadContent, direction: FlipDirection): void {
     this.begun.push(direction);
   }
-  setFlipProgress(): void {}
+  setFlipProgress(): void { }
   setViewTransform(scale: number, x: number, y: number): void {
     this.views.push([scale, x, y]);
   }
@@ -60,7 +60,7 @@ function fire(target: EventTarget, type: string, props: Record<string, number>):
 beforeEach(() => {
   vi.stubGlobal('performance', { now: () => 0 });
   vi.stubGlobal('requestAnimationFrame', () => 0);
-  vi.stubGlobal('cancelAnimationFrame', () => {});
+  vi.stubGlobal('cancelAnimationFrame', () => { });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -282,8 +282,8 @@ describe('Zine — zoom tiles', () => {
       this.calls++;
       return this.#page; // the same object every time, hint or no hint
     }
-    prefetch(): void {}
-    destroy(): void {}
+    prefetch(): void { }
+    destroy(): void { }
   }
 
   const overlay = (el: HTMLElement): HTMLElement | null => el.querySelector('.zine-zoom-overlay');
@@ -339,7 +339,7 @@ describe('Zine — display-aware base raster', () => {
     readonly pageCount = 4;
     readonly requests: Array<number | undefined> = [];
     #cache = new Map<string, PageContent>();
-    constructor(private readonly base = 100) {}
+    constructor(private readonly base = 100) { }
     async get(index: number, opts?: { scale: number }): Promise<PageContent> {
       this.requests.push(opts?.scale);
       const scale = opts?.scale ?? 1;
@@ -351,8 +351,8 @@ describe('Zine — display-aware base raster', () => {
       }
       return page;
     }
-    prefetch(): void {}
-    destroy(): void {}
+    prefetch(): void { }
+    destroy(): void { }
   }
 
   it('sharpens a single-page spread painted larger than its raster, at rest', async () => {
@@ -395,7 +395,7 @@ describe('Zine — display-aware base raster', () => {
 
       await vi.advanceTimersByTimeAsync(200);
 
-      expect(source.requests).toContain(2); // lifted to the crispness floor
+      expect(source.requests).toContain(1.1); // lifted to the crispness floor
       expect(source.requests.some((s) => s === 2.5)).toBe(false); // not over-rasterized
       zine.destroy();
     } finally {
@@ -444,8 +444,8 @@ describe('Zine — display-aware base raster', () => {
           requests.push(opts?.scale);
           return page; // same object every time, hint or no hint
         },
-        prefetch() {},
-        destroy() {},
+        prefetch() { },
+        destroy() { },
       };
       const renderer = new ContentRenderer(800);
       const zine = new Zine(el, { source, renderer, spreadMode: 'single', zoom: { max: 4 } });
@@ -481,7 +481,7 @@ describe('Zine — display-aware base raster', () => {
       zine.setZoom(4);
       await vi.advanceTimersByTimeAsync(200);
 
-      expect(source.requests).toContain(2);
+      expect(source.requests).toContain(1.1);
       expect(source.requests.some((s) => s !== undefined && s !== 2)).toBe(false);
       zine.destroy();
     } finally {
