@@ -111,6 +111,7 @@ function zoneBlocksZoom(zone: 'left-flip' | 'right-flip' | 'dead', zine: Zine): 
 export function installClickDebug(container: HTMLElement, zine: Zine, opts: Options): void {
   let lastClickAt: number | null = null;
   let lastClickPos: { x: number; y: number } | null = null;
+  let lastDetail = 0; // browser click-streak counter of the previous click
   let pendingSingle: ReturnType<typeof setTimeout> | null = null;
   let sawDblClick = false;
   let zoomAtLastClick = zine.getZoom();
@@ -155,6 +156,26 @@ export function installClickDebug(container: HTMLElement, zine: Zine, opts: Opti
         ` ${local} zone=${zone}`,
     );
 
+    // The browser's `detail` is a running click-streak counter; a dblclick fires on the 2nd,
+    // 4th, 6th… click of an unbroken streak. If it drops back to 1 while the previous click was
+    // recent and in the same spot, the streak was reset (commonly because the last click zoomed,
+    // moving the target under the pointer). This click is a fresh first-click, so no dblclick
+    // will pair with it — a second double-click needs a distinct gesture, not four fast clicks.
+    if (
+      event.detail === 1 &&
+      lastDetail >= 2 &&
+      gap !== null &&
+      gap < 500 &&
+      (moved ?? 0) <= 4
+    ) {
+      console.warn(
+        `${TAG} click-streak reset: this is a fresh first-click (detail=1), not the second of a ` +
+          `pair, so no dblclick will fire. The previous click likely zoomed and broke the streak. ` +
+          `To zoom again, double-click as a separate gesture rather than clicking rapidly.`,
+      );
+    }
+
+    lastDetail = event.detail;
     lastClickAt = now;
     lastClickPos = { x: event.clientX, y: event.clientY };
     zoomAtLastClick = zine.getZoom();
