@@ -381,9 +381,9 @@ describe('Zine — display-aware base raster', () => {
 
   it('supersamples a raster matched 1:1 to a low-dpr display, at rest', async () => {
     // Two 400px pages fill the two halves of an 800px box exactly, so device coverage is already
-    // 1:1 (dpr 1 in this env). A 1:1 raster still reads soft, so the engine lifts it to the ~2x
-    // crispness floor even with no fit gap and no zoom. A well-fit double lands on exactly 2x, not
-    // the 2.5 a stretched single-page spread would demand.
+    // 1:1 (dpr 1 in this env). A 1:1 raster still reads soft, so the engine lifts it to the
+    // TEXT_SUPERSAMPLE crispness floor (1.5), even with no fit gap and no zoom.
+    // A well-fit double lands on that step, not the 2.5 a stretched single-page spread would demand.
     vi.useFakeTimers();
     try {
       const el = document.createElement('div');
@@ -395,7 +395,7 @@ describe('Zine — display-aware base raster', () => {
 
       await vi.advanceTimersByTimeAsync(200);
 
-      expect(source.requests).toContain(1.1); // lifted to the crispness floor
+      expect(source.requests).toContain(1.5); // lifted to the crispness floor
       expect(source.requests.some((s) => s === 2.5)).toBe(false); // not over-rasterized
       zine.destroy();
     } finally {
@@ -481,7 +481,7 @@ describe('Zine — display-aware base raster', () => {
       zine.setZoom(4);
       await vi.advanceTimersByTimeAsync(200);
 
-      expect(source.requests).toContain(1.1);
+      expect(source.requests).toContain(2);
       expect(source.requests.some((s) => s !== undefined && s !== 2)).toBe(false);
       zine.destroy();
     } finally {

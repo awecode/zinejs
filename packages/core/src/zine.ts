@@ -68,7 +68,7 @@ const MAX_PAGE_UPGRADE = 2.5;
  *  bilinear-sampled under a fractional transform, with nothing to downsample. Rendering ~2x and
  *  letting the GPU minify supersamples the edges. A retina display already paints its raster at
  *  ~2x CSS px, so this floor is scaled by 1/dpr and only lifts low-dpr screens. */
-const TEXT_SUPERSAMPLE = 1.1;
+const TEXT_SUPERSAMPLE = 1.5;
 
 /** Flip time under `prefers-reduced-motion`. Short enough not to read as animation, long enough
  *  to show which way the page went — an instant swap leaves the reader guessing. */
