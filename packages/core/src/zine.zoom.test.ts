@@ -138,13 +138,18 @@ describe('Zine — slice 4a (zoom + pan)', () => {
 
   it('cycles zoom levels on double-click (1 → 2 → 4 → 1)', async () => {
     const { zine, el } = await makeZine(); // default doubleClick [1, 2, 4]
-    const dbl = (): void => {
+    // The library detects double-clicks by pairing two raw clicks itself, so fire a pair.
+    const click = (): void => {
       el.dispatchEvent(
-        Object.assign(new Event('dblclick', { cancelable: true, bubbles: true }), {
+        Object.assign(new Event('click', { cancelable: true, bubbles: true }), {
           clientX: 400,
           clientY: 300,
         }),
       );
+    };
+    const dbl = (): void => {
+      click();
+      click();
     };
     dbl();
     expect(zine.getZoom()).toBe(2);
@@ -152,6 +157,24 @@ describe('Zine — slice 4a (zoom + pan)', () => {
     expect(zine.getZoom()).toBe(4);
     dbl();
     expect(zine.getZoom()).toBe(1);
+  });
+
+  it('cycles again on a continuous run of clicks (every second click zooms)', async () => {
+    const { zine, el } = await makeZine(); // default doubleClick [1, 2, 4]
+    const click = (): void => {
+      el.dispatchEvent(
+        Object.assign(new Event('click', { cancelable: true, bubbles: true }), { clientX: 400, clientY: 300 }),
+      );
+    };
+    // Four uninterrupted clicks in one spot must read as two double-clicks: the browser would
+    // fire at most one native `dblclick` across such a streak, which is why the library pairs
+    // clicks itself. Clicks 2 and 4 each complete a pair and cycle the zoom.
+    click(); // 1 → pending
+    click(); // 2 → pair → zoom 2
+    expect(zine.getZoom()).toBe(2);
+    click(); // 3 → pending (pair was consumed on click 2)
+    click(); // 4 → pair → zoom 4
+    expect(zine.getZoom()).toBe(4);
   });
 
   it('does not double-click zoom when doubleClick is false', async () => {
@@ -163,12 +186,15 @@ describe('Zine — slice 4a (zoom + pan)', () => {
       zoom: { doubleClick: false },
     });
     await zine.ready;
-    el.dispatchEvent(
-      Object.assign(new Event('dblclick', { cancelable: true, bubbles: true }), {
-        clientX: 400,
-        clientY: 300,
-      }),
-    );
+    const click = (): void =>
+      void el.dispatchEvent(
+        Object.assign(new Event('click', { cancelable: true, bubbles: true }), {
+          clientX: 400,
+          clientY: 300,
+        }),
+      );
+    click();
+    click(); // a full pair; still must not zoom when doubleClick is disabled
     expect(zine.getZoom()).toBe(1);
   });
 

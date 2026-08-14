@@ -3,26 +3,27 @@ import type { Zine } from '@zinejs/core';
 /**
  * Click / double-click diagnostics for the demo.
  *
- * When double-click zoom "does not work", the cause is ambiguous from the outside. Either:
+ * The library detects double-clicks itself by pairing two raw `click` events within a short
+ * window and spot (it does not rely on the browser's `dblclick`, which drops out on rapid
+ * streaks). So when a double-click "does not zoom", the cause is one of:
  *
- *  1. the browser never paired the two clicks into a `dblclick` at all (they were too far
- *     apart in time, or the pointer drifted between them), so the flipbook never heard
- *     about it, or
- *  2. the browser did fire `dblclick`, and the flipbook deliberately ignored it because the
- *     point landed in a click-to-flip edge zone (by design, the tap turns the page there).
+ *  1. the two clicks were too far apart in time or space to pair, so the library saw two
+ *     separate single clicks, or
+ *  2. they did pair, but the point landed in a live click-to-flip edge zone, where by design a
+ *     double-click turns the page instead of zooming.
  *
- * Those need opposite fixes, so this logs the deciding evidence for each click: how long
- * since the previous one, how far the pointer moved, whether the browser counted it as the
- * second of a pair (`detail`), where it landed relative to the book, and whether the zoom
- * actually changed afterwards.
+ * This mirrors the library's pairing state and logs, per click, whether it paired, where it
+ * landed relative to the book, and — for a real pair — whether the zoom actually changed.
  */
-
-/** How long to wait after a click before calling it a lone single click. Comfortably longer
- *  than any platform double-click threshold (Windows defaults to 500ms, and users can raise it). */
-const PAIR_WINDOW_MS = 700;
 
 /** Default of `ZineOptions.clickZoneSize`; the demo does not expose it as a control. */
 const DEFAULT_CLICK_ZONE = 64;
+
+/** Mirror of the library's own click-pairing window (`DOUBLE_CLICK_MS` / `DOUBLE_CLICK_MOVE` in
+ *  zine.ts): two clicks this close in time and space are treated as a double-click by the book,
+ *  regardless of whether the browser fired a native `dblclick`. Kept in sync by hand. */
+const LIB_PAIR_MS = 250;
+const LIB_PAIR_MOVE = 24;
 
 const TAG = '[zine:click]';
 
@@ -111,10 +112,10 @@ function zoneBlocksZoom(zone: 'left-flip' | 'right-flip' | 'dead', zine: Zine): 
 export function installClickDebug(container: HTMLElement, zine: Zine, opts: Options): void {
   let lastClickAt: number | null = null;
   let lastClickPos: { x: number; y: number } | null = null;
-  let lastDetail = 0; // browser click-streak counter of the previous click
-  let pendingSingle: ReturnType<typeof setTimeout> | null = null;
-  let sawDblClick = false;
-  let zoomAtLastClick = zine.getZoom();
+  // Mirrors the library's own #lastClick: the first click of a pending pair, or null when the
+  // last click already completed a pair (and so was consumed). Lets the log say, per click,
+  // whether the library will treat THIS click as the second of a double-click.
+  let libFirstClick: { t: number; x: number; y: number } | null = null;
   let seq = 0;
 
   const describe = (event: MouseEvent): { local: string; zone: string; blocks: boolean } => {
@@ -156,75 +157,50 @@ export function installClickDebug(container: HTMLElement, zine: Zine, opts: Opti
         ` ${local} zone=${zone}`,
     );
 
-    // The browser's `detail` is a running click-streak counter; a dblclick fires on the 2nd,
-    // 4th, 6th… click of an unbroken streak. If it drops back to 1 while the previous click was
-    // recent and in the same spot, the streak was reset (commonly because the last click zoomed,
-    // moving the target under the pointer). This click is a fresh first-click, so no dblclick
-    // will pair with it — a second double-click needs a distinct gesture, not four fast clicks.
-    if (
-      event.detail === 1 &&
-      lastDetail >= 2 &&
-      gap !== null &&
-      gap < 500 &&
-      (moved ?? 0) <= 4
-    ) {
-      console.warn(
-        `${TAG} click-streak reset: this is a fresh first-click (detail=1), not the second of a ` +
-          `pair, so no dblclick will fire. The previous click likely zoomed and broke the streak. ` +
-          `To zoom again, double-click as a separate gesture rather than clicking rapidly.`,
-      );
-    }
-
-    lastDetail = event.detail;
     lastClickAt = now;
     lastClickPos = { x: event.clientX, y: event.clientY };
-    zoomAtLastClick = zine.getZoom();
 
-    // Wait out the pairing window; if no dblclick arrives, say why it probably did not.
-    if (pendingSingle !== null) clearTimeout(pendingSingle);
-    sawDblClick = false;
-    const thisGap = gap;
-    const thisMoved = moved;
-    const thisDetail = event.detail;
-    pendingSingle = setTimeout(() => {
-      pendingSingle = null;
-      if (sawDblClick) return;
-      if (thisDetail >= 2) {
+    // Mirror the library's own click-pairing (see #bindDoubleClickZoom): it holds the first
+    // click, and a second one within the window and spot completes a double-click (consuming
+    // both, so the next click starts fresh). We report the library's verdict for THIS click
+    // regardless of whether the browser bothered to fire a native `dblclick` — which it drops
+    // on rapid streaks, the whole reason the library pairs clicks itself.
+    const near =
+      libFirstClick !== null &&
+      Math.hypot(event.clientX - libFirstClick.x, event.clientY - libFirstClick.y) <= LIB_PAIR_MOVE;
+    const inWindow = libFirstClick !== null && now - libFirstClick.t <= LIB_PAIR_MS;
+    if (libFirstClick !== null && inWindow && near) {
+      libFirstClick = null; // pair consumed → the next click starts a fresh pair
+      if (blocks) {
+        // A live flip zone owns this double-click at zoom 1, so the book turns instead of zooming.
         console.warn(
-          `${TAG} the browser paired these clicks (detail=${thisDetail}) but fired no dblclick. ` +
-            `That is unusual: something is swallowing the event.`,
+          `${TAG} double-click #${seq} lands in the ${zone} zone, which belongs to click-to-flip ` +
+            `at zoom 1, so it turns the page instead of zooming. Double-click nearer the middle ` +
+            `to zoom, or set zoom.doubleClickInFlipZone.`,
         );
-        return;
+      } else {
+        const before = zine.getZoom();
+        console.log(`${TAG} library double-click #${seq}: ${local} zone=${zone} — book zooms/cycles here.`);
+        // The library zooms synchronously in its click listener, so the outcome is settled by
+        // the next task: if the scale did not move, something rejected it.
+        setTimeout(() => {
+          const after = zine.getZoom();
+          if (after === before) {
+            console.warn(`${TAG} double-click #${seq} was in a zoomable spot but the scale stayed ${after.toFixed(2)}x.`);
+          }
+        }, 0);
       }
-      if (thisGap === null) return; // first click of the session, nothing to pair with
-      const reasons: string[] = [];
-      if (thisGap > 500) reasons.push(`the two clicks were ${thisGap.toFixed(0)}ms apart, past the usual ~500ms limit`);
-      if (thisMoved !== null && thisMoved > 4) reasons.push(`the pointer moved ${thisMoved.toFixed(0)}px between them, so the browser did not treat them as one spot`);
-      if (reasons.length > 0) {
-        console.warn(`${TAG} NO double-click: ${reasons.join('; ')}. ${blocks ? '' : 'A faster click here would have zoomed.'}`);
+    } else {
+      // Not a pair: either a fresh first click, or one that arrived too late/far to pair with the
+      // pending first click. Say which, so a "double-click did nothing" is explainable.
+      if (libFirstClick !== null && !(inWindow && near)) {
+        const reasons: string[] = [];
+        if (!inWindow) reasons.push(`${(now - libFirstClick.t).toFixed(0)}ms after the last click, past the ${LIB_PAIR_MS}ms window`);
+        if (!near) reasons.push(`${Math.hypot(event.clientX - libFirstClick.x, event.clientY - libFirstClick.y).toFixed(0)}px from it, past the ${LIB_PAIR_MOVE}px spot`);
+        console.log(`${TAG} click #${seq} did NOT pair (${reasons.join('; ')}) — it starts a new pair instead.`);
       }
-    }, PAIR_WINDOW_MS);
-  });
-
-  container.addEventListener('dblclick', (event: MouseEvent) => {
-    sawDblClick = true;
-    const { local, zone, blocks } = describe(event);
-    console.log(`${TAG} dblclick ${local} zone=${zone} zoom=${zine.getZoom().toFixed(2)}x`);
-    if (blocks) {
-      console.warn(
-        `${TAG} will NOT zoom: this is the ${zone} zone, which belongs to click-to-flip at ` +
-          `zoom 1. Double-click nearer the middle to zoom, or set zoom.doubleClickInFlipZone.`,
-      );
+      libFirstClick = { t: now, x: event.clientX, y: event.clientY }; // first of a possible pair
     }
-    // The library zooms synchronously in its own dblclick listener, so by the next task the
-    // outcome is settled: if the scale did not move, something rejected it.
-    const before = zoomAtLastClick;
-    setTimeout(() => {
-      const after = zine.getZoom();
-      if (after === before && !blocks) {
-        console.warn(`${TAG} dblclick fired in a zoomable spot but the scale stayed ${after.toFixed(2)}x.`);
-      }
-    }, 0);
   });
 
   zine.on('zoomChanged', ({ scale }) => console.log(`${TAG} zoom -> ${scale.toFixed(2)}x`));

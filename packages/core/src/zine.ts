@@ -39,8 +39,13 @@ const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 /** Pointer movement (px) beyond which a press becomes a drag rather than a tap. */
 const DRAG_THRESHOLD = 6;
 
-/** Window (ms) a single click waits to rule out a double-click before flipping. */
+/** Window (ms) a single click waits to rule out a double-click before flipping. Also the window
+ *  within which the library pairs two clicks into its own double-click (see #bindDoubleClickZoom). */
 const DOUBLE_CLICK_MS = 250;
+
+/** How far (px) the second click of a pair may land from the first and still count as the same
+ *  spot. Forgiving enough for a wobble, tight enough that two different zones don't pair. */
+const DOUBLE_CLICK_MOVE = 24;
 
 /** A lone page fills the container, so it sweeps the full width where a spread leaf only covers
  *  its half — and it dissolves instead of landing on a facing page. Stretch duration so the
@@ -261,6 +266,9 @@ export class Zine {
   #unbindWheel: (() => void) | null = null;
   #unbindContextMenu: (() => void) | null = null;
   #unbindDblClick: (() => void) | null = null;
+  /** First click of a possible library-detected double-click, and when/where it landed. Kept
+   *  because the browser's own `dblclick` misfires on rapid streaks (the counter resets). */
+  #lastClick: { t: number; x: number; y: number } | null = null;
   #a11yCleanup: (() => void) | null = null;
   /** Resolved once and reused; see {@link getOutline}. */
   #outline: Promise<OutlineItem[]> | null = null;
@@ -1197,29 +1205,53 @@ export class Zine {
   }
 
   #bindDoubleClickZoom(): void {
-    const onDoubleClick = (event: MouseEvent): void => {
+    // The library pairs clicks itself rather than trusting the browser's `dblclick`. The native
+    // event drops out on rapid streaks — four fast clicks in one spot fire only a single
+    // `dblclick`, because the browser resets its click counter mid-streak (often when the first
+    // zoom shifts the target under the pointer). Detecting pairs from raw `click` events makes
+    // every second click of a streak zoom (or cycle), so continuous clicks keep toggling.
+    const onClick = (event: MouseEvent): void => {
       const levels = this.#doubleClickLevels;
       if (!this.#zoomEnabled || levels === null || !this.#renderer) return;
-      // At scale 1 a double-click inside a flip zone belongs to click-to-flip, not zoom,
-      // unless we're honoring double-click zoom there.
-      if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
-        const local = this.#toBookPoint(event.clientX, event.clientY);
-        const dir = this.#clickFlipDirection(local);
-        // Yield only to a zone that can actually turn: at the first/last spread the outer zone
-        // is dead, so a double-click there zooms instead of deferring to a flip that can't happen.
-        if (dir !== null && this.#canFlip(dir)) return;
+      const t = performance.now();
+      const prev = this.#lastClick;
+      const paired =
+        prev !== null &&
+        t - prev.t <= DOUBLE_CLICK_MS &&
+        Math.hypot(event.clientX - prev.x, event.clientY - prev.y) <= DOUBLE_CLICK_MOVE;
+      if (!paired) {
+        // First click of a potential pair: remember it and wait for a second.
+        this.#lastClick = { t, x: event.clientX, y: event.clientY };
+        return;
       }
-      // A double-click means the single-click flip we may have queued was really a zoom.
-      this.#clearPendingClickFlip();
-      event.preventDefault();
-      // Next configured level above the current scale, else wrap to the first.
-      const next = levels.find((l) => l > this.#scale + 1e-6) ?? levels[0] ?? this.#scale;
-      const rect = this.#container.getBoundingClientRect();
-      this.setZoom(next, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+      // Second click within the window → a double-click. Consume it so the next click starts a
+      // fresh pair rather than chaining a third click into another zoom.
+      this.#lastClick = null;
+      this.#zoomAt(event.clientX, event.clientY, levels);
     };
-    this.#container.addEventListener('dblclick', onDoubleClick as EventListener);
+    this.#container.addEventListener('click', onClick as EventListener);
     this.#unbindDblClick = () =>
-      this.#container.removeEventListener('dblclick', onDoubleClick as EventListener);
+      this.#container.removeEventListener('click', onClick as EventListener);
+  }
+
+  /** Cycle to the next configured zoom level, keeping the clicked point fixed. Honors the
+   *  flip-zone arbitration at scale 1 so an edge double-click still turns the page there. */
+  #zoomAt(clientX: number, clientY: number, levels: number[]): void {
+    // At scale 1 a double-click inside a live flip zone belongs to click-to-flip, not zoom,
+    // unless we're honoring double-click zoom there.
+    if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
+      const local = this.#toBookPoint(clientX, clientY);
+      const dir = this.#clickFlipDirection(local);
+      // Yield only to a zone that can actually turn: at the first/last spread the outer zone
+      // is dead, so a double-click there zooms instead of deferring to a flip that can't happen.
+      if (dir !== null && this.#canFlip(dir)) return;
+    }
+    // A double-click means the single-click flip we may have queued was really a zoom.
+    this.#clearPendingClickFlip();
+    // Next configured level above the current scale, else wrap to the first.
+    const next = levels.find((l) => l > this.#scale + 1e-6) ?? levels[0] ?? this.#scale;
+    const rect = this.#container.getBoundingClientRect();
+    this.setZoom(next, { x: clientX - rect.left, y: clientY - rect.top });
   }
 
   async #init(rendererOption: RendererOption): Promise<void> {

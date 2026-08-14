@@ -45,8 +45,13 @@ function tap(el: EventTarget, x: number, y: number): void {
   el.dispatchEvent(Object.assign(new Event('pointerdown', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }));
   el.dispatchEvent(Object.assign(new Event('pointerup', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }));
 }
+/** The library pairs two raw clicks into its own double-click (the browser's `dblclick` is
+ *  unreliable on rapid streaks), so drive it with two same-spot clicks in the pairing window. */
 function doubleClick(el: EventTarget, x: number, y: number): void {
-  el.dispatchEvent(Object.assign(new Event('dblclick', { bubbles: true, cancelable: true }), { clientX: x, clientY: y }));
+  const click = (): boolean =>
+    el.dispatchEvent(Object.assign(new Event('click', { bubbles: true, cancelable: true }), { clientX: x, clientY: y }));
+  click();
+  click();
 }
 
 beforeEach(() => {
@@ -168,6 +173,17 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     doubleClick(el, 400, 300);
     await flush();
     expect(zine.getZoom()).toBe(2);
+  });
+
+  it('does not pair two clicks that fall outside the double-click window', async () => {
+    const { zine, el } = await makeZine();
+    const click = (): void =>
+      void el.dispatchEvent(Object.assign(new Event('click', { bubbles: true }), { clientX: 400, clientY: 300 }));
+    click();
+    now += 400; // > the 250ms pairing window
+    click();
+    await flush();
+    expect(zine.getZoom()).toBe(1); // two lone clicks, no double-click, no zoom
   });
 
   it('zooms on a double-click in the dead back zone of the first spread', async () => {
