@@ -115,9 +115,7 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     for (let i = 1; i < ts.length; i++) expect(ts[i]!).toBeGreaterThanOrEqual(ts[i - 1]!);
     expect(ts.at(-1)).toBeCloseTo(1, 5);
     // Frames fire on a fixed 25ms cadence over the 500ms turn, so frame i is at raw time 0.05*(i+1);
-    // index by that known clock position rather than by list length, which the end-settle shortens
-    // (it snaps to 1 once the eased pose is within FLIP_SETTLE_EPSILON of the end, dropping the last
-    // near-still frames). Frame 9 is raw 0.5, frame 3 is raw 0.2 — both well before the settle.
+    // index by that known clock position. Frame 9 is raw 0.5, frame 3 is raw 0.2.
     // Symmetric about the midpoint: halfway through the time is halfway through the turn.
     expect(ts[9]).toBeCloseTo(0.5, 1);
     // A quadratic ease has reached ~8% by 20% of the way in. A cubic sits near 3% and then has

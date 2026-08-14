@@ -74,17 +74,16 @@ const TEXT_SUPERSAMPLE = 1.5;
  *  to show which way the page went — an instant swap leaves the reader guessing. */
 const REDUCED_MOTION_DURATION = 120;
 
-/** How close to the end pose (in eased progress, 0..1) a flip is treated as landed. The eases
- *  decelerate into the finish, so the last sliver of the clock moves the fold too little to see;
- *  ending there snaps an imperceptible remainder and lets the page number update on time instead
- *  of trailing the visual. At the 800ms default this trims ~80ms off a two-page turn. */
-const FLIP_SETTLE_EPSILON = 0.02;
+/** Eased fold pose (0..1) at which the page number is announced, while the fold keeps animating to
+ *  its full duration. The eases decelerate into the finish, so by this pose the turn already reads
+ *  as landed; announcing here updates the number on time without shortening the visible flip. This
+ *  is a pure timing lead for the number: it does not touch the animation clock or the end pose. */
+const PAGE_LEAD = 0.85;
 
 /** The single-page turn ends in a dissolve, not a fold landing on a facing half, so its tail is
- *  longer and flatter and read as sluggish — the page number lagged most here. A wider threshold
- *  ends it sooner (~190ms off the 800ms default); the fade is nearly complete by then, so snapping
- *  the rest does not pop. */
-const FLIP_SETTLE_EPSILON_LONE = 0.06;
+ *  longer and flatter and read as landed earlier — the number lagged most here. A lower pose
+ *  threshold announces sooner in that tail, matching when the fade already looks complete. */
+const PAGE_LEAD_LONE = 0.72;
 
 /** One page that matched a {@link Zine.search} query. */
 export interface SearchHit {
@@ -873,7 +872,13 @@ export class Zine {
       curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
-    this.#animateProgress(0, 1, direction, () => this.#commit(targetIndex, toPage, toContent));
+    this.#animateProgress(
+      0,
+      1,
+      direction,
+      () => this.#commit(targetIndex, toPage, toContent),
+      () => this.#announcePage(toPage),
+    );
   }
 
   /** Animate the fold from `fromT` to `toT`, easing per-frame, then run `onDone`. */
@@ -882,10 +887,12 @@ export class Zine {
     toT: number,
     direction: FlipDirection,
     onDone: () => void,
+    onLead?: () => void,
   ): void {
     const duration = this.#effectiveDuration() * Math.abs(toT - fromT);
     if (duration <= 0) {
-      // Reduced motion (or zero-duration): swap without the curl sweep.
+      // Reduced motion (or zero-duration): swap without the curl sweep. onDone announces the
+      // page itself, so there is no separate lead to fire.
       this.#renderer?.setFlipProgress(toT, direction);
       onDone();
       return;
@@ -896,22 +903,26 @@ export class Zine {
     const anim = { toT, direction, onDone };
     this.#activeAnim = anim;
     const start = performance.now();
+    let ledPage = false;
     const step = (now: number): void => {
       if (this.#activeAnim !== anim) return; // superseded/interrupted → this frame is void
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
       // Lone pages ease out harder — no facing half to land on, only a dissolve.
       const raw = Math.min(1, (now - start) / duration);
       const eased = this.#singlePage ? easeInOutLone(raw) : easeInOutQuad(raw);
-      // Both eases decelerate hard into the end, so the fold looks landed while the clock still
-      // has a tail to run — and the page number, which only updates on commit, lags behind the
-      // visual. Finish once the pose is within a sub-perceptual sliver of the destination: snap
-      // that remainder to the true end this frame and commit, so paint and number land together.
-      // The lone (single-page) turn ends in a dissolve with a longer, flatter tail, so it gets a
-      // wider threshold — that is the mode that read as slow.
-      const settle = this.#singlePage ? FLIP_SETTLE_EPSILON_LONE : FLIP_SETTLE_EPSILON;
+      // Both eases decelerate hard into the end, so once the pose crosses the lead threshold the
+      // fold already reads as landed. Announce the page number there — once — while the fold plays
+      // on to its full duration: the number leads the near-still tail without shortening the flip.
+      if (onLead && !ledPage) {
+        const lead = this.#singlePage ? PAGE_LEAD_LONE : PAGE_LEAD;
+        if (eased >= lead) {
+          ledPage = true;
+          onLead();
+        }
+      }
       // `raw < 1` (not `raw >= 1`) so a finished — or NaN, under a rAF stub that omits the
       // timestamp — clock still lands rather than looping forever.
-      if (raw < 1 && eased < 1 - settle) {
+      if (raw < 1) {
         this.#renderer?.setFlipProgress(fromT + (toT - fromT) * eased, direction);
         this.#raf = requestAnimationFrame(step);
       } else {
@@ -924,17 +935,27 @@ export class Zine {
     this.#raf = requestAnimationFrame(step);
   }
 
+  /** The page-facing half of a landing: current page, a11y text, and `pageChanged`. Fired from the
+   *  animation lead a little before the fold finishes so the number updates on time, then guarded
+   *  so the end-of-flip #commit does not repeat it. A jump with no animation just calls it inline. */
+  #announcePage(toPage: number): void {
+    if (this.#currentPage === toPage) return; // already led this turn (or nothing moved)
+    this.#currentPage = toPage;
+    this.#announce();
+    this.#emitter.emit('pageChanged', { page: toPage });
+  }
+
   #commit(targetIndex: number, toPage: number, toContent: SpreadContent): void {
     const spread = this.#spreads[targetIndex];
     this.#current = targetIndex;
-    this.#currentPage = toPage;
     this.#currentContent = toContent;
     // renderSpread paints the landed spread and clears the turning leaf.
     if (spread) this.#paintSpread(spread, toContent);
     this.#prefetchWindow();
     this.#machine.send('settle');
-    this.#announce();
-    this.#emitter.emit('pageChanged', { page: toPage });
+    // No-op if the animation already led the number; otherwise (reduced motion, a canceled lead,
+    // or an interrupt landing before the threshold) this is where it lands.
+    this.#announcePage(toPage);
     this.#emitter.emit('flipEnd', { page: toPage });
     this.#drainQueuedFlip();
   }
@@ -1085,8 +1106,12 @@ export class Zine {
       gesture.swipe &&
       (drag.direction === 'forward' ? gesture.dx < 0 : gesture.dx > 0);
     if (drag.t >= 0.5 || swiped) {
-      this.#animateProgress(drag.t, 1, drag.direction, () =>
-        this.#commit(drag.targetIndex, drag.toPage, drag.toContent),
+      this.#animateProgress(
+        drag.t,
+        1,
+        drag.direction,
+        () => this.#commit(drag.targetIndex, drag.toPage, drag.toContent),
+        () => this.#announcePage(drag.toPage),
       );
     } else {
       this.#animateProgress(drag.t, 0, drag.direction, () => this.#cancelFlip());
