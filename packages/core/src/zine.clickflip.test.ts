@@ -210,6 +210,30 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     await flush();
     expect(zine.getZoom()).toBe(1);
   });
+
+  it('does not zoom in the dead forward zone when a flip just landed (streak tail)', async () => {
+    // Rapid-flip to the last spread, then keep tapping the same edge: those trailing clicks are
+    // the reader still flipping, not asking to zoom. A flip landing on their heels suppresses it.
+    const { zine, el } = await makeZine(0); // spreads [0,1] [2,3]
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    expect(zine.getPage()).toBe(2); // last spread; forward zone now dead
+    now += 100; // a fast tap, well inside the streak window
+    doubleClick(el, 790, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1); // swallowed, not zoomed
+  });
+
+  it('still zooms in the dead forward zone once the reader pauses past the streak window', async () => {
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    expect(zine.getPage()).toBe(2);
+    now += 600; // paused on the end page, past 2 × DOUBLE_CLICK_MS (500ms)
+    doubleClick(el, 790, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2); // a deliberate zoom
+  });
 });
 
 // A book narrower than its container is letterboxed, so container x and book x differ.

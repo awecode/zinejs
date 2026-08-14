@@ -47,6 +47,13 @@ const DOUBLE_CLICK_MS = 250;
  *  spot. Forgiving enough for a wobble, tight enough that two different zones don't pair. */
 const DOUBLE_CLICK_MOVE = 24;
 
+/** Grace period after a flip lands during which a paired double-click in a *dead* edge zone (the
+ *  first/last spread, where the turn can't happen) is read as the tail of a rapid flipping streak
+ *  and swallowed rather than zooming. Two streak clicks pair within DOUBLE_CLICK_MS of each other,
+ *  so two of them span this window; a deliberate zoom comes after the reader pauses on the end
+ *  page, well outside it. */
+const FLIP_STREAK_MS = 2 * DOUBLE_CLICK_MS;
+
 /** A lone page fills the container, so it sweeps the full width where a spread leaf only covers
  *  its half — and it dissolves instead of landing on a facing page. Stretch duration so the
  *  peel and fade read at a comparable pace to a spread turn rather than whipping away. */
@@ -287,6 +294,9 @@ export class Zine {
   /** First click of a possible library-detected double-click, and when/where it landed. Kept
    *  because the browser's own `dblclick` misfires on rapid streaks (the counter resets). */
   #lastClick: { t: number; x: number; y: number } | null = null;
+  /** When the last flip committed (performance.now()). A dead-edge double-click landing soon after
+   *  is the tail of a flipping streak, not a zoom request; see #zoomAt and FLIP_STREAK_MS. */
+  #lastFlipAt = Number.NEGATIVE_INFINITY;
   #a11yCleanup: (() => void) | null = null;
   /** Resolved once and reused; see {@link getOutline}. */
   #outline: Promise<OutlineItem[]> | null = null;
@@ -953,6 +963,9 @@ export class Zine {
     if (spread) this.#paintSpread(spread, toContent);
     this.#prefetchWindow();
     this.#machine.send('settle');
+    // Stamp the landing so a dead-edge double-click that arrives on its heels reads as the tail of
+    // a flipping streak rather than a zoom (see #zoomAt).
+    this.#lastFlipAt = performance.now();
     // No-op if the animation already led the number; otherwise (reduced motion, a canceled lead,
     // or an interrupt landing before the threshold) this is where it lands.
     this.#announcePage(toPage);
@@ -1296,9 +1309,15 @@ export class Zine {
     if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
       const local = this.#toBookPoint(clientX, clientY);
       const dir = this.#clickFlipDirection(local);
-      // Yield only to a zone that can actually turn: at the first/last spread the outer zone
-      // is dead, so a double-click there zooms instead of deferring to a flip that can't happen.
-      if (dir !== null && this.#canFlip(dir)) return;
+      if (dir !== null) {
+        // Yield to a zone that can actually turn: click-to-flip owns it, not zoom.
+        if (this.#canFlip(dir)) return;
+        // The zone is dead (first/last spread). A double-click here would normally zoom, but if a
+        // flip just landed this is the reader still tapping through a rapid streak that ran off the
+        // end — swallow it so they don't get an unwanted zoom. A deliberate zoom comes after they
+        // pause on the end page, past the streak window.
+        if (performance.now() - this.#lastFlipAt <= FLIP_STREAK_MS) return;
+      }
     }
     // A double-click means the single-click flip we may have queued was really a zoom.
     this.#clearPendingClickFlip();
