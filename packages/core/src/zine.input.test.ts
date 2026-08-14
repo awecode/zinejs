@@ -56,6 +56,23 @@ function fire(target: EventTarget, type: string, props: Record<string, number>):
   target.dispatchEvent(Object.assign(new Event(type), props));
 }
 
+/** Fire a pointer event carrying a timestamp, so the recognizer can measure flick velocity
+ *  (happy-dom's Event.timeStamp is read-only, hence defineProperty). */
+function fireAt(target: EventTarget, type: string, t: number, props: Record<string, number>): void {
+  const e = Object.assign(new Event(type), props);
+  Object.defineProperty(e, 'timeStamp', { value: t, configurable: true });
+  target.dispatchEvent(e);
+}
+
+/** A horizontal flick from (x0,y) to (x1,y): fast enough (over the recognizer's 0.3 px/ms) to
+ *  count as a swipe. The last segment carries the velocity, so the final move must be quick. */
+function swipe(target: EventTarget, y: number, x0: number, x1: number): void {
+  fireAt(target, 'pointerdown', 0, { pointerId: 1, clientX: x0, clientY: y });
+  fireAt(target, 'pointermove', 10, { pointerId: 1, clientX: (x0 + x1) / 2, clientY: y });
+  fireAt(target, 'pointermove', 20, { pointerId: 1, clientX: x1, clientY: y }); // last segment sets velocity
+  fireAt(target, 'pointerup', 22, { pointerId: 1, clientX: x1, clientY: y });
+}
+
 beforeEach(() => {
   now = 0;
   rafCbs = [];
@@ -146,6 +163,82 @@ describe('Zine — slice 3 (drag to flip)', () => {
     await flush();
     fire(el, 'pointerdown', { pointerId: 1, clientX: 790, clientY: 10 }); // busy → ignored
     expect(start).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
+  it('flips forward on a leftward flick from the vertical middle of the right edge', async () => {
+    const { zine, renderer, el } = await makeZine(4); // spreads [0,1], [2,3]
+    swipe(el, 300, 760, 360); // right edge, dead-center height → leftward flick
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward']);
+    expect(zine.getPage()).toBe(2);
+  });
+
+  it('flips backward on a rightward flick from the middle of the left edge', async () => {
+    const { zine, renderer, el } = await makeZine(4, 2); // start on spread 1
+    swipe(el, 300, 40, 440); // left edge → rightward flick
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['backward']);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip on a flick from the middle of the page', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    swipe(el, 300, 400, 100); // starts dead center, not an edge zone
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual([]);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip on a slow horizontal drag from the edge (only a fast flick)', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    // Same path as the forward test, but slow: the final segment is 100px over 1000ms
+    // (0.1 px/ms), well under the recognizer's 0.3 px/ms swipe threshold.
+    fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 760, clientY: 300 });
+    fireAt(el, 'pointermove', 2000, { pointerId: 1, clientX: 460, clientY: 300 });
+    fireAt(el, 'pointermove', 3000, { pointerId: 1, clientX: 360, clientY: 300 });
+    fireAt(el, 'pointerup', 3000, { pointerId: 1, clientX: 360, clientY: 300 });
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual([]);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip on a fast vertical flick from the edge', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 760, clientY: 100 });
+    fireAt(el, 'pointermove', 10, { pointerId: 1, clientX: 760, clientY: 300 });
+    fireAt(el, 'pointermove', 20, { pointerId: 1, clientX: 760, clientY: 500 }); // vertical throw
+    fireAt(el, 'pointerup', 22, { pointerId: 1, clientX: 760, clientY: 500 });
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual([]);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip past the end on a forward flick at the last spread', async () => {
+    const { zine, renderer, el } = await makeZine(4, 2); // last spread [2,3]
+    swipe(el, 300, 760, 360); // forward flick with nowhere to go
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual([]);
+    expect(zine.getPage()).toBe(2);
   });
 });
 
