@@ -63,6 +63,13 @@ const ZOOM_TILE_DELAY = 60;
  *  fraction of that. */
 const MAX_PAGE_UPGRADE = 2.5;
 
+/** Raster texels we want per CSS px for crisp text (roughly retina density). A raster matched 1:1
+ *  to CSS px looks soft: glyph antialiasing is baked at exactly the on-screen size and then
+ *  bilinear-sampled under a fractional transform, with nothing to downsample. Rendering ~2x and
+ *  letting the GPU minify supersamples the edges. A retina display already paints its raster at
+ *  ~2x CSS px, so this floor is scaled by 1/dpr and only lifts low-dpr screens. */
+const TEXT_SUPERSAMPLE = 1.1;
+
 /** Flip time under `prefers-reduced-motion`. Short enough not to read as animation, long enough
  *  to show which way the page went — an instant swap leaves the reader guessing. */
 const REDUCED_MOTION_DURATION = 120;
@@ -1576,15 +1583,55 @@ export class Zine {
   }
 
   /**
+   * How many device pixels the visible page is painted across, over how many its fit-resolution
+   * raster has (the neediest page of the spread). > 1 means the raster is stretched to cover the
+   * display and text is soft; < 1 means the raster already has pixels to spare (a high-res image on
+   * a low-dpr screen), which must be allowed so a crispness floor doesn't wastefully re-request it.
+   *
+   * A single-page spread gives one page the width two shared, so a fit raster sized for the double
+   * layout is stretched over ~2x the space; this is the magnification the upgrade pass must undo.
+   */
+  #fitFactor(): number {
+    const m = this.#renderer?.measure();
+    const box = m?.content ?? m?.book;
+    if (!box || box.width <= 0) return 1;
+    const c = this.#currentContent;
+    const painted = (c.left ? 1 : 0) + (c.right ? 1 : 0);
+    if (painted === 0) return 1;
+    // Both halves of a spread are equal width, so the per-page painted width is the box over the
+    // number of pages in it (1 for a lone page, whose `content` box is already the centered half).
+    const paintedPageCss = box.width / painted;
+    const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    let f = 0;
+    for (const p of [c.left, c.right]) {
+      if (!p || p.width <= 0) continue;
+      // #renderZoomTiles swaps an upgraded (larger) raster into #currentContent and records its
+      // multiplier in #zoomedAt; dividing it back out recovers the invariant fit-resolution width,
+      // so a re-measure of an already-sharp page reports the same factor instead of flip-flopping
+      // between fit and sharp.
+      const intrinsic = p.width / this.#zoomedAt;
+      f = Math.max(f, (paintedPageCss * dpr) / intrinsic);
+    }
+    return f === 0 ? 1 : f;
+  }
+
+  /**
    * The resolution multiplier to rasterize the visible pages at.
    *
+   * Three demands compound onto the fit raster. `#fitFactor` covers a page painted larger than its
+   * raster (device px). Zoom magnifies it further. And a text-crispness floor lifts the raster to
+   * ~2x CSS px even when it already covers the display 1:1, because a 1:1 raster reads soft; the
+   * floor is scaled by 1/dpr so a retina screen (already ~2x) is left alone and pays no memory.
    * Capped because a page costs the square of this in memory: at 4x a letter page is over 100 MB,
-   * which would dwarf the source's whole cache. The cap keeps a deep zoom sharper than the
-   * fit-to-screen raster without trying to match it pixel for pixel.
+   * which would dwarf the source's whole cache.
    */
   #upgradeScale(): number {
-    if (this.#scale <= 1) return 1;
-    return Math.min(Math.ceil(this.#scale * 2) / 2, MAX_PAGE_UPGRADE);
+    const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    const crispnessFloor = Math.max(1, TEXT_SUPERSAMPLE / dpr);
+    const zoom = this.#scale <= 1 ? 1 : this.#scale;
+    const raw = this.#fitFactor() * Math.max(zoom, crispnessFloor);
+    if (raw <= 1 + 1e-3) return 1;
+    return Math.min(Math.ceil(raw * 2) / 2, MAX_PAGE_UPGRADE);
   }
 
   async #renderZoomTiles(): Promise<void> {
@@ -1800,12 +1847,12 @@ function validateOptions(container: unknown, options: unknown): void {
       // A real curl, just not bundled: say how to get it rather than calling it invalid.
       throw new Error(
         `Zine: the '${String(curl)}' curl is not bundled. Import it and pass the model: ` +
-          `import { ${String(curl)} } from '@zinejs/core/curls'  →  curl: ${String(curl)}`,
+        `import { ${String(curl)} } from '@zinejs/core/curls'  →  curl: ${String(curl)}`,
       );
     } else if (!CURL_TYPES.includes(curl as CurlType)) {
       throw new Error(
         `Zine: curl must be ${CURL_TYPES.join(' or ')}, or a model imported from ` +
-          `'@zinejs/core/curls' (${IMPORTABLE_CURLS.join(', ')}); got ${JSON.stringify(curl)}.`,
+        `'@zinejs/core/curls' (${IMPORTABLE_CURLS.join(', ')}); got ${JSON.stringify(curl)}.`,
       );
     }
   }
