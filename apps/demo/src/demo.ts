@@ -1,4 +1,6 @@
+import './theme.css';
 import './demo.css';
+import { createThemeToggle, initTheme } from './theme';
 import { Zine, ImageSource, CURL_TYPES, IMPORTABLE_CURLS, type CurlSpec, type Source } from '@zinejs/core';
 // The demo offers every curl, so it imports the four that are not bundled. A real book names
 // the one it wants and carries only that.
@@ -19,6 +21,8 @@ const DEMOS: { path: string; kind: Kind; renderer: RendererKind; label: string }
 
 const current = DEMOS.find((d) => location.pathname.endsWith(d.path)) ?? DEMOS[0]!;
 const { kind, renderer } = current;
+
+initTheme();
 
 // Reactive options live in the URL query string: changing one reloads with a fresh Zine
 // (robust — no in-place teardown), while the shareable URL captures the exact config.
@@ -60,8 +64,12 @@ const app = document.getElementById('app')!;
 app.innerHTML = `
   <div class="wrap">
     <header>
-      <h1>zinejs demo — ${current.label}</h1>
-      <div class="sub">${kind === 'pdf' ? 'PDF source (pdf.js)' : 'Image source'}, forced <code>renderer: '${renderer}'</code>${renderer === 'webgl2' ? ` · curl <code>${opt.curl}</code>` : ''}. Options are reactive (they reload with a fresh book).</div>
+      <div class="header-row">
+        <div>
+          <h1>zinejs demo — ${current.label}</h1>
+          <div class="sub">${kind === 'pdf' ? 'PDF source (pdf.js)' : 'Image source'}, forced <code>renderer: '${renderer}'</code>${renderer === 'webgl2' ? ` · curl <code>${opt.curl}</code>` : ''}. Options are reactive (they reload with a fresh book).</div>
+        </div>
+      </div>
       <nav>${DEMOS.map((d) => `<a href="${d.path}" class="${d === current ? 'active' : ''}">${d.label}</a>`).join('')}</nav>
     </header>
     <div class="controls" id="controls"></div>
@@ -72,6 +80,7 @@ app.innerHTML = `
     </footer>
   </div>
 `;
+app.querySelector('.header-row')!.appendChild(createThemeToggle());
 const book = document.getElementById('book')!;
 const controlsEl = document.getElementById('controls')!;
 const statusEl = document.getElementById('status')!;
