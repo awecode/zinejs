@@ -64,13 +64,34 @@ function fireAt(target: EventTarget, type: string, t: number, props: Record<stri
   target.dispatchEvent(e);
 }
 
-/** A horizontal flick from (x0,y) to (x1,y): fast enough (over the recognizer's 0.3 px/ms) to
- *  count as a swipe. The last segment carries the velocity, so the final move must be quick. */
-function swipe(target: EventTarget, y: number, x0: number, x1: number): void {
-  fireAt(target, 'pointerdown', 0, { pointerId: 1, clientX: x0, clientY: y });
-  fireAt(target, 'pointermove', 10, { pointerId: 1, clientX: (x0 + x1) / 2, clientY: y });
-  fireAt(target, 'pointermove', 20, { pointerId: 1, clientX: x1, clientY: y }); // last segment sets velocity
-  fireAt(target, 'pointerup', 22, { pointerId: 1, clientX: x1, clientY: y });
+/** Play a pointer gesture through timestamped samples: the first is the press, the last the
+ *  release, the rest are moves. Flushes after each move so a promoted grab can stage its content
+ *  (that staging is async) before the next event — the release is misread as a tap otherwise. */
+async function dragThrough(
+  target: EventTarget,
+  samples: Array<{ x: number; y: number; t: number }>,
+): Promise<void> {
+  const down = samples[0]!;
+  const up = samples[samples.length - 1]!;
+  const moves = samples.slice(1, -1);
+  fireAt(target, 'pointerdown', down.t, { pointerId: 1, clientX: down.x, clientY: down.y });
+  for (const m of moves) {
+    fireAt(target, 'pointermove', m.t, { pointerId: 1, clientX: m.x, clientY: m.y });
+    await flush();
+  }
+  fireAt(target, 'pointerup', up.t, { pointerId: 1, clientX: up.x, clientY: up.y });
+  await flush();
+}
+
+/** A fast horizontal flick from x0 to x1 at height y: the last move segment clears the
+ *  recognizer's 0.3 px/ms swipe threshold (200px in 10ms). */
+async function swipe(target: EventTarget, y: number, x0: number, x1: number): Promise<void> {
+  await dragThrough(target, [
+    { x: x0, y, t: 0 },
+    { x: (x0 + x1) / 2, y, t: 10 },
+    { x: x1, y, t: 20 }, // last segment sets the release velocity
+    { x: x1, y, t: 22 },
+  ]);
 }
 
 beforeEach(() => {
@@ -143,11 +164,11 @@ describe('Zine — slice 3 (drag to flip)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('ignores a press that is not on a corner', async () => {
+  it('ignores a press away from the side edges', async () => {
     const { zine, el } = await makeZine(4);
     const start = vi.fn();
     zine.on('flipStart', start);
-    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 }); // center
+    fire(el, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 300 }); // center, no edge band
     fire(el, 'pointermove', { pointerId: 1, clientX: 100, clientY: 300 });
     fire(el, 'pointerup', { pointerId: 1, clientX: 100, clientY: 300 });
     await flush();
@@ -166,11 +187,10 @@ describe('Zine — slice 3 (drag to flip)', () => {
   });
 });
 
-describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
+describe('Zine — slice 3 (peel/swipe to flip from a side edge)', () => {
   it('flips forward on a leftward flick from the vertical middle of the right edge', async () => {
     const { zine, renderer, el } = await makeZine(4); // spreads [0,1], [2,3]
-    swipe(el, 300, 760, 360); // right edge, dead-center height → leftward flick
-    await flush();
+    await swipe(el, 300, 760, 360); // right edge, dead-center height → leftward flick
     tick(1000);
     await flush();
 
@@ -180,8 +200,7 @@ describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
 
   it('flips backward on a rightward flick from the middle of the left edge', async () => {
     const { zine, renderer, el } = await makeZine(4, 2); // start on spread 1
-    swipe(el, 300, 40, 440); // left edge → rightward flick
-    await flush();
+    await swipe(el, 300, 40, 440); // left edge → rightward flick
     tick(1000);
     await flush();
 
@@ -191,8 +210,7 @@ describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
 
   it('does not flip on a flick from the middle of the page', async () => {
     const { zine, renderer, el } = await makeZine(4);
-    swipe(el, 300, 400, 100); // starts dead center, not an edge zone
-    await flush();
+    await swipe(el, 300, 400, 100); // starts dead center, not an edge zone
     tick(1000);
     await flush();
 
@@ -200,24 +218,43 @@ describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('does not flip on a slow horizontal drag from the edge (only a fast flick)', async () => {
+  it('peels and flips on a slow drag from the mid-edge that crosses halfway', async () => {
     const { zine, renderer, el } = await makeZine(4);
-    // Same path as the forward test, but slow: the final segment is 100px over 1000ms
-    // (0.1 px/ms), well under the recognizer's 0.3 px/ms swipe threshold.
+    // Slow (every segment under the 0.3 px/ms swipe threshold), so no flick shortcut — it
+    // flips only because the peel is dragged past the halfway point, following the finger.
     fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 760, clientY: 300 });
     fireAt(el, 'pointermove', 2000, { pointerId: 1, clientX: 460, clientY: 300 });
-    fireAt(el, 'pointermove', 3000, { pointerId: 1, clientX: 360, clientY: 300 });
+    await flush(); // grab promoted on this move → stage content before the release
+    fireAt(el, 'pointermove', 3000, { pointerId: 1, clientX: 360, clientY: 300 }); // dx=-400 → t=1.0
     fireAt(el, 'pointerup', 3000, { pointerId: 1, clientX: 360, clientY: 300 });
     await flush();
     tick(1000);
     await flush();
 
-    expect(renderer.begun).toEqual([]);
-    expect(zine.getPage()).toBe(0);
+    expect(renderer.begun).toEqual(['forward']);
+    expect(zine.getPage()).toBe(2);
   });
 
-  it('does not flip on a fast vertical flick from the edge', async () => {
+  it('cancels a mid-edge peel that is released before halfway', async () => {
     const { zine, renderer, el } = await makeZine(4);
+    // Grabs the mid-edge and drags only a little (dx=-80, t≈0.1), slowly, then lets go.
+    fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 760, clientY: 300 });
+    fireAt(el, 'pointermove', 2000, { pointerId: 1, clientX: 720, clientY: 300 });
+    await flush(); // grab promoted on this move → stage content before the release
+    fireAt(el, 'pointermove', 3000, { pointerId: 1, clientX: 680, clientY: 300 });
+    fireAt(el, 'pointerup', 3000, { pointerId: 1, clientX: 680, clientY: 300 });
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward']); // it did peel (a fold began)…
+    expect(zine.getPage()).toBe(0); // …but fell short, so the book stays put
+  });
+
+  it('does not turn the page on a purely vertical drag from the edge', async () => {
+    const { zine, el } = await makeZine(4);
+    // A vertical throw carries no horizontal progress (t stays ~0), so whatever peel it arms
+    // snaps straight back. The guarantee that matters is that the book does not turn.
     fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 760, clientY: 100 });
     fireAt(el, 'pointermove', 10, { pointerId: 1, clientX: 760, clientY: 300 });
     fireAt(el, 'pointermove', 20, { pointerId: 1, clientX: 760, clientY: 500 }); // vertical throw
@@ -226,7 +263,6 @@ describe('Zine — slice 3 (swipe to flip from a side edge)', () => {
     tick(1000);
     await flush();
 
-    expect(renderer.begun).toEqual([]);
     expect(zine.getPage()).toBe(0);
   });
 

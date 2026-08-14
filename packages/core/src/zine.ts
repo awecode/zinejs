@@ -9,7 +9,6 @@ import { Virtualizer } from './engine/virtualizer';
 import { Emitter, type ZineEventMap } from './engine/emitter';
 import { FlipMachine } from './engine/stateMachine';
 import { PointerRecognizer, PinchRecognizer, bindGestures, type GestureEnd } from './engine/input';
-import { hitTest } from './geometry/hitTest';
 import {
   bindDeepLink,
   claimHash,
@@ -931,13 +930,18 @@ export class Zine {
       this.#pendingGrab = null;
       return;
     }
-    const cornerSize = Math.min(b.width, b.height) * CORNER_FRACTION;
-    if (hitTest(point, { width: b.width, height: b.height }, cornerSize) !== 'corner') {
-      return; // not a corner — no drag; a tap here may still click-to-flip on release
+    // Grabbable along the whole outer band of each side edge, not just the corners: a drag
+    // from the vertical middle should peel and follow the finger too, the way a corner does.
+    // The fold then anchors at the grabbed height, so mid-edge grabs curl from the middle.
+    const edgeBand = Math.min(b.width, b.height) * CORNER_FRACTION;
+    const insidePage = point.x >= 0 && point.x <= b.width && point.y >= 0 && point.y <= b.height;
+    const nearSideEdge = point.x <= edgeBand || point.x >= b.width - edgeBand;
+    if (!insidePage || !nearSideEdge) {
+      return; // not near a side edge — no drag; a tap here may still click-to-flip on release
     }
-    this.#anchorY = clamp(point.y / b.height, 0, 1); // fold anchors at the grabbed corner
+    this.#anchorY = clamp(point.y / b.height, 0, 1); // fold anchors at the grabbed point
     // Arm a potential drag; it only becomes a real flip once the pointer moves
-    // (so a corner *tap* never fires a spurious flipStart). Right-side corner
+    // (so an edge *tap* never fires a spurious flipStart). The right edge
     // turns the page forward in LTR; RTL mirrors it.
     const rightSide = point.x > b.width / 2;
     const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
@@ -1023,10 +1027,9 @@ export class Zine {
     }
     const drag = this.#drag;
     if (!drag) {
-      // Never armed a corner peel. A fast horizontal flick from an edge still turns the page;
-      // otherwise it was a tap, handled by clickToFlip.
+      // Never became a drag → it was a tap; maybe flip via clickToFlip.
       this.#pendingGrab = null;
-      if (!this.#maybeSwipeFlip(gesture)) this.#maybeClickFlip(gesture);
+      this.#maybeClickFlip(gesture);
       return;
     }
     this.#drag = null;
@@ -1042,26 +1045,6 @@ export class Zine {
     } else {
       this.#animateProgress(drag.t, 0, drag.direction, () => this.#cancelFlip());
     }
-  }
-
-  /** Turn a fast horizontal flick that began on a side edge into a page turn. Complements the
-   *  corner peel: the corner grab needs near-corner precision, so a flick from the vertical
-   *  middle of an edge would otherwise do nothing even though a tap there flips. The flick's own
-   *  direction chooses the turn (leftward = forward in LTR), and the start must land in a flip
-   *  zone so a mid-page throw stays inert. Follows `clickToFlip` — the corner peel is the
-   *  always-on drag; this is a shortcut over the same edge zones. Returns whether it flipped. */
-  #maybeSwipeFlip(gesture: GestureEnd): boolean {
-    if (this.#clickToFlip === 'off' || this.#scale > 1 || !this.#press || !gesture.swipe) return false;
-    // A horizontal flick; a fast vertical throw is not a page turn.
-    if (Math.abs(gesture.dx) <= Math.abs(gesture.dy)) return false;
-    // Must start where an edge tap would also turn, so mid-page flicks do nothing.
-    if (this.#clickFlipDirection(this.#press) === null) return false;
-    const forward = this.#direction === 'rtl' ? gesture.dx > 0 : gesture.dx < 0;
-    if (!this.#canFlip(forward ? 'forward' : 'backward')) return false;
-    this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
-    const step = forward ? 1 : -1;
-    this.#requestFlip(() => this.#startFlip(this.#current + step));
-    return true;
   }
 
   #maybeClickFlip(gesture: GestureEnd): void {
