@@ -402,7 +402,13 @@ export class PdfSource implements Source {
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    // `willReadFrequently` keeps the backing store on the CPU. These canvases are never inserted
+    // into the document and are only ever read back from (drawImage in the CSS renderer,
+    // texImage2D in the WebGL2 one), so GPU acceleration buys nothing and costs correctness:
+    // Chrome hibernates offscreen accelerated canvases, and on drivers where the shared-image
+    // handoff fails the readback silently yields blank pages with no error anywhere.
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvasContext: ctx, viewport }).promise;
     return canvas;
   }
 }

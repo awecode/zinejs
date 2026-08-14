@@ -42,6 +42,22 @@ describe('PdfSource', () => {
     expect(canvas.height).toBe(160);
   });
 
+  it('rasterizes onto an unaccelerated canvas', async () => {
+    // These canvases are never inserted into the document and are only ever read back from, by
+    // drawImage in the CSS renderer and texImage2D in the WebGL2 one. Chrome hibernates offscreen
+    // accelerated canvases, and on drivers whose shared-image handoff fails the readback hands
+    // back blank pages with no error, so the backing store has to stay on the CPU.
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext');
+    try {
+      const src = new PdfSource('doc.pdf', { workerSrc: '/pdf.worker.mjs' });
+      await src.open();
+      await src.get(0);
+      expect(getContext).toHaveBeenCalledWith('2d', { willReadFrequently: true });
+    } finally {
+      getContext.mockRestore();
+    }
+  });
+
   it('memoizes a decoded page', async () => {
     const src = new PdfSource('doc.pdf', { workerSrc: '/pdf.worker.mjs' });
     await src.open();
