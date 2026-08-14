@@ -98,6 +98,16 @@ function zoneAt(x: number, bookWidth: number, opts: Options): 'left-flip' | 'rig
   return 'dead';
 }
 
+/** Whether a click in `zone` will actually be claimed by click-to-flip (and so refuse to zoom).
+ *  An edge zone only blocks zoom when the flip has somewhere to land: at the first spread the
+ *  left zone is dead and at the last spread the right zone is dead, so a double-click there zooms.
+ *  This mirrors the library's #canFlip gate via its public canFlipPrev/canFlipNext. */
+function zoneBlocksZoom(zone: 'left-flip' | 'right-flip' | 'dead', zine: Zine): boolean {
+  if (zone === 'left-flip') return zine.canFlipPrev();
+  if (zone === 'right-flip') return zine.canFlipNext();
+  return false;
+}
+
 export function installClickDebug(container: HTMLElement, zine: Zine, opts: Options): void {
   let lastClickAt: number | null = null;
   let lastClickPos: { x: number; y: number } | null = null;
@@ -122,8 +132,9 @@ export function installClickDebug(container: HTMLElement, zine: Zine, opts: Opti
     return {
       local: `page(${x.toFixed(0)}, ${y.toFixed(0)}) of ${b.width.toFixed(0)}x${b.height.toFixed(0)}${outside ? ' — OUTSIDE THE PAGE' : ''}`,
       zone,
-      // At scale 1 an edge zone belongs to click-to-flip, so a dblclick there will not zoom.
-      blocks: zone !== 'dead',
+      // At scale 1 an edge zone belongs to click-to-flip and will not zoom, but only when the
+      // flip can land: a dead edge zone (first spread back, last spread forward) zooms instead.
+      blocks: zoneBlocksZoom(zone, zine),
     };
   };
 
