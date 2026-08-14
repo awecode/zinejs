@@ -74,6 +74,18 @@ const TEXT_SUPERSAMPLE = 1.5;
  *  to show which way the page went — an instant swap leaves the reader guessing. */
 const REDUCED_MOTION_DURATION = 120;
 
+/** How close to the end pose (in eased progress, 0..1) a flip is treated as landed. The eases
+ *  decelerate into the finish, so the last sliver of the clock moves the fold too little to see;
+ *  ending there snaps an imperceptible remainder and lets the page number update on time instead
+ *  of trailing the visual. At the 800ms default this trims ~80ms off a two-page turn. */
+const FLIP_SETTLE_EPSILON = 0.02;
+
+/** The single-page turn ends in a dissolve, not a fold landing on a facing half, so its tail is
+ *  longer and flatter and read as sluggish — the page number lagged most here. A wider threshold
+ *  ends it sooner (~190ms off the 800ms default); the fade is nearly complete by then, so snapping
+ *  the rest does not pop. */
+const FLIP_SETTLE_EPSILON_LONE = 0.06;
+
 /** One page that matched a {@link Zine.search} query. */
 export interface SearchHit {
   /** Zero-based page index; pass straight to `flipTo`. */
@@ -890,10 +902,20 @@ export class Zine {
       // Lone pages ease out harder — no facing half to land on, only a dissolve.
       const raw = Math.min(1, (now - start) / duration);
       const eased = this.#singlePage ? easeInOutLone(raw) : easeInOutQuad(raw);
-      this.#renderer?.setFlipProgress(fromT + (toT - fromT) * eased, direction);
-      if (raw < 1) {
+      // Both eases decelerate hard into the end, so the fold looks landed while the clock still
+      // has a tail to run — and the page number, which only updates on commit, lags behind the
+      // visual. Finish once the pose is within a sub-perceptual sliver of the destination: snap
+      // that remainder to the true end this frame and commit, so paint and number land together.
+      // The lone (single-page) turn ends in a dissolve with a longer, flatter tail, so it gets a
+      // wider threshold — that is the mode that read as slow.
+      const settle = this.#singlePage ? FLIP_SETTLE_EPSILON_LONE : FLIP_SETTLE_EPSILON;
+      // `raw < 1` (not `raw >= 1`) so a finished — or NaN, under a rAF stub that omits the
+      // timestamp — clock still lands rather than looping forever.
+      if (raw < 1 && eased < 1 - settle) {
+        this.#renderer?.setFlipProgress(fromT + (toT - fromT) * eased, direction);
         this.#raf = requestAnimationFrame(step);
       } else {
+        this.#renderer?.setFlipProgress(toT, direction);
         this.#raf = null;
         this.#activeAnim = null;
         onDone();
