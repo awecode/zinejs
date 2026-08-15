@@ -1,5 +1,5 @@
 import type { PageContent } from '../renderer/types';
-import type { DownloadInfo, OutlineItem, PageRequest, Source } from './types';
+import type { DownloadInfo, LoadProgress, OutlineItem, PageRequest, Source } from './types';
 
 export interface CompositionOptions {
   /** Image URL prepended as a lone front cover (adds a page). */
@@ -42,6 +42,7 @@ class CompositeSource implements Source {
   #cache = new Map<string, Promise<ImageBitmap>>();
   open?: () => Promise<void>;
   onPageUpdate?: (handler: (index: number) => void) => void;
+  onProgress?: (handler: (progress: LoadProgress) => void) => void;
   getText?: (index: number) => Promise<string>;
   getDownload?: () => Promise<DownloadInfo | null>;
   getOutline?: () => Promise<OutlineItem[]>;
@@ -67,6 +68,12 @@ class CompositeSource implements Source {
       this.onPageUpdate = (handler) => {
         base.onPageUpdate!((src) => handler(src + (this.#front !== null ? 1 : 0)));
       };
+    }
+
+    if (typeof base.onProgress === 'function') {
+      // Download progress is about the whole document, not any one page, so it passes straight
+      // through: covers and replacements do not shift it.
+      this.onProgress = (handler) => base.onProgress!(handler);
     }
 
     if (typeof base.getText === 'function') {

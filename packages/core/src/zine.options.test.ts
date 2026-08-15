@@ -147,6 +147,12 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects a non-boolean loading', () => {
+    expect(() => new Zine(fakeContainer(), { source: src(), loading: 'yes' as any })).toThrow(
+      /loading/,
+    );
+  });
+
   it('accepts a well-formed options object', () => {
     expect(
       () => new Zine(fakeContainer(), { source: src(), renderer: new MockRenderer() }),

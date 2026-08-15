@@ -75,6 +75,12 @@
       "path": "dist/share-*.js",
       "limit": "6 kB",
       "gzip": true
+    },
+    {
+      "name": "loading overlay chunk (lazy, gzip)",
+      "path": "dist/loading-*.js",
+      "limit": "3 kB",
+      "gzip": true
     }
   ]
 }

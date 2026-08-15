@@ -179,6 +179,36 @@ describe('PdfSource', () => {
   });
 });
 
+describe('PdfSource — onProgress', () => {
+  it('forwards pdf.js download progress to a registered handler', async () => {
+    const page = {
+      getViewport: () => ({ width: 120, height: 160 }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const doc = { numPages: 3, getPage: async () => page, destroy: () => {} };
+    // A loading task that drives its assigned onProgress before resolving the document.
+    mock.getDocument.mockImplementationOnce(() => {
+      const task: { promise: Promise<typeof doc>; onProgress?: (p: unknown) => void } = {
+        promise: Promise.resolve().then(() => {
+          task.onProgress?.({ loaded: 4, total: 8 });
+          task.onProgress?.({ loaded: 8, total: 8 });
+          return doc;
+        }),
+      };
+      return task;
+    });
+
+    const src = new PdfSource('doc.pdf', { workerSrc: '/w.mjs' });
+    const seen: Array<{ loaded: number; total: number }> = [];
+    src.onProgress((p) => seen.push(p));
+    await src.open();
+    expect(seen).toEqual([
+      { loaded: 4, total: 8 },
+      { loaded: 8, total: 8 },
+    ]);
+  });
+});
+
 describe('PdfSource — getText', () => {
   const textDoc = () => {
     const page = {

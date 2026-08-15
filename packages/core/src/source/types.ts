@@ -33,6 +33,12 @@ export interface Source {
    */
   onPageUpdate?(handler: (index: number) => void): void;
   /**
+   * Optional: register a handler called as the document downloads, for a loading indicator.
+   * Only sources that fetch bytes over the network (a PDF from a URL) report progress; image
+   * books and sources built from already-in-memory bytes have nothing to report and omit this.
+   */
+  onProgress?(handler: (progress: LoadProgress) => void): void;
+  /**
    * Optional: the page's plain text, for search. Sources backed by images can't have any and
    * simply omit this — `Zine.canSearch()` reports whether a book is searchable at all.
    */
@@ -72,6 +78,14 @@ export interface OutlineItem {
   page: number | null;
   /** Nested entries; empty for a leaf. */
   children: OutlineItem[];
+}
+
+/** How far a document's download has got, for a loading indicator. */
+export interface LoadProgress {
+  /** Bytes fetched so far. */
+  loaded: number;
+  /** Total bytes when the server declares a content-length; 0 when it does not (chunked). */
+  total: number;
 }
 
 /** A downloadable original document. */

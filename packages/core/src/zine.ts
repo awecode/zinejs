@@ -26,9 +26,10 @@ import {
 } from './geometry/curls/types';
 import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
-import type { DownloadInfo, OutlineItem, Source } from './source/types';
+import type { DownloadInfo, LoadProgress, OutlineItem, Source } from './source/types';
 import { composeSource } from './source/compose';
 import type { ControlsOptions } from './controls/types';
+import type { LoaderHandle } from './loading/loading';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
@@ -199,6 +200,14 @@ export interface ZineOptions {
    */
   controls?: boolean | ControlsOptions;
   /**
+   * The built-in loading indicator, shown while a source that reports download progress (a PDF
+   * from a URL) fetches and prepares its first spread. On by default; pass `false` to render none
+   * and drive your own from the `progress` event and the `ready` promise. Retheme the default with
+   * the `--zine-loading-bg`, `--zine-loading-fg`, `--zine-loading-accent`, and `--zine-loading-track`
+   * CSS variables.
+   */
+  loading?: boolean;
+  /**
    * Keep the current page in the URL hash (`#page=12`), so a link opens where the reader was and
    * back/forward move through the book. Default true.
    *
@@ -304,6 +313,12 @@ export class Zine {
   #pendingUpgrades = new Set<number>();
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
+  #loadingOption: boolean;
+  #loader: LoaderHandle | null = null;
+  #lastProgress: LoadProgress | null = null;
+  /** 'download' while bytes arrive, 'preparing' while the first spread rasterizes, 'done' after
+   *  it paints. Guards a late-arriving loader chunk from mounting once the book is already up. */
+  #loaderPhase: 'download' | 'preparing' | 'done' = 'download';
   /** Resolution multiplier the current spread is rasterized at; 1 while not zoomed. */
   #zoomedAt = 1;
   /** Guards against an out-of-date tile landing after the view has already moved on. */
@@ -343,6 +358,7 @@ export class Zine {
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
+    this.#loadingOption = options.loading ?? true;
     this.#startPageOption = options.startPage;
     // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
     // throw immediately from `new Zine`. Async sources (an `open()`) defer to #init.
@@ -840,6 +856,7 @@ export class Zine {
     this.#unsubscribeDeepLink?.();
     if (this.#deepLinkEnabled) releaseHash(); // a later book may own it now
     this.#controlsCleanup?.();
+    this.#dismissLoader();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
     this.#unbindDblClick?.();
@@ -1365,9 +1382,19 @@ export class Zine {
   async #init(rendererOption: RendererOption): Promise<void> {
     // Load the renderer chunk while opening an async source (e.g. a PDF) in parallel.
     const rendererPromise = selectRenderer(rendererOption);
+    // Report the download to the progress event and the built-in loader; register before open()
+    // so the very first bytes are seen.
+    this.#source.onProgress?.((p) => this.#onLoadProgress(p));
     if (typeof this.#source.open === 'function') {
-      await this.#source.open();
-      this.#buildSpreadModel(); // page count known now; validates + builds spreads
+      void this.#mountLoader(); // an async source has a wait worth indicating; sync ones do not
+      try {
+        await this.#source.open();
+        this.#buildSpreadModel(); // page count known now; validates + builds spreads
+      } catch (error) {
+        this.#dismissLoader(); // tear the overlay down before `ready` rejects
+        throw error;
+      }
+      this.#setLoaderPhase('preparing'); // bytes are in; the wait is now rasterizing
     }
     this.#source.prefetch([this.#currentPage]);
 
@@ -1401,12 +1428,54 @@ export class Zine {
     this.#a11yCleanup = this.#setupA11y();
 
     await this.#renderCurrent();
+    this.#dismissLoader(); // the first spread is painted; drop the overlay before the toolbar mounts
     this.#observeResize();
     this.#prefetchWindow();
     this.#announce();
     this.#bindDeepLink();
     await this.#mountControls();
     this.#emitter.emit('ready');
+  }
+
+  /** Forward a download-progress tick to the public event and the built-in loader. */
+  #onLoadProgress(progress: LoadProgress): void {
+    this.#lastProgress = progress;
+    this.#emitter.emit('progress', progress);
+    this.#loader?.update(progress);
+  }
+
+  /**
+   * Fetch the loader chunk and show the overlay, unless disabled or the book is already up.
+   *
+   * Lazy, so `loading: false` (or a source that never reports progress) never downloads it.
+   * Failure is swallowed: a loader that cannot load should cost the reader a spinner, not the book.
+   */
+  async #mountLoader(): Promise<void> {
+    if (this.#loadingOption === false || this.#destroyed) return;
+    const container = this.#container;
+    if (!container.ownerDocument || typeof container.appendChild !== 'function') return;
+    try {
+      const { mountLoading } = await import('./loading/loading');
+      // The spread may have painted while the chunk was in flight; do not pop an overlay over it.
+      if (this.#loaderPhase === 'done' || this.#destroyed) return;
+      this.#loader = mountLoading(container);
+      if (this.#lastProgress) this.#loader.update(this.#lastProgress);
+      if (this.#loaderPhase === 'preparing') this.#loader.preparing();
+    } catch {
+      // No overlay; the book itself is unaffected.
+    }
+  }
+
+  #setLoaderPhase(phase: 'preparing'): void {
+    if (this.#loaderPhase === 'done') return;
+    this.#loaderPhase = phase;
+    this.#loader?.preparing();
+  }
+
+  #dismissLoader(): void {
+    this.#loaderPhase = 'done';
+    this.#loader?.destroy();
+    this.#loader = null;
   }
 
   /** Mount `renderer`; if it can't initialize (e.g. no WebGL2 context) fall back to CSS. */
@@ -1974,7 +2043,7 @@ function validateOptions(container: unknown, options: unknown): void {
     }
   }
 
-  for (const flag of ['deepLink', 'disableContextMenu', 'responsiveSpread'] as const) {
+  for (const flag of ['deepLink', 'disableContextMenu', 'responsiveSpread', 'loading'] as const) {
     if (o[flag] !== undefined && typeof o[flag] !== 'boolean') {
       throw new Error(`Zine: ${flag} must be a boolean; got ${typeName(o[flag])}.`);
     }

@@ -1,4 +1,11 @@
-import type { DownloadInfo, OutlineItem, PageContent, PageRequest, Source } from '@zinejs/core';
+import type {
+  DownloadInfo,
+  LoadProgress,
+  OutlineItem,
+  PageContent,
+  PageRequest,
+  Source,
+} from '@zinejs/core';
 
 /** Minimal shapes of the pdf.js API we rely on (avoids a hard type dependency). */
 interface PdfPageLike {
@@ -31,9 +38,14 @@ interface DocParams {
   data?: ArrayBuffer | Uint8Array;
   disableAutoFetch?: boolean;
 }
+/** pdf.js's loading task: the document promise, plus an assignable download-progress callback. */
+interface PdfLoadingTask {
+  promise: Promise<PdfDocumentLike>;
+  onProgress?: (p: LoadProgress) => void;
+}
 interface PdfjsModule {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument(src: DocParams): { promise: Promise<PdfDocumentLike> };
+  getDocument(src: DocParams): PdfLoadingTask;
 }
 
 /** A URL, raw bytes, or a pre-created pdf.js document. */
@@ -122,6 +134,7 @@ export class PdfSource implements Source {
   #maxCacheBytes: number;
   #progressive: boolean;
   #disableAutoFetch: boolean;
+  #onProgress: ((progress: LoadProgress) => void) | null = null;
   #cache = new Map<number, CacheEntry>();
   #cachedBytes = 0;
   #onUpdate: ((index: number) => void) | null = null;
@@ -148,6 +161,11 @@ export class PdfSource implements Source {
     this.#onUpdate = handler;
   }
 
+  /** Register a handler called as the document downloads, driving a loading indicator. */
+  onProgress(handler: (progress: LoadProgress) => void): void {
+    this.#onProgress = handler;
+  }
+
   async open(): Promise<void> {
     if (isPdfDocument(this.#src)) {
       this.#doc = this.#src;
@@ -157,7 +175,9 @@ export class PdfSource implements Source {
       const params: DocParams =
         typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
       if (this.#disableAutoFetch) params.disableAutoFetch = true;
-      this.#doc = await pdfjs.getDocument(params).promise;
+      const task = pdfjs.getDocument(params);
+      if (this.#onProgress) task.onProgress = this.#onProgress;
+      this.#doc = await task.promise;
     }
     this.pageCount = this.#doc.numPages;
   }

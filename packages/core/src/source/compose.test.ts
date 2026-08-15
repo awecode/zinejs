@@ -110,6 +110,29 @@ describe('composeSource', () => {
   });
 });
 
+describe('composeSource — onProgress', () => {
+  class ProgressBase extends FakeBase {
+    handler: ((p: { loaded: number; total: number }) => void) | null = null;
+    onProgress(handler: (p: { loaded: number; total: number }) => void): void {
+      this.handler = handler;
+    }
+  }
+
+  it('is absent when the base does not report progress', () => {
+    const s = composeSource(new FakeBase(4), { frontCover: 'front.jpg' });
+    expect(s.onProgress).toBeUndefined();
+  });
+
+  it('forwards download progress straight through from the base', () => {
+    const base = new ProgressBase(4);
+    const s = composeSource(base, { frontCover: 'front.jpg' });
+    const seen: Array<{ loaded: number; total: number }> = [];
+    s.onProgress!((p) => seen.push(p));
+    base.handler!({ loaded: 5, total: 10 }); // covers do not shift a document-level signal
+    expect(seen).toEqual([{ loaded: 5, total: 10 }]);
+  });
+});
+
 describe('composeSource — getText', () => {
   class TextBase extends FakeBase {
     readonly textCalls: number[] = [];

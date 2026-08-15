@@ -250,7 +250,7 @@ zine.ready
   })
   .catch((err: unknown) => {
     rendererError = err instanceof Error ? err.message : String(err);
-    statusEl.textContent = 'renderer unavailable — see debug below';
+    statusEl.textContent = 'could not open (see debug below)';
     updateDebug();
   });
 

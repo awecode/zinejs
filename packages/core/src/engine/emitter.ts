@@ -1,4 +1,5 @@
 import type { SpreadMode } from './spread.js';
+import type { LoadProgress } from '../source/types.js';
 
 export type Listener<T> = (payload: T) => void;
 
@@ -51,6 +52,9 @@ export interface ZineEventMap {
   /** Pages regrouped: the spread mode changed, or a narrow container forced one page. */
   spreadChanged: { mode: SpreadMode; singlePage: boolean };
   zoomChanged: { scale: number };
+  /** The document is downloading. Fires only for sources that report byte progress (a PDF from a
+   *  URL); use it to drive a custom loading indicator, and hide it on `ready`. */
+  progress: LoadProgress;
   sourceError: { index: number; error: unknown };
   rendererFallback: { from: string; to: string };
 }

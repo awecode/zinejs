@@ -14,7 +14,7 @@ export type {
 
 export { ImageSource } from './source/imageSource';
 export type { ImageSourceOptions, ImageFit } from './source/imageSource';
-export type { Source, DownloadInfo, OutlineItem, PageRequest } from './source/types';
+export type { Source, DownloadInfo, LoadProgress, OutlineItem, PageRequest } from './source/types';
 
 export type { RendererOption, RendererKind } from './renderer/select';
 export type { Renderer, SpreadContent, PageContent, FlipDirection, LayoutMetrics, RenderOptions } from './renderer/types';
