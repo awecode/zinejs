@@ -1302,21 +1302,24 @@ export class Zine {
   }
 
   /** Cycle to the next configured zoom level, keeping the clicked point fixed. Honors the
-   *  flip-zone arbitration at scale 1 so an edge double-click still turns the page there. */
+   *  flip-zone arbitration at scale 1 so an edge double-click still turns the page there, and
+   *  suppresses zoom on the tail of a rapid flipping streak (see below). */
   #zoomAt(clientX: number, clientY: number, levels: number[]): void {
     // At scale 1 a double-click inside a live flip zone belongs to click-to-flip, not zoom,
     // unless we're honoring double-click zoom there.
     if (this.#scale <= 1 && this.#clickToFlip !== 'off' && !this.#honorDoubleClickInFlipZone) {
       const local = this.#toBookPoint(clientX, clientY);
       const dir = this.#clickFlipDirection(local);
-      if (dir !== null) {
-        // Yield to a zone that can actually turn: click-to-flip owns it, not zoom.
-        if (this.#canFlip(dir)) return;
-        // The zone is dead (first/last spread). A double-click here would normally zoom, but if a
-        // flip just landed this is the reader still tapping through a rapid streak that ran off the
-        // end — swallow it so they don't get an unwanted zoom. A deliberate zoom comes after they
-        // pause on the end page, past the streak window.
-        if (performance.now() - this.#lastFlipAt <= FLIP_STREAK_MS) return;
+      // Yield to a zone that can actually turn: click-to-flip owns it, not zoom.
+      if (dir !== null && this.#canFlip(dir)) return;
+      // Otherwise — a dead edge at the book's ends, or the centre dead zone. That normally zooms,
+      // but if the reader is mid-streak (a flip still folding, or one that just landed) the pair is
+      // the tail of rapid flipping, not a zoom: swallow it. This is the cover/lone-page glitch —
+      // the flip zone sits mid-screen there, so the first click turns the page and the second lands
+      // in the centre of the spread it flipped to. A deliberate zoom comes once the reader pauses,
+      // past the streak window.
+      if (this.#machine.state === 'animating' || performance.now() - this.#lastFlipAt <= FLIP_STREAK_MS) {
+        return;
       }
     }
     // A double-click means the single-click flip we may have queued was really a zoom.

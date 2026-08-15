@@ -234,6 +234,40 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     await flush();
     expect(zine.getZoom()).toBe(2); // a deliberate zoom
   });
+
+  it('does not zoom in the centre dead zone when a flip just landed (layout shifted under the pair)', async () => {
+    // The cover/lone-page glitch generalised: the flip zone can sit mid-screen, so the first click
+    // turns the page and the second — same spot — lands in the centre of the spread it flipped to.
+    // A centre double-click normally zooms; on a streak tail it must not.
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    now += 100; // fast pair, inside the streak window
+    doubleClick(el, 400, 300); // centre dead zone
+    await flush();
+    expect(zine.getZoom()).toBe(1); // swallowed, not zoomed
+  });
+
+  it('does not zoom in the centre dead zone while a flip is still folding', async () => {
+    // A long flip is mid-fold when the paired click arrives: the machine is animating, so even
+    // before any landing this is plainly a streak, not a zoom.
+    const { zine, el } = await makeZine(0, { flipDuration: 500 });
+    tap(el, 790, 300); // start a forward flip
+    await flush(); // staged + first frame scheduled, but not ticked → still animating
+    doubleClick(el, 400, 300); // centre, mid-fold
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('still zooms in the centre dead zone once the reader pauses past the streak window', async () => {
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300);
+    await settleInstant();
+    now += 600; // paused, past the window
+    doubleClick(el, 400, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2); // a deliberate centre zoom
+  });
 });
 
 // A book narrower than its container is letterboxed, so container x and book x differ.
