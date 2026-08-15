@@ -58,7 +58,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 describe('Zine — slice 5 (resize + single-page mode)', () => {
   it('opens in single-page mode when the container is narrow', async () => {

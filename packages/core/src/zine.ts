@@ -772,12 +772,21 @@ export class Zine {
     this.#tx = tx;
     this.#ty = ty;
     this.#renderer.setViewTransform(s2, tx, ty);
+    // Crossing in/out of zoom flips who owns vertical panning: browser scroll at rest, us when zoomed.
+    if ((s1 > 1) !== (s2 > 1)) this.#applyTouchAction();
     this.#refreshZoomTiles();
     this.#emitter.emit('zoomChanged', { scale: s2 });
   }
 
   resetZoom(): void {
     this.setZoom(1);
+  }
+
+  /** Hand the browser the gestures we don't use, so a flipbook filling the viewport doesn't trap
+   *  the page. At rest we only claim horizontal turns, so vertical panning (page scroll) stays the
+   *  browser's — `pan-y`. Zoomed in, one finger pans the image in both axes, so we take it all. */
+  #applyTouchAction(): void {
+    this.#container.style.touchAction = this.#scale > 1 ? 'none' : 'pan-y';
   }
 
   #clampPan(tx: number, ty: number, scale: number, w: number, h: number): [number, number] {
@@ -1377,6 +1386,8 @@ export class Zine {
       onPinchEnd: () => this.#onPinchEnd(),
     });
     this.#unbindInput = bindGestures(this.#container, { pointer, pinch });
+    // We now own horizontal gestures; hand vertical panning (page scroll) back to the browser.
+    this.#applyTouchAction();
     this.#bindWheelZoom();
     this.#bindDoubleClickZoom();
     this.#bindContextMenu();

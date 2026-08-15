@@ -34,6 +34,7 @@ class MockRenderer implements Renderer {
 function fakeContainer(): HTMLElement {
   return Object.assign(new EventTarget(), {
     appendChild() {},
+    style: {},
     getBoundingClientRect: () => ({ left: 0, top: 0 }),
   }) as unknown as HTMLElement;
 }

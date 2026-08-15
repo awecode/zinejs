@@ -334,6 +334,21 @@ describe('Zine — slice 3 (peel/swipe to flip from a side edge)', () => {
   });
 });
 
+describe('Zine — touch-action (browser keeps vertical scroll at rest)', () => {
+  it('claims only horizontal gestures at rest, so the page still scrolls vertically', async () => {
+    const { el } = await makeZine(4);
+    expect(el.style.touchAction).toBe('pan-y');
+  });
+
+  it('takes both axes when zoomed and hands vertical back on reset', async () => {
+    const { zine, el } = await makeZine(4);
+    zine.setZoom(2);
+    expect(el.style.touchAction).toBe('none');
+    zine.resetZoom();
+    expect(el.style.touchAction).toBe('pan-y');
+  });
+});
+
 describe('Zine — context menu', () => {
   /** Right-click, and report whether anything suppressed the menu. */
   const rightClick = (el: HTMLElement): boolean =>

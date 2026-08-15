@@ -77,7 +77,7 @@ afterEach(() => {
 
 // EventTarget + appendChild satisfies option validation and the input binding;
 // these tests drive flips programmatically and never dispatch pointer events.
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 async function makeZine(pageCount = 4, startPage = 0): Promise<{ zine: Zine; renderer: MockRenderer; source: FakeSource }> {
   const source = new FakeSource(pageCount);
