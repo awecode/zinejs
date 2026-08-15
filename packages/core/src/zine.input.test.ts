@@ -291,6 +291,40 @@ describe('Zine — slice 3 (peel/swipe to flip from a side edge)', () => {
     expect(zine.getPage()).toBe(2);
   });
 
+  it('cancels a peel dragged past halfway then flung back toward the edge', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    // Peel the right edge well past halfway, then flick back toward the edge to let go — the
+    // mobile counterpart of dragging back to cancel on desktop. Position says commit, but the
+    // release velocity points back, so it must snap home.
+    await dragThrough(el, [
+      { x: 760, y: 300, t: 0 },
+      { x: 300, y: 300, t: 2000 }, // dx=-460 → t≈0.58, past halfway; grab promoted here
+      { x: 340, y: 300, t: 2010 }, // fast rightward: vx=+4 px/ms back toward the edge, t≈0.53
+      { x: 340, y: 300, t: 2012 },
+    ]);
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward']); // it did peel…
+    expect(zine.getPage()).toBe(0); // …but the throw-back cancelled it
+  });
+
+  it('commits a peel released short of halfway when flung onward', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    // Barely peeled (short of halfway), but flicked onward on release — velocity carries it over.
+    await dragThrough(el, [
+      { x: 760, y: 300, t: 0 },
+      { x: 700, y: 300, t: 2000 }, // dx=-60 → t≈0.08, short of halfway; grab promoted
+      { x: 500, y: 300, t: 2010 }, // fast leftward: vx=-20 px/ms onward
+      { x: 500, y: 300, t: 2012 },
+    ]);
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward']);
+    expect(zine.getPage()).toBe(2); // the onward flick carried it over
+  });
+
   it('cancels a mid-edge peel that is released before halfway', async () => {
     const { zine, renderer, el } = await makeZine(4);
     // Grabs the mid-edge and drags only a little (dx=-80, t≈0.1), slowly, then lets go.

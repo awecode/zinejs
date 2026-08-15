@@ -1125,10 +1125,16 @@ export class Zine {
     this.#drag = null;
     this.#machine.send('release');
 
-    const swiped =
-      gesture.swipe &&
-      (drag.direction === 'forward' ? gesture.dx < 0 : gesture.dx > 0);
-    if (drag.t >= 0.5 || swiped) {
+    // A flick at release throws the page, and its direction is the release velocity (vx), not the
+    // net displacement: you can peel a page well past halfway and then flick it back toward the
+    // edge to let go — the mobile counterpart of dragging back to cancel on desktop. An onward
+    // throw commits even from short of halfway; a back-throw cancels even from past it. Position
+    // (drag.t) decides only when the release is not a horizontal flick.
+    const horizFlick = gesture.swipe && Math.abs(gesture.vx) > Math.abs(gesture.vy);
+    const onward = drag.direction === 'forward' ? gesture.vx < 0 : gesture.vx > 0;
+    const flungOnward = horizFlick && onward;
+    const flungBack = horizFlick && !onward;
+    if (flungOnward || (drag.t >= 0.5 && !flungBack)) {
       this.#animateProgress(
         drag.t,
         1,
