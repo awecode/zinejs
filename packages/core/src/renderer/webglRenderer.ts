@@ -92,6 +92,7 @@ uniform sampler2D uBack;
 uniform highp float uDir;
 uniform float uGloss; // 0 disables the specular highlight (e.g. the flat 'simple' curl)
 uniform float uAlpha; // leaf opacity; a lone page dissolves into the page landing beneath it
+uniform float uCrease; // spine-crease strength: 1 matches a spread's gutter; ramps from 0 for a lone leaf
 out vec4 outColor;
 void main() {
   // The turn mesh carries its own facing in the normal; the front points at the viewer
@@ -105,7 +106,10 @@ void main() {
   // rolled edge reads as a deep crease with a soft highlight riding the ridge.
   float diff = clamp(abs(vFacing), 0.0, 1.0);
   float lit = mix(0.42, 1.0, diff);
-  lit *= mix(0.7, 1.0, smoothstep(0.0, 0.12, vU)); // spine crease matches the gutter shadow
+  // Spine crease matches the gutter shadow on a spread. A lone page has no gutter, so uCrease
+  // ramps it in from 0 as the leaf lifts — otherwise a still-flat leaf paints a shadow band on
+  // the anchor edge before the turn even begins.
+  lit *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.12, vU)), uCrease);
 
   // Glossy specular: brightest where the surface tilts ~30 deg from facing the viewer,
   // so a thin glossy highlight rides across the sheet as it rolls.
@@ -424,7 +428,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss', 'uAlpha']) {
+    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss', 'uAlpha', 'uCrease']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -613,6 +617,9 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
     gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlModel.gloss === false ? 0 : 1);
     gl.uniform1f(this.#curlU.uAlpha ?? null, flip.fill ? this.#fillFade() : 1);
+    // Spreads carry the full gutter crease; a lone leaf ramps it in over the first fifth of the
+    // turn so a still-flat sheet shows no shadow band at its anchor before it lifts.
+    gl.uniform1f(this.#curlU.uCrease ?? null, flip.fill ? Math.min(1, this.#flipT / 0.2) : 1);
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
   }
 
