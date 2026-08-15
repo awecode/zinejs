@@ -55,6 +55,18 @@ class MockRenderer implements Renderer {
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
 
+/** Wait for the lazily-imported overlay to appear (or not). The loader chunk is fetched with a
+ *  dynamic import() that can settle across several ticks on first load, so poll rather than
+ *  assume a single flush is enough. */
+async function waitForOverlay(el: HTMLElement): Promise<Element | null> {
+  for (let i = 0; i < 20; i++) {
+    const found = el.querySelector('.zine-loading');
+    if (found) return found;
+    await flush();
+  }
+  return el.querySelector('.zine-loading');
+}
+
 function container(): HTMLElement {
   const el = document.createElement('div');
   Object.defineProperty(el, 'clientWidth', { value: 800, configurable: true });
@@ -69,8 +81,7 @@ describe('Zine — built-in loading indicator', () => {
     const source = new GatedSource();
     const zine = new Zine(el, { source, renderer: new MockRenderer() });
 
-    await flush(); // let the lazy loader chunk import and mount
-    expect(el.querySelector('.zine-loading')).not.toBeNull();
+    expect(await waitForOverlay(el)).not.toBeNull();
 
     source.finishOpen();
     await zine.ready;
@@ -100,7 +111,7 @@ describe('Zine — built-in loading indicator', () => {
     zine.on('progress', (p) => seen.push(p));
     source.emitProgress({ loaded: 3, total: 8 });
 
-    await flush(); // give a would-be loader chunk the chance it never takes
+    for (let i = 0; i < 5; i++) await flush(); // give a would-be loader chunk the chance it never takes
     expect(el.querySelector('.zine-loading')).toBeNull();
     expect(seen).toEqual([{ loaded: 3, total: 8 }]);
 
@@ -113,8 +124,7 @@ describe('Zine — built-in loading indicator', () => {
     const source = new GatedSource();
     const zine = new Zine(el, { source, renderer: new MockRenderer() });
 
-    await flush(); // overlay mounts
-    expect(el.querySelector('.zine-loading')).not.toBeNull();
+    expect(await waitForOverlay(el)).not.toBeNull(); // overlay mounts
 
     source.failOpen(new Error('bad url'));
     await expect(zine.ready).rejects.toThrow(/bad url/);
