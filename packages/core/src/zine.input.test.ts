@@ -224,9 +224,49 @@ describe('Zine — slice 3 (peel/swipe to flip from a side edge)', () => {
     expect(zine.getPage()).toBe(4); // advanced two spreads, not stuck on one
   });
 
-  it('does not flip on a flick from the middle of the page', async () => {
+  it('flips forward on a leftward flick from the middle of the page', async () => {
+    const { zine, renderer, el } = await makeZine(4); // spreads [0,1], [2,3]
+    await swipe(el, 300, 400, 100); // starts dead center, not an edge zone → leftward flick
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['forward']);
+    expect(zine.getPage()).toBe(2);
+  });
+
+  it('flips backward on a rightward flick from the middle of the page', async () => {
+    const { zine, renderer, el } = await makeZine(4, 2); // start on spread 1
+    await swipe(el, 300, 400, 700); // center → rightward flick
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual(['backward']);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip on a slow horizontal drag from the middle (only a flick turns)', async () => {
     const { zine, renderer, el } = await makeZine(4);
-    await swipe(el, 300, 400, 100); // starts dead center, not an edge zone
+    // Center press, dragged far but slowly (every segment under the 0.3 px/ms threshold): no edge
+    // grab is armed there, and without flick velocity nothing turns.
+    fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 400, clientY: 300 });
+    fireAt(el, 'pointermove', 2000, { pointerId: 1, clientX: 200, clientY: 300 });
+    await flush();
+    fireAt(el, 'pointerup', 4000, { pointerId: 1, clientX: 100, clientY: 300 });
+    await flush();
+    tick(1000);
+    await flush();
+
+    expect(renderer.begun).toEqual([]);
+    expect(zine.getPage()).toBe(0);
+  });
+
+  it('does not flip on a vertical flick from the middle (page-scroll intent)', async () => {
+    const { zine, renderer, el } = await makeZine(4);
+    fireAt(el, 'pointerdown', 0, { pointerId: 1, clientX: 400, clientY: 100 });
+    fireAt(el, 'pointermove', 10, { pointerId: 1, clientX: 400, clientY: 300 });
+    fireAt(el, 'pointermove', 20, { pointerId: 1, clientX: 400, clientY: 500 }); // fast, but vertical
+    fireAt(el, 'pointerup', 22, { pointerId: 1, clientX: 400, clientY: 500 });
+    await flush();
     tick(1000);
     await flush();
 

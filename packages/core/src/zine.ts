@@ -1107,9 +1107,10 @@ export class Zine {
     }
     const drag = this.#drag;
     if (!drag) {
-      // Never became a drag → it was a tap; maybe flip via clickToFlip.
+      // Never became a grab (the press was not on a side edge, so no live peel armed). A fast
+      // horizontal flick from anywhere still turns the page; otherwise it was a tap.
       this.#pendingGrab = null;
-      this.#maybeClickFlip(gesture);
+      if (!this.#swipeFlip(gesture)) this.#maybeClickFlip(gesture);
       return;
     }
     this.#drag = null;
@@ -1129,6 +1130,22 @@ export class Zine {
     } else {
       this.#animateProgress(drag.t, 0, drag.direction, () => this.#cancelFlip());
     }
+  }
+
+  /** A fast horizontal flick that started away from the side edges (so no live peel was armed):
+   *  turn the page in the flick's direction. Returns whether it consumed the gesture, so the caller
+   *  skips click-to-flip. Zoomed in the same gesture pans, so this only applies at scale 1. */
+  #swipeFlip(gesture: GestureEnd): boolean {
+    if (this.#scale > 1) return false;
+    // A flick, and predominantly horizontal — a vertical flick (page scroll intent) is not a turn.
+    if (!gesture.swipe || Math.abs(gesture.dx) <= Math.abs(gesture.dy)) return false;
+    // In LTR a leftward flick (dx < 0) turns forward; RTL and the reading direction mirror it.
+    const forward = this.#direction === 'rtl' ? gesture.dx > 0 : gesture.dx < 0;
+    const direction: FlipDirection = forward ? 'forward' : 'backward';
+    if (!this.#canFlip(direction)) return false;
+    const step = forward ? 1 : -1;
+    this.#requestFlip(() => this.#startFlip(this.#current + step));
+    return true;
   }
 
   #maybeClickFlip(gesture: GestureEnd): void {
