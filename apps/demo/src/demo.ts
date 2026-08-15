@@ -50,8 +50,11 @@ const imageUrls = Array.from(
   { length: 20 },
   (_, i) => `sample-images/page-${String(i + 1).padStart(2, '0')}.png`,
 );
+// `?src=` overrides the PDF URL for ad-hoc perf testing — pass any URL, e.g. a large e-paper:
+// ?src=https://media.xyz.com/issues/epapers/1084.pdf.
+const pdfSrc = q.get('src') ?? 'pdf/sample.pdf';
 const makeSource = (): Source =>
-  kind === 'pdf' ? new PdfSource('pdf/sample.pdf', { progressive: true }) : new ImageSource(imageUrls);
+  kind === 'pdf' ? new PdfSource(pdfSrc, { progressive: true }) : new ImageSource(imageUrls);
 
 function applyOption(param: string, value: string | number): void {
   const url = new URL(location.href);
@@ -200,29 +203,29 @@ const zine = new Zine(book, {
     opt.controls === 'off'
       ? false
       : {
-          position: opt.controls,
-          docked: opt.controlsDock === 'docked',
-          // ?items=ends puts first/last on the bar itself, to see how a control that comes and
-          // goes behaves out there rather than tucked in the ⋮ menu.
-          ...(q.get('items') === 'ends'
-            ? {
-                items: [
-                  'first',
-                  'prev',
-                  'pageInput',
-                  'next',
-                  'last',
-                  '|',
-                  'zoomOut',
-                  'zoomIn',
-                  'search',
-                  'share',
-                  'menu',
-                  'fullscreen',
-                ],
-              }
-            : {}),
-        },
+        position: opt.controls,
+        docked: opt.controlsDock === 'docked',
+        // ?items=ends puts first/last on the bar itself, to see how a control that comes and
+        // goes behaves out there rather than tucked in the ⋮ menu.
+        ...(q.get('items') === 'ends'
+          ? {
+            items: [
+              'first',
+              'prev',
+              'pageInput',
+              'next',
+              'last',
+              '|',
+              'zoomOut',
+              'zoomIn',
+              'search',
+              'share',
+              'menu',
+              'fullscreen',
+            ],
+          }
+          : {}),
+      },
 });
 
 // Click/double-click diagnostics, on unless ?clickdebug=0. Explains in the console why a
