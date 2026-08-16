@@ -175,7 +175,9 @@ export const CSS = `
 .zine-search-hits {
   flex: 1 1 auto;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Chain overscroll up to the page: once the list is at its end (or too short to scroll at all),
+     a further wheel scrolls the page behind, the same as scrolling over the book itself does. */
+  overscroll-behavior: auto;
   margin-top: 5px;
   scrollbar-width: thin;
 }
@@ -340,7 +342,9 @@ export const CSS = `
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Chain overscroll up to the page: once the list is at its end (or too short to scroll at all),
+     a further wheel scrolls the page behind, the same as scrolling over the book itself does. */
+  overscroll-behavior: auto;
   padding: 6px;
   box-sizing: border-box;
   border-radius: 8px;
