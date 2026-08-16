@@ -34,6 +34,7 @@ export class Outline {
       width: RAIL_WIDTH,
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
+      overlay: true, // floats over the book's edge on a wide screen rather than shrinking it
     });
     this.root = this.#bar.root;
 

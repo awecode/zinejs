@@ -290,8 +290,12 @@ export const CSS = `
 
 /* Side panels (thumbnails, outline, search). The rail wraps the book and its docked toolbar so it
    sits beside them as a flex sibling. On a wide screen the book shrinks to make room (below); on a
-   narrow one the rail becomes a drawer over the book. */
-.zine-panel-wrap { display: flex; align-items: stretch; gap: 8px; position: relative; }
+   narrow one the rail becomes a drawer over the book.
+   align-items:flex-start, not stretch: the book sizes its height from its width through its own
+   aspect-ratio, and that height is 'auto' from flex's point of view, so a stretch would override it
+   and blow the book (and the rail matched to it) up to the flex line's cross size. Left as auto, the
+   book keeps its aspect height and the holder alone stretches down to meet it (below). */
+.zine-panel-wrap { display: flex; align-items: flex-start; gap: 8px; position: relative; }
 
 /* The book-side slot (the bare container, or the docked-toolbar wrapper around it) yields space to
    the fixed-width rail instead of overflowing: flex-shrink lets it fall below its own width, and
@@ -353,14 +357,40 @@ export const CSS = `
 .zine-panel-active { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.18))); }
 .zine-panel-note { padding: 8px; opacity: 0.66; line-height: 1.4; }
 
+/* Overlay panels (outline, search) on a wide screen: float over the book's start edge instead of
+   flanking it, so the book never resizes. The wrap drops to a block, laying the book out exactly as
+   it was before the panel opened; the holder sits absolute over it at full book height, with a
+   shadow so it reads as lifted off the page. thumbnails is not overlaid — it stays a flex flank and
+   shrinks the book only when the two will not otherwise both fit. */
+@media (min-width: 641px) {
+  .zine-panel-wrap-overlay { display: block; }
+  .zine-panel-wrap-overlay .zine-panel-holder {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 4;
+    box-shadow: 0 0 24px light-dark(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.55));
+  }
+  .zine-panel-wrap-overlay.zine-panel-wrap-rtl .zine-panel-holder { inset: 0 0 0 auto; }
+  /* Opaque over the page it floats on, unlike a flanking rail that sits against empty margin. */
+  .zine-panel-wrap-overlay .zine-panel {
+    background: var(--zine-controls-bg, light-dark(#ffffff, #18181b));
+  }
+}
+@media (min-width: 641px) and (prefers-reduced-motion: no-preference) {
+  .zine-panel-wrap-overlay .zine-panel-holder { animation: zine-drawer-in 180ms ease; }
+  .zine-panel-wrap-overlay.zine-panel-wrap-rtl .zine-panel-holder { animation-name: zine-drawer-in-rtl; }
+}
+
 /* Narrow screen: no room to flank, so the rail becomes a drawer over the book and the scrim dims
-   the page behind it. The book keeps its size (the flex child is pinned back to no-shrink), so the
-   drawer overlays rather than squeezing. The wrap is position:relative, so absolute here is
+   the page behind it. The wrap is position:relative, so the absolute holder and scrim below are
    measured against it — i.e. against the book's own box. */
 @media (max-width: 640px) {
-  .zine-panel-wrap > *:not(.zine-panel-holder):not(.zine-panel-scrim),
-  .zine-panel-wrap .zine-controls-wrap > *:not(.zine-controls) {
-    flex: 0 0 auto;
+  /* No flanking here — the rail and scrim both overlay absolutely — so drop the flex row entirely.
+     As a plain block wrap the book keeps the exact box it had before a panel opened (its own width,
+     margin and aspect-ratio height); a flex row would instead re-resolve the book's width and, with
+     it, its aspect-derived height, enlarging the canvas and pushing the page down. */
+  .zine-panel-wrap {
+    display: block;
   }
   .zine-panel-holder {
     position: absolute;

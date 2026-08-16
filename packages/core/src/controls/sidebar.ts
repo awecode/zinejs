@@ -39,6 +39,11 @@ export class Sidebar {
       onDismiss?: () => void;
       /** Reading direction; the drawer slides in from the right instead of the left when true. */
       rtl?: boolean;
+      /** Float over the book's edge instead of flanking it (so the book never resizes). Panels
+       *  whose width is fixed and modest — the outline and search rails — prefer this; the wider
+       *  thumbnail rail flanks so both stay fully visible. Only affects wide screens: below the
+       *  breakpoint every panel is a drawer regardless. */
+      overlay?: boolean;
     },
   ) {
     this.#doc = doc;
@@ -58,7 +63,7 @@ export class Sidebar {
       this.root.addEventListener(type, (e) => e.stopPropagation());
     }
 
-    this.#place(doc, container, options.rtl ?? false);
+    this.#place(doc, container, options.rtl ?? false, options.overlay ?? false);
 
     if (options.onDismiss) this.#armDismiss(doc, options.onDismiss);
   }
@@ -68,7 +73,7 @@ export class Sidebar {
     this.#holder.style.width = `${px}px`;
   }
 
-  #place(doc: Document, container: HTMLElement, rtl: boolean): void {
+  #place(doc: Document, container: HTMLElement, rtl: boolean, overlay: boolean): void {
     const parent = container.parentNode;
     if (!parent) {
       // Not in a document yet: overlay rather than lose the panel.
@@ -83,6 +88,9 @@ export class Sidebar {
     const wrap = doc.createElement('div');
     wrap.className = 'zine-panel-wrap';
     if (rtl) wrap.classList.add('zine-panel-wrap-rtl');
+    // An overlay panel floats over the book's edge rather than flanking it, so the book keeps its
+    // size on a wide screen too — the flex-row shrink is off for this wrap.
+    if (overlay) wrap.classList.add('zine-panel-wrap-overlay');
     target.parentNode!.insertBefore(wrap, target);
     wrap.append(this.#holder, target);
     this.#wrap = wrap;

@@ -754,6 +754,15 @@ describe('controls toolbar', () => {
     expect(document.querySelector('.zine-panel-scrim')).toBeNull();
     expect(document.querySelector('.zine-panel-wrap')).toBeNull();
   });
+
+  it('flanks the book with the thumbnail rail rather than overlaying it', async () => {
+    // The wider page rail earns its keep beside the book (shrinking it only when both will not
+    // otherwise fit), so its wrap is not tagged for the wide-screen overlay.
+    const { el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    const wrap = scope(el).querySelector('.zine-panel-wrap')!;
+    expect(wrap.classList.contains('zine-panel-wrap-overlay')).toBe(false);
+  });
 });
 
 describe('controls page arrows', () => {
@@ -921,6 +930,15 @@ describe('controls outline panel', () => {
     expect(await outlineItem(el)).toBeTruthy();
   });
 
+  it('floats over the book rather than shrinking it', async () => {
+    // The outline is a narrow, fixed-width rail, so on a wide screen it overlays the book's edge
+    // instead of flanking and resizing it. The tag is what the wide-screen media query keys on.
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openOutline(el);
+    const wrap = scope(el).querySelector('.zine-panel-wrap')!;
+    expect(wrap.classList.contains('zine-panel-wrap-overlay')).toBe(true);
+  });
+
   it('opens search in the same rail, replacing whichever panel was up', async () => {
     const { el } = await mount({ source: new DocSource(8, toc()) });
     await openThumbs(el);
@@ -951,6 +969,14 @@ describe('controls outline panel', () => {
     await openOutline(el);
     expect(scope(el).querySelector('.zine-outline')).not.toBeNull();
     expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+  });
+
+  it('floats the search rail over the book rather than shrinking it', async () => {
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    byLabel(el, 'Search')!.click();
+    await flush();
+    const wrap = scope(el).querySelector('.zine-panel-wrap')!;
+    expect(wrap.classList.contains('zine-panel-wrap-overlay')).toBe(true);
   });
 
   it('hides search on a book whose source has no text', async () => {
