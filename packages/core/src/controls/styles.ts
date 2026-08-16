@@ -352,6 +352,11 @@ export const CSS = `
   -webkit-user-select: none;
   user-select: none;
 }
+/* The rail sits flush against the book's reading-start edge (left, or right in RTL), so its outer
+   corners there would round away from that edge and leave a gap. Square them; keep the interior
+   corners, which face the page, rounded. */
+.zine-panel { border-radius: 0 8px 8px 0; }
+.zine-panel-wrap-rtl .zine-panel { border-radius: 8px 0 0 8px; }
 /* Overlay fallback, used when the container has no parent to wrap. */
 .zine-panel-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
 .zine-panel-active { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.18))); }
