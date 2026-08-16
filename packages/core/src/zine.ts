@@ -556,9 +556,18 @@ export class Zine {
     return typeof this.#source.getOutline === 'function' || typeof this.#source.getText === 'function';
   }
 
-  /** Whether this book can be printed — true when the source has an original document. */
+  /**
+   * Whether this book can be printed: the source must have an original document, and the browser
+   * must render PDFs inline. {@link print} loads the file into an offscreen iframe and drives it
+   * with `window.print()`, which needs a built-in PDF viewer; Android Chrome has none, so the
+   * frame never lays out and the print silently does nothing. `pdfViewerEnabled` reports exactly
+   * that capability, so hide the control when it is explicitly false. It is only hidden on that
+   * explicit false — a browser too old to report the property (undefined) keeps the button.
+   */
   canPrint(): boolean {
-    return typeof this.#source.getDownload === 'function';
+    if (typeof this.#source.getDownload !== 'function') return false;
+    const nav = this.#container.ownerDocument?.defaultView?.navigator;
+    return nav?.pdfViewerEnabled !== false;
   }
 
   /**
