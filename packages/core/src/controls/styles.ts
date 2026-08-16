@@ -220,26 +220,31 @@ export const CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--zine-controls-bg, light-dark(rgba(255, 255, 255, 0.94), rgba(24, 24, 27, 0.82)));
-  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
+  background: none;
+  /* Light on a light page, dark on a dark one. The shadow below carries the contrast. */
+  color: var(--zine-controls-fg, light-dark(#f4f4f5, #18181b));
   cursor: pointer;
-  backdrop-filter: blur(8px);
   -webkit-user-select: none;
   user-select: none;
 }
-.zine-arrow svg { width: 22px; height: 22px; }
-/* Hover mixes toward the page in dark mode (a lighter circle) but away from it in light mode:
-   a light-mode hover that lightened would wash the arrow into a near-white disc against a light
-   page, so it darkens instead and keeps its edge. */
-.zine-arrow:hover:not(:disabled) { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.22))); }
+.zine-arrow svg {
+  width: 36px;
+  height: 36px;
+  stroke-width: 2.25;
+  /* No backing disc, so a subtle offset shadow keeps the chevron from disappearing into a
+     matching background. It contrasts the fill: a light chevron (light mode) casts a soft dark
+     shadow, a dark chevron (dark mode) a soft light one, offset rather than a glowing halo. */
+  filter: drop-shadow(0 1px 2px light-dark(rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.35)));
+}
+.zine-arrow:hover:not(:disabled) { color: var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc)); }
 .zine-arrow:focus-visible {
   outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 2px;
+  border-radius: 8px;
 }
 /* Nothing to turn to: invisible, but still occupying its slot so the book does not slide across
    as the reader reaches a cover. */
@@ -254,9 +259,11 @@ export const CSS = `
     top: 50%;
     transform: translateY(-50%);
     z-index: 2;
+    /* Sit back over the page so the reader can look at the book. */
+    opacity: 0.7;
   }
-  .zine-arrow:first-child { left: 6px; }
-  .zine-arrow:last-child { right: 6px; }
+  .zine-arrow:first-child { left: -2px; }
+  .zine-arrow:last-child { right: -2px; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .zine-arrow { transition: background 120ms ease; }
