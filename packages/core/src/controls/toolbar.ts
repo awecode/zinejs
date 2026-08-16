@@ -57,6 +57,8 @@ export class Toolbar {
   /** Which palette the built-in colours resolve to. Passed on to the arrows, panels and share
    *  dialog, each of which mounts its own root outside this one and so must be stamped too. */
   #colorScheme: ControlsColorScheme;
+  /** The edge the bar sits on, kept so a popover can open away from it. */
+  #position: ControlsPosition;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -67,6 +69,7 @@ export class Toolbar {
 
     this.#colorScheme = options.colorScheme ?? 'auto';
     const position = options.position ?? 'bottom';
+    this.#position = position;
     const docked = options.docked ?? true;
     this.#root = doc.createElement('div');
     this.#root.className = [
@@ -291,10 +294,12 @@ export class Toolbar {
     let left = anchor.left - root.left + anchor.width / 2 - box.width / 2;
     left = Math.max(4, Math.min(left, root.width - box.width - 4));
     el.style.left = `${left}px`;
-    // Prefer opening away from the edge the toolbar sits on.
     const below = anchor.bottom - root.top + 6;
     const above = anchor.top - root.top - box.height - 6;
-    el.style.top = `${above >= 0 ? above : below}px`;
+    // A bottom bar opens its menu upward (above the button), so it never spills off the bottom
+    // edge — the book above always has the room. Every other edge keeps the pick-whichever-fits
+    // behaviour, preferring upward only when there is space for it.
+    el.style.top = `${this.#position === 'bottom' ? above : above >= 0 ? above : below}px`;
   }
 
   #closePopover(): void {
