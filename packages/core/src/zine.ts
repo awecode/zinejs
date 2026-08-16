@@ -676,16 +676,44 @@ export class Zine {
     if (!info) return false;
     const doc = this.#container.ownerDocument;
     if (!doc) return false;
+    let url = info.url;
+    let revoke = info.revoke ?? false;
+    // The `download` attribute is honoured only for same-origin (and blob/data) URLs; for a
+    // cross-origin one the browser ignores it and just navigates to the file, opening the PDF in
+    // a tab instead of saving it. Pull such a file into a same-origin blob so the save is forced
+    // with its filename. The server must allow CORS, which it already does — the viewer fetched
+    // the same PDF to render it. On failure fall back to the raw URL (opens in a tab, no worse).
+    if (!revoke && this.#isCrossOrigin(url, doc)) {
+      try {
+        const blob = await (await fetch(url)).blob();
+        url = URL.createObjectURL(blob);
+        revoke = true;
+      } catch {
+        /* keep the raw URL */
+      }
+    }
     const link = doc.createElement('a');
-    link.href = info.url;
+    link.href = url;
     link.download = info.filename;
     link.rel = 'noopener';
     doc.body.appendChild(link);
     link.click();
     link.remove();
     // An object URL is ours to clean up; give the click a tick to start first.
-    if (info.revoke) setTimeout(() => URL.revokeObjectURL(info.url), 10_000);
+    if (revoke) setTimeout(() => URL.revokeObjectURL(url), 10_000);
     return true;
+  }
+
+  /** Whether `url` resolves to a different origin than the page, so an `<a download>` would be
+   *  ignored for it. A relative or same-origin URL, or one that fails to parse, counts as same. */
+  #isCrossOrigin(url: string, doc: Document): boolean {
+    const here = doc.defaultView?.location?.href;
+    if (!here) return false;
+    try {
+      return new URL(url, here).origin !== new URL(here).origin;
+    } catch {
+      return false;
+    }
   }
 
   /**

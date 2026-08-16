@@ -1118,4 +1118,44 @@ describe('Zine.download', () => {
     expect(zine.canDownload()).toBe(true);
     expect(await zine.download()).toBe(false);
   });
+
+  it('saves a cross-origin file through a same-origin blob so the browser does not just open it', async () => {
+    // The <a download> attribute is ignored for a cross-origin URL, so a remote PDF would open in
+    // a tab. The file is pulled into a blob first; the anchor then points at that same-origin URL.
+    class RemoteSource extends FakeSource {
+      async getDownload(): Promise<{ url: string; filename: string }> {
+        return { url: 'https://cdn.example.com/issues/1084.pdf', filename: '1084.pdf' };
+      }
+    }
+    const g = globalThis as unknown as {
+      fetch: unknown;
+      URL: { createObjectURL: unknown; revokeObjectURL: unknown };
+    };
+    const realFetch = g.fetch;
+    const realCreate = g.URL.createObjectURL;
+    const realRevoke = g.URL.revokeObjectURL;
+    let fetched = '';
+    g.fetch = (input: string) => {
+      fetched = input;
+      return Promise.resolve({ blob: () => Promise.resolve(new Blob(['%PDF'])) });
+    };
+    g.URL.createObjectURL = () => 'blob:mock-object-url';
+    g.URL.revokeObjectURL = (): void => {};
+    const clicked: { href: string; download: string }[] = [];
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicked.push({ href: this.getAttribute('href') ?? '', download: this.download });
+    };
+    try {
+      const { zine } = await mount({ source: new RemoteSource(4) });
+      expect(await zine.download()).toBe(true);
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+      g.fetch = realFetch;
+      g.URL.createObjectURL = realCreate;
+      g.URL.revokeObjectURL = realRevoke;
+    }
+    expect(fetched).toBe('https://cdn.example.com/issues/1084.pdf');
+    expect(clicked).toEqual([{ href: 'blob:mock-object-url', download: '1084.pdf' }]);
+  });
 });
