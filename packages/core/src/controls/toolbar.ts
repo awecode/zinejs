@@ -490,7 +490,11 @@ export class Toolbar {
     this.#panel = null;
     this.#panelKind = null;
     if (wasOpen !== kind) {
-      this.#panel = new PANELS[kind](this.#zine, this.#container);
+      // Reopening the same kind toggles it shut, the same path the toolbar button takes, so the
+      // scrim and Escape can dismiss the narrow-screen drawer without any new close machinery.
+      this.#panel = new PANELS[kind](this.#zine, this.#container, {
+        onDismiss: () => this.togglePanel(kind),
+      });
       applyColorScheme(this.#panel.root, this.#colorScheme);
       this.#panelKind = kind;
     }

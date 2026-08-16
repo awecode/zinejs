@@ -706,6 +706,54 @@ describe('controls toolbar', () => {
     zine.destroy();
     expect(document.querySelector('.zine-panel')).toBeNull();
   });
+
+  it('builds a scrim beside the open rail and removes it when the rail closes', async () => {
+    const { el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    const scrim = scope(el).querySelector('.zine-panel-scrim');
+    expect(scrim).not.toBeNull();
+    // The scrim is a sibling of the holder inside the panel wrap, not a child of the book.
+    expect(scrim!.closest('.zine-panel-wrap')).not.toBeNull();
+
+    // Toggling the rail off from the menu takes the scrim down with it.
+    byLabel(el, 'More')!.click();
+    thumbsItem(el).click();
+    await flush();
+    expect(scope(el).querySelector('.zine-panel-scrim')).toBeNull();
+  });
+
+  it('closes the open rail when the scrim is tapped', async () => {
+    const { el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    scope(el).querySelector<HTMLElement>('.zine-panel-scrim')!.dispatchEvent(
+      new Event('pointerdown', { bubbles: true }),
+    );
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+    expect(scope(el).querySelector('.zine-panel-scrim')).toBeNull();
+  });
+
+  it('closes the open rail on Escape, then leaves later Escapes alone', async () => {
+    const { el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+
+    // The listener came down with the rail, so a second Escape reopens nothing.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+  });
+
+  it('takes the scrim down with the book on destroy', async () => {
+    const { zine, el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    expect(scope(el).querySelector('.zine-panel-scrim')).not.toBeNull();
+    zine.destroy();
+    expect(document.querySelector('.zine-panel-scrim')).toBeNull();
+    expect(document.querySelector('.zine-panel-wrap')).toBeNull();
+  });
 });
 
 describe('controls page arrows', () => {

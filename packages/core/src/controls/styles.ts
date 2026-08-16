@@ -288,9 +288,34 @@ export const CSS = `
   .zine-arrow { transition: background 120ms ease; }
 }
 
-/* Side panels (thumbnails, outline). The rail wraps the book and its docked toolbar so it sits
-   beside them without shrinking the container the renderer measures. */
-.zine-panel-wrap { display: flex; align-items: stretch; gap: 8px; }
+/* Side panels (thumbnails, outline, search). The rail wraps the book and its docked toolbar so it
+   sits beside them as a flex sibling. On a wide screen the book shrinks to make room (below); on a
+   narrow one the rail becomes a drawer over the book. */
+.zine-panel-wrap { display: flex; align-items: stretch; gap: 8px; position: relative; }
+
+/* The book-side slot (the bare container, or the docked-toolbar wrapper around it) yields space to
+   the fixed-width rail instead of overflowing: flex-shrink lets it fall below its own width, and
+   min-width:0 removes the automatic content floor that would otherwise stop it. The book only
+   actually shrinks if its width is elastic (a %, max-width, or the demo's min(...) with a % term);
+   a hard-coded pixel width has nothing for the % to resolve smaller against. */
+.zine-panel-wrap > *:not(.zine-panel-holder):not(.zine-panel-scrim) {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* With a docked toolbar the book lives inside .zine-controls-wrap, whose children are pinned
+   flex:0 0 auto (so the bar keeps its size). Inside a panel wrap the book child — everything but
+   the bar itself — must instead be allowed to shrink, so left/right docking flanks like the rest.
+   Top/bottom docking already shrinks through the container's own % width. */
+.zine-panel-wrap .zine-controls-wrap > *:not(.zine-controls) {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zine-panel-wrap > *:not(.zine-panel-holder):not(.zine-panel-scrim) {
+    transition: flex-basis 160ms ease, width 160ms ease;
+  }
+}
 
 /* The holder stretches to the book's height; the rail is absolutely positioned inside it so a
    long list scrolls rather than growing the row and running past the bottom of the book. */
@@ -300,6 +325,10 @@ export const CSS = `
   align-self: stretch;
   min-height: 0;
 }
+/* The scrim dims the book behind the narrow-screen drawer. It exists on every screen but only
+   shows under the breakpoint below, so on a wide screen it takes no flex slot and never intercepts
+   a click. */
+.zine-panel-scrim { display: none; }
 .zine-panel {
   position: absolute;
   inset: 0;
@@ -323,6 +352,46 @@ export const CSS = `
 .zine-panel-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
 .zine-panel-active { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.18))); }
 .zine-panel-note { padding: 8px; opacity: 0.66; line-height: 1.4; }
+
+/* Narrow screen: no room to flank, so the rail becomes a drawer over the book and the scrim dims
+   the page behind it. The book keeps its size (the flex child is pinned back to no-shrink), so the
+   drawer overlays rather than squeezing. The wrap is position:relative, so absolute here is
+   measured against it — i.e. against the book's own box. */
+@media (max-width: 640px) {
+  .zine-panel-wrap > *:not(.zine-panel-holder):not(.zine-panel-scrim),
+  .zine-panel-wrap .zine-controls-wrap > *:not(.zine-controls) {
+    flex: 0 0 auto;
+  }
+  .zine-panel-holder {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 4;
+    /* Cap the drawer so it never eats the whole book; its inline width still applies under this. */
+    max-width: 80%;
+    box-shadow: 0 0 24px light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6));
+  }
+  /* RTL reads from the right, so the drawer enters from there. */
+  .zine-panel-wrap-rtl .zine-panel-holder { inset: 0 0 0 auto; }
+  /* Opaque over the page, unlike the wide-screen rail which can sit against empty margin. */
+  .zine-panel {
+    background: var(--zine-controls-bg, light-dark(#ffffff, #18181b));
+  }
+  .zine-panel-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: rgba(0, 0, 0, 0.4);
+  }
+}
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+  .zine-panel-holder { animation: zine-drawer-in 180ms ease; }
+  .zine-panel-wrap-rtl .zine-panel-holder { animation-name: zine-drawer-in-rtl; }
+  .zine-panel-scrim { animation: zine-scrim-in 180ms ease; }
+}
+@keyframes zine-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes zine-drawer-in-rtl { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes zine-scrim-in { from { opacity: 0; } to { opacity: 1; } }
 
 .zine-thumbs { align-items: center; }
 

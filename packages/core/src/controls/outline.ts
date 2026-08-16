@@ -1,4 +1,4 @@
-import { Sidebar } from './sidebar';
+import { Sidebar, type PanelOptions } from './sidebar';
 import type { OutlineItem } from '../source/types';
 import type { Zine } from '../zine';
 
@@ -24,7 +24,7 @@ export class Outline {
   #rows: { el: HTMLElement; page: number }[] = [];
   #unsubscribe: (() => void)[] = [];
 
-  constructor(zine: Zine, container: HTMLElement) {
+  constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
@@ -32,6 +32,8 @@ export class Outline {
       className: 'zine-outline',
       label: 'Outline',
       width: RAIL_WIDTH,
+      onDismiss: options.onDismiss,
+      rtl: zine.getDirection() === 'rtl',
     });
     this.root = this.#bar.root;
 

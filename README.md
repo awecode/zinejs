@@ -200,6 +200,13 @@ container is already forcing one page, where it could not honour two.
 opening one closes the others, and all are as tall as the book and scroll internally — a long list
 never runs past the bottom. All three are for documents (a PDF), not image books.
 
+On a wide screen the rail flanks the book and the book shrinks to make room, so nothing leaves the
+viewport. This works only when the book's width is elastic (`100%`, a `max-width`, or the demo's
+`min(920px, 100%, …)`): a book pinned to a fixed pixel width has nothing to give and will overflow
+its slot instead. Below 640px there is no room to flank, so the rail becomes a drawer that slides in
+over a dimmed book (from the reading-start edge, so it follows RTL); tapping the dimmed area or
+pressing Escape closes it, as does the toolbar button. The book itself does not move at that size.
+
 **`thumbnails`** shows the pages. Its rows mirror the book's own spread grouping, so it always
 matches what the reader sees, including the responsive fallback on a narrow container:
 

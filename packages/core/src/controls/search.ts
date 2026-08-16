@@ -1,4 +1,4 @@
-import { Sidebar } from './sidebar';
+import { Sidebar, type PanelOptions } from './sidebar';
 import type { Zine } from '../zine';
 
 /** Rail width in px. Matches the outline: both hold text, not pictures. */
@@ -27,7 +27,7 @@ export class Search {
   #run = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(zine: Zine, container: HTMLElement) {
+  constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
@@ -35,6 +35,8 @@ export class Search {
       className: 'zine-search',
       label: 'Search results',
       width: RAIL_WIDTH,
+      onDismiss: options.onDismiss,
+      rtl: zine.getDirection() === 'rtl',
     });
     this.root = this.#bar.root;
 

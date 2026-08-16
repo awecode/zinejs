@@ -1,4 +1,4 @@
-import { Sidebar } from './sidebar';
+import { Sidebar, type PanelOptions } from './sidebar';
 import type { Zine } from '../zine';
 
 /** Width of one page thumbnail, in px. A paired rail fits two of these side by side. */
@@ -29,7 +29,7 @@ export class Thumbnails {
   #observer: IntersectionObserver | null = null;
   #unsubscribe: (() => void)[] = [];
 
-  constructor(zine: Zine, container: HTMLElement) {
+  constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
@@ -37,6 +37,8 @@ export class Thumbnails {
       className: 'zine-thumbs',
       label: 'Pages',
       width: THUMB_WIDTH + RAIL_PAD * 2,
+      onDismiss: options.onDismiss,
+      rtl: zine.getDirection() === 'rtl',
     });
     this.root = this.#bar.root;
 
