@@ -746,6 +746,16 @@ describe('controls toolbar', () => {
     expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
   });
 
+  it('closes the open rail from its own close button', async () => {
+    const { el } = await mount({ source: new DocSource(8) });
+    await openThumbs(el);
+    const close = scope(el).querySelector<HTMLElement>('.zine-panel-close');
+    expect(close).not.toBeNull(); // the discoverable dismiss, present on every screen
+    close!.click();
+    await flush();
+    expect(scope(el).querySelector('.zine-thumbs')).toBeNull();
+  });
+
   it('takes the scrim down with the book on destroy', async () => {
     const { zine, el } = await mount({ source: new DocSource(8) });
     await openThumbs(el);

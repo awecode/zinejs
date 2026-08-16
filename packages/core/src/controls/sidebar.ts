@@ -1,3 +1,5 @@
+import { createIcon, ICONS } from './icons';
+
 /**
  * The rail beside the book that the thumbnail and outline lists both sit in.
  *
@@ -28,6 +30,7 @@ export class Sidebar {
   #holder: HTMLElement;
   #wrap: HTMLElement | null = null;
   #scrim: HTMLElement | null = null;
+  #close: HTMLElement | null = null;
   #onKeydown: ((e: KeyboardEvent) => void) | null = null;
   #doc: Document;
   #pageBox: (() => PageBox | null) | null = null;
@@ -133,13 +136,30 @@ export class Sidebar {
   }
 
   /**
-   * Wire the drawer's two dismiss affordances (only reachable under the narrow-screen media query;
-   * on a wide screen the scrim is display:none and the drawer needs no dismiss of its own). The
-   * scrim is a sibling of the holder so it can dim the book area without the flex row reserving a
-   * column for it. When there is no wrap (the parentless overlay fallback), there is no book beside
-   * it to dim, so only the Escape key is armed.
+   * Wire every way to dismiss the rail. A close button in the rail's trailing-top corner is the
+   * discoverable one, present on every screen — the toolbar button and Escape always toggle too,
+   * but neither is obvious, and the flanking thumbnail rail has no scrim to click away on. The
+   * scrim (drawer only, under the narrow-screen media query) and the Escape key are the other two.
+   *
+   * The scrim is a sibling of the holder so it can dim the book area without the flex row reserving
+   * a column for it. When there is no wrap (the parentless overlay fallback), there is no book
+   * beside it to dim, so the scrim is skipped and only the button and Escape are armed.
    */
   #armDismiss(doc: Document, onDismiss: () => void): void {
+    const close = doc.createElement('button');
+    close.type = 'button';
+    close.className = 'zine-panel-close';
+    close.setAttribute('aria-label', 'Close');
+    close.appendChild(createIcon(doc, ICONS.close));
+    // Floats over the scrolling list (see styles.ts); stop the click reaching the book's tap handler
+    // in the overlay fallback, where the rail sits inside the container.
+    close.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onDismiss();
+    });
+    this.#holder.appendChild(close);
+    this.#close = close;
+
     if (this.#wrap) {
       const scrim = doc.createElement('div');
       scrim.className = 'zine-panel-scrim';
@@ -168,6 +188,7 @@ export class Sidebar {
     }
     this.#scrim?.remove();
     this.#scrim = null;
+    this.#close = null; // lives inside #holder, removed with it below
     this.#holder.remove();
     const wrap = this.#wrap;
     if (wrap?.parentNode) {

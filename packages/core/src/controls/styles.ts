@@ -172,6 +172,12 @@ export const CSS = `
   font: inherit;
   box-sizing: border-box;
 }
+/* Replace the browser's default (white) focus ring with the accent ring the other controls use. */
+.zine-search-input:focus-visible {
+  outline: none;
+  border-color: var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
+  box-shadow: 0 0 0 1px var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
+}
 .zine-search-hits {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -345,6 +351,9 @@ export const CSS = `
   /* Chain overscroll up to the page: once the list is at its end (or too short to scroll at all),
      a further wheel scrolls the page behind, the same as scrolling over the book itself does. */
   overscroll-behavior: auto;
+  /* Reserve the scrollbar's lane whether or not it is showing, so rows never sit under the bar
+     and the close button (inset past this lane below) has a fixed edge to clear. */
+  scrollbar-gutter: stable;
   padding: 6px;
   box-sizing: border-box;
   border-radius: 8px;
@@ -365,6 +374,44 @@ export const CSS = `
 .zine-panel-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
 .zine-panel-active { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.18))); }
 .zine-panel-note { padding: 8px; opacity: 0.66; line-height: 1.4; }
+/* Discoverable dismiss, floated in the rail's trailing-top (interior) corner, away from the book.
+   It sits in the holder above the scrolling list so the list scrolls under it. A translucent
+   backdrop keeps the glyph legible over a thumbnail or a line of text. */
+.zine-panel-close {
+  position: absolute;
+  top: 6px;
+  /* Inset past the reserved scrollbar gutter so the button never overlaps the bar. */
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  /* Opaque so a light thumbnail underneath never shows through and dims the glyph. */
+  background: light-dark(#f4f4f5, #27272a);
+  color: inherit;
+  cursor: pointer;
+}
+.zine-panel-close svg { width: 15px; height: 15px; }
+/* Opaque hover, not the translucent hover token: a see-through backdrop over a light thumbnail
+   would wash the glyph out. Solid neutrals keep the X readable in both themes over anything. */
+.zine-panel-close:hover { background: light-dark(#e4e4e7, #3f3f46); }
+.zine-panel-close:focus-visible {
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
+  outline-offset: -2px;
+}
+.zine-panel-wrap-rtl .zine-panel-close { right: auto; left: 12px; }
+/* End the search field just before the close button rather than running under it, so the two sit
+   side by side and the field's border reads cleanly. The button's inner edge is ~30px from the
+   panel's content edge (24px wide, its right edge 6px in once the reserved scrollbar gutter is
+   accounted for), so 30px leaves them flush with a hair of breathing room. width:auto lets the
+   column's stretch fill the rest, so the margin shortens the field instead of overflowing 100%. */
+.zine-search .zine-search-input { width: auto; align-self: stretch; margin-right: 30px; }
+.zine-panel-wrap-rtl .zine-search .zine-search-input { margin-right: 0; margin-left: 30px; }
 
 /* Overlay panels (outline, search) on a wide screen: float over the book's start edge instead of
    flanking it, so the book never resizes. The wrap drops to a block, laying the book out exactly as
