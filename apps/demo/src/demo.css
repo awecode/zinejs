@@ -87,7 +87,9 @@ nav a.active {
   gap: 8px;
   align-items: center;
 }
-button {
+/* Demo chrome buttons only. Excludes the library's own controls (all `zine-`prefixed), whose
+   injected styles this global box/border/hover would otherwise leak into. */
+button:not([class^='zine-']) {
   background: var(--demo-btn-bg);
   color: var(--demo-fg);
   border: 1px solid var(--demo-btn-border);
@@ -96,7 +98,7 @@ button {
   cursor: pointer;
   font: inherit;
 }
-button:hover {
+button:not([class^='zine-']):hover {
   background: var(--demo-btn-hover);
 }
 #book {

@@ -230,6 +230,8 @@ export const CSS = `
   cursor: pointer;
   -webkit-user-select: none;
   user-select: none;
+  /* No grey tap box on touch; the :active tint below is the press feedback instead. */
+  -webkit-tap-highlight-color: transparent;
 }
 .zine-arrow svg {
   width: 36px;
@@ -240,7 +242,15 @@ export const CSS = `
      shadow, a dark chevron (dark mode) a soft light one, offset rather than a glowing halo. */
   filter: drop-shadow(0 1px 2px light-dark(rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.35)));
 }
-.zine-arrow:hover:not(:disabled) { color: var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc)); }
+/* Feedback intensifies the chevron toward its extreme (white in light mode, black in dark)
+   rather than tinting it, so no new colour is introduced. Not tied to --zine-controls-fg: that
+   sets the resting fill, and hover has to differ from it to read as feedback. :active clears on
+   release, so tap and click feel the same; :hover is behind (hover: hover) so it never sticks on
+   touch. */
+.zine-arrow:active:not(:disabled) { color: light-dark(#ffffff, #000000); }
+@media (hover: hover) {
+  .zine-arrow:hover:not(:disabled) { color: light-dark(#ffffff, #000000); }
+}
 .zine-arrow:focus-visible {
   outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 2px;
