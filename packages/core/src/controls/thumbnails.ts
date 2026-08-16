@@ -25,7 +25,7 @@ export class Thumbnails {
   #zine: Zine;
   #doc: Document;
   #bar: Sidebar;
-  #rows: { el: HTMLElement; spread: number }[] = [];
+  #rows: { el: HTMLElement; spread: number; pages: number[] }[] = [];
   #observer: IntersectionObserver | null = null;
   #unsubscribe: (() => void)[] = [];
 
@@ -93,7 +93,7 @@ export class Thumbnails {
         if (pages.length > 0) this.#zine.flipTo(Math.min(...pages));
       });
       this.#bar.root.appendChild(row);
-      this.#rows.push({ el: row, spread: index });
+      this.#rows.push({ el: row, spread: index, pages });
     }
     this.#observeRows();
   }
@@ -144,9 +144,13 @@ export class Thumbnails {
 
   /** Highlight the spread on screen and keep it scrolled into view. */
   #markCurrent(): void {
-    const current = this.#zine.getSpreadIndex();
-    for (const { el, spread } of this.#rows) {
-      const active = spread === current;
+    // Key off the current page, not getSpreadIndex(): a `pageChanged` fires during the flip's
+    // lead, a beat before the landing updates the book's spread index, so reading that index here
+    // would highlight the spread we are leaving until the next flip. The page number is already
+    // fresh at lead time, so the row that contains it is always the right one.
+    const page = this.#zine.getPage();
+    for (const { el, pages } of this.#rows) {
+      const active = pages.includes(page);
       el.classList.toggle('zine-panel-active', active);
       el.setAttribute('aria-selected', String(active));
       if (active) el.scrollIntoView?.({ block: 'nearest' });
