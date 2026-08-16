@@ -410,6 +410,16 @@ export class Zine {
   }
 
   /**
+   * Where the book is actually painted inside the container, in container pixels: the
+   * aspect-fitted, centred region, which is shorter (or narrower) than the container whenever the
+   * two aspect-ratios do not match. A side rail uses it to stand exactly as tall as the page rather
+   * than the whole container. Null before the first paint, when there is nothing to measure yet.
+   */
+  getPageBox(): { x: number; y: number; width: number; height: number } | null {
+    return this.#renderer?.measure().book ?? null;
+  }
+
+  /**
    * How pages are currently grouped, one entry per spread — the same model the renderer paints,
    * so it already reflects `spreadMode` and the responsive single-page fallback. Useful for
    * building a page list or thumbnail rail that matches the book.

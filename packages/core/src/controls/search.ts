@@ -38,6 +38,7 @@ export class Search {
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
       overlay: true, // floats over the book's edge on a wide screen rather than shrinking it
+      pageBox: () => zine.getPageBox(),
     });
     this.root = this.#bar.root;
 

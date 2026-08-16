@@ -19,6 +19,9 @@ export interface PanelOptions {
   onDismiss?: () => void;
 }
 
+/** The book's painted box inside the container, in container px (see Zine.getPageBox). */
+type PageBox = { x: number; y: number; width: number; height: number };
+
 export class Sidebar {
   /** The scrolling list; panels append their rows here. */
   readonly root: HTMLElement;
@@ -27,6 +30,8 @@ export class Sidebar {
   #scrim: HTMLElement | null = null;
   #onKeydown: ((e: KeyboardEvent) => void) | null = null;
   #doc: Document;
+  #pageBox: (() => PageBox | null) | null = null;
+  #resizeObserver: ResizeObserver | null = null;
 
   constructor(
     doc: Document,
@@ -44,12 +49,17 @@ export class Sidebar {
        *  thumbnail rail flanks so both stay fully visible. Only affects wide screens: below the
        *  breakpoint every panel is a drawer regardless. */
       overlay?: boolean;
+      /** The book's painted box in container px. The rail stands exactly as tall as the page rather
+       *  than the whole container, which is taller whenever the page is letterboxed (its aspect not
+       *  matching the container's) or a docked toolbar padded the wrap. Re-read on every resize. */
+      pageBox?: () => PageBox | null;
     },
   ) {
     this.#doc = doc;
     this.#holder = doc.createElement('div');
     this.#holder.className = 'zine-panel-holder';
     this.#holder.style.width = `${options.width}px`;
+    this.#pageBox = options.pageBox ?? null;
 
     this.root = doc.createElement('div');
     this.root.className = `zine-panel ${options.className}`;
@@ -66,6 +76,32 @@ export class Sidebar {
     this.#place(doc, container, options.rtl ?? false, options.overlay ?? false);
 
     if (options.onDismiss) this.#armDismiss(doc, options.onDismiss);
+
+    this.#trackPage(container);
+  }
+
+  /**
+   * Keep the rail sized to the painted page. The page box changes whenever the container resizes
+   * (window, flanking shrink) or its aspect-ratio does (spread-mode toggle), and a ResizeObserver
+   * on the container fires on all of those, so re-fitting there catches every case with no event
+   * wiring. Falls back to the full-height CSS when there is no observer or no box yet (e.g. tests).
+   */
+  #trackPage(container: HTMLElement): void {
+    if (!this.#pageBox) return;
+    this.#fitToPage();
+    if (typeof ResizeObserver === 'undefined') return;
+    this.#resizeObserver = new ResizeObserver(() => this.#fitToPage());
+    this.#resizeObserver.observe(container);
+  }
+
+  #fitToPage(): void {
+    const box = this.#pageBox?.();
+    if (!box) return;
+    // top+height (and bottom:auto so an absolute drawer is not over-constrained back to full height)
+    // work whether the holder is a relative flex item (flank) or absolutely placed (overlay/drawer).
+    this.#holder.style.top = `${box.y}px`;
+    this.#holder.style.bottom = 'auto';
+    this.#holder.style.height = `${box.height}px`;
   }
 
   /** Resize the rail, e.g. once a thumbnail list knows whether it needs one column or two. */
@@ -124,6 +160,8 @@ export class Sidebar {
   }
 
   destroy(): void {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
     if (this.#onKeydown) {
       this.#doc.removeEventListener('keydown', this.#onKeydown);
       this.#onKeydown = null;

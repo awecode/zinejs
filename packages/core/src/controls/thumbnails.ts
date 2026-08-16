@@ -39,6 +39,7 @@ export class Thumbnails {
       width: THUMB_WIDTH + RAIL_PAD * 2,
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
+      pageBox: () => zine.getPageBox(),
     });
     this.root = this.#bar.root;
 
