@@ -98,7 +98,12 @@ export class Toolbar {
     this.#unsubscribe.push(zine.on('zoomChanged', refresh));
     this.#unsubscribe.push(zine.on('flipEnd', refresh));
     const onDocPointer = (e: Event): void => {
-      if (this.#popover && !this.#popover.el.contains(e.target as Node)) this.#closePopover();
+      if (!this.#popover) return;
+      const target = e.target as Node;
+      // Leave a press on the trigger to its own click handler, which toggles the menu shut —
+      // closing here first would let that click reopen it, so it would never close.
+      if (this.#popover.el.contains(target) || this.#popover.trigger.contains(target)) return;
+      this.#closePopover();
     };
     doc.addEventListener('pointerdown', onDocPointer, true);
     this.#unsubscribe.push(() => doc.removeEventListener('pointerdown', onDocPointer, true));
