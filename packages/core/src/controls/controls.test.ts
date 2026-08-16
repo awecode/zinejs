@@ -939,6 +939,18 @@ describe('controls outline panel', () => {
     expect(wrap.classList.contains('zine-panel-wrap-overlay')).toBe(true);
   });
 
+  it('closes when the book behind a floating rail is clicked', async () => {
+    // The scrim gives the wide-screen overlay the same click-away the narrow drawer has (CSS shows
+    // it on both sides of the breakpoint for an overlay wrap); tapping it runs onDismiss.
+    const { el } = await mount({ source: new DocSource(8, toc()) });
+    await openOutline(el);
+    scope(el).querySelector<HTMLElement>('.zine-panel-scrim')!.dispatchEvent(
+      new Event('pointerdown', { bubbles: true }),
+    );
+    await flush();
+    expect(scope(el).querySelector('.zine-outline')).toBeNull();
+  });
+
   it('opens search in the same rail, replacing whichever panel was up', async () => {
     const { el } = await mount({ source: new DocSource(8, toc()) });
     await openThumbs(el);

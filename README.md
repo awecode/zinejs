@@ -204,7 +204,8 @@ On a wide screen `thumbnails` flanks the book: the rail takes its width beside t
 book shrinks only if the two would not otherwise both fit. That shrink needs the book's width to be
 elastic (`100%`, a `max-width`, or the demo's `min(920px, 100%, …)`); a book pinned to a fixed pixel
 width has nothing to give and would overflow its slot instead. The narrower `outline` and `search`
-rails float over the book's start edge instead, so the book never resizes at all.
+rails float over the book's start edge instead, so the book never resizes at all; clicking the page
+behind such a rail closes it, as does pressing Escape or the toolbar button.
 
 Below 640px there is no room for either, so every rail becomes a drawer that slides in over a dimmed
 book (from the reading-start edge, so it follows RTL); tapping the dimmed area or pressing Escape

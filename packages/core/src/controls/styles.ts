@@ -375,6 +375,17 @@ export const CSS = `
   .zine-panel-wrap-overlay .zine-panel {
     background: var(--zine-controls-bg, light-dark(#ffffff, #18181b));
   }
+  /* A click-away layer over the book, so pressing the page behind the floating rail closes it the
+     way tapping the scrim does on a narrow screen. Transparent here — the wide-screen rail only
+     covers an edge, so there is no need to dim the page the reader is still looking at. It sits
+     under the holder (z-index) so the rail's own rows still take their clicks. */
+  .zine-panel-wrap-overlay .zine-panel-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: transparent;
+  }
 }
 @media (min-width: 641px) and (prefers-reduced-motion: no-preference) {
   .zine-panel-wrap-overlay .zine-panel-holder { animation: zine-drawer-in 180ms ease; }
