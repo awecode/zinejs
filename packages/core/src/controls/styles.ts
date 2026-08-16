@@ -244,9 +244,19 @@ export const CSS = `
 /* Nothing to turn to: invisible, but still occupying its slot so the book does not slide across
    as the reader reaches a cover. */
 .zine-arrow-hidden { visibility: hidden; }
-/* No room to flank on a narrow screen; the toolbar's own prev/next still work. */
+/* Too narrow to flank without squeezing the pages, so overlay the arrows on the book's edges
+   instead. The wrap sits outside the container, so painting them over it leaves the container's
+   measured box (which sizes the book and maps taps) untouched. */
 @media (max-width: 640px) {
-  .zine-arrow { display: none; }
+  .zine-arrows-wrap { position: relative; }
+  .zine-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+  }
+  .zine-arrow:first-child { left: 6px; }
+  .zine-arrow:last-child { right: 6px; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .zine-arrow { transition: background 120ms ease; }
