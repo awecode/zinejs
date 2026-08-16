@@ -4,7 +4,14 @@ Checklist for releasing `@zinejs/core` and `@zinejs/pdf` to npm. Publish **core 
 
 ## 1. Bump versions
 
-Bump `version` in whichever package(s) you are releasing (`packages/core/package.json`, `packages/pdf/package.json`, or both). Committing the bump is recommended. Commit:
+Check if version bumping and publishing is necessary.
+
+```bash
+git log -1 -- packages/core
+git log -1 -- packages/pdf
+```
+
+Bump `version` in whichever package(s) you are publishing ([packages/core/package.json](packages/core/package.json), [packages/pdf/package.json](packages/pdf/package.json), or both). Committing the bump is recommended. Commit:
 
 ```bash
 git commit -am "chore: bump versions"
