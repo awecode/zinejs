@@ -1,4 +1,6 @@
 import { createIcon, ICONS } from './icons';
+import { applyColorScheme } from './styles';
+import type { ControlsColorScheme } from './types';
 import type { Zine } from '../zine';
 
 /**
@@ -19,7 +21,7 @@ export class Arrows {
   #wrap: HTMLElement | null = null;
   #unsubscribe: (() => void)[] = [];
 
-  constructor(zine: Zine, container: HTMLElement) {
+  constructor(zine: Zine, container: HTMLElement, colorScheme: ControlsColorScheme = 'auto') {
     this.#zine = zine;
     const doc = container.ownerDocument!;
 
@@ -33,6 +35,10 @@ export class Arrows {
     );
 
     this.#place(doc, container);
+    // The wrap holds both arrow buttons; color-scheme inherits, so stamping it themes both. In
+    // the parentless fallback there is no wrap, so stamp the buttons directly instead.
+    if (this.#wrap) applyColorScheme(this.#wrap, colorScheme);
+    else for (const btn of [this.#prev, this.#next]) applyColorScheme(btn, colorScheme);
 
     const refresh = (): void => this.#refresh();
     this.#unsubscribe.push(zine.on('pageChanged', refresh));

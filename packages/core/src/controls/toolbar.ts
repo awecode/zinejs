@@ -1,7 +1,7 @@
 import { createIcon, ICONS } from './icons';
 import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
 import { registerBuiltins } from './builtins';
-import { ensureStyles } from './styles';
+import { applyColorScheme, ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
 import { Outline } from './outline';
 import { Search } from './search';
@@ -16,6 +16,7 @@ import type {
   ControlContext,
   ControlDef,
   ControlItem,
+  ControlsColorScheme,
   ControlsOptions,
   ControlsPosition,
 } from './types';
@@ -53,6 +54,9 @@ export class Toolbar {
    *  is async, and the outline control stays hidden rather than flash in and out. */
   #hasOutline: boolean | null = null;
   #arrows: Arrows | null = null;
+  /** Which palette the built-in colours resolve to. Passed on to the arrows, panels and share
+   *  dialog, each of which mounts its own root outside this one and so must be stamped too. */
+  #colorScheme: ControlsColorScheme;
 
   constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
     this.#zine = zine;
@@ -61,6 +65,7 @@ export class Toolbar {
     this.#doc = doc;
     ensureStyles(doc);
 
+    this.#colorScheme = options.colorScheme ?? 'auto';
     const position = options.position ?? 'bottom';
     const docked = options.docked ?? true;
     this.#root = doc.createElement('div');
@@ -74,6 +79,7 @@ export class Toolbar {
       .join(' ');
     this.#root.setAttribute('role', 'toolbar');
     this.#root.setAttribute('aria-label', 'Flipbook controls');
+    applyColorScheme(this.#root, this.#colorScheme);
 
     this.#bar = doc.createElement('div');
     this.#bar.className = 'zine-controls-bar';
@@ -136,7 +142,8 @@ export class Toolbar {
   mount(options: ControlsOptions): void {
     this.#build(options.items ?? DEFAULT_ITEMS);
     // After #place, so the arrows can wrap whatever it built around the book.
-    if (options.arrows ?? true) this.#arrows = new Arrows(this.#zine, this.#container);
+    if (options.arrows ?? true)
+      this.#arrows = new Arrows(this.#zine, this.#container, this.#colorScheme);
     this.#refresh();
     this.#probeOutline();
   }
@@ -167,7 +174,7 @@ export class Toolbar {
   }
 
   #context(close: () => void = () => this.#closePopover()): ControlContext {
-    return { zine: this.#zine, close };
+    return { zine: this.#zine, close, colorScheme: this.#colorScheme };
   }
 
   #build(items: readonly ControlItem[]): void {
@@ -467,6 +474,7 @@ export class Toolbar {
     this.#panelKind = null;
     if (wasOpen !== kind) {
       this.#panel = new PANELS[kind](this.#zine, this.#container);
+      applyColorScheme(this.#panel.root, this.#colorScheme);
       this.#panelKind = kind;
     }
     this.#refresh();

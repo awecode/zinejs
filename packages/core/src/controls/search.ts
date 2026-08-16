@@ -16,6 +16,8 @@ const MIN_QUERY = 2;
  * searched or clip the very results it found.
  */
 export class Search {
+  /** The panel's themed root, so the toolbar can stamp its colour scheme. */
+  readonly root: HTMLElement;
   #zine: Zine;
   #doc: Document;
   #bar: Sidebar;
@@ -34,6 +36,7 @@ export class Search {
       label: 'Search results',
       width: RAIL_WIDTH,
     });
+    this.root = this.#bar.root;
 
     this.#input = doc.createElement('input');
     this.#input.type = 'search';

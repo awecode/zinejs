@@ -3,12 +3,18 @@ import type { Zine } from '../zine';
 /** Where the toolbar sits relative to the book. */
 export type ControlsPosition = 'top' | 'bottom' | 'left' | 'right';
 
+/** How the controls decide between their light and dark palettes. */
+export type ControlsColorScheme = 'light' | 'dark' | 'auto';
+
 /** What a control is handed when it runs or reports its state. */
 export interface ControlContext {
   /** The flipbook this toolbar drives. */
   readonly zine: Zine;
   /** Dismiss the submenu this control lives in (no-op at the top level). */
   close(): void;
+  /** The controls' resolved colour scheme, for a control that mounts its own root outside the
+   *  toolbar (the share dialog) and so has to carry the scheme across to it. */
+  readonly colorScheme: ControlsColorScheme;
 }
 
 /**
@@ -81,4 +87,17 @@ export interface ControlsOptions {
   arrows?: boolean;
   /** Extra class on the toolbar root, for styling hooks. */
   className?: string;
+  /**
+   * Which palette the built-in controls use, when their colours have not been overridden.
+   *
+   * `'auto'` (the default) follows the host page: left unset, every colour falls back to
+   * `light-dark()`, which resolves against the element's used `color-scheme`. Because
+   * `color-scheme` inherits, a page that declares `color-scheme: light` (or `dark`) on its root
+   * — as any page with a theme toggle should — gets controls that match, with no configuration.
+   * `'light'` or `'dark'` forces that palette on the controls regardless of the page.
+   *
+   * A set `--zine-controls-*` custom property always wins over this, so branding is unaffected
+   * either way.
+   */
+  colorScheme?: ControlsColorScheme;
 }

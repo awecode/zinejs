@@ -8,6 +8,7 @@ export type {
   ControlContext,
   ControlDef,
   ControlItem,
+  ControlsColorScheme,
   ControlsOptions,
   ControlsPosition,
 } from './types';

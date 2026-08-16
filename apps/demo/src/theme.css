@@ -22,10 +22,6 @@
   --demo-debug-border: #e4e4e7;
   --demo-ok: #15803d;
   --demo-bad: #dc2626;
-  --zine-controls-fg: #18181b;
-  --zine-controls-bg: rgba(255, 255, 255, 0.94);
-  --zine-controls-hover: rgba(0, 0, 0, 0.08);
-  --zine-controls-accent: #0284c7;
 }
 
 :root[data-theme='dark'] {
@@ -52,10 +48,6 @@
   --demo-debug-border: #262633;
   --demo-ok: #6ee787;
   --demo-bad: #ff7b72;
-  --zine-controls-fg: #f4f4f5;
-  --zine-controls-bg: rgba(24, 24, 27, 0.82);
-  --zine-controls-hover: rgba(255, 255, 255, 0.14);
-  --zine-controls-accent: #7dd3fc;
 }
 
 .theme-toggle {

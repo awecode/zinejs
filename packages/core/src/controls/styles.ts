@@ -3,8 +3,14 @@
  *
  * The rest of the library styles elements inline, but a toolbar needs `:hover`, `:focus-visible`
  * and `:disabled` — states inline styles cannot express — so this is the one place a `<style>`
- * element is warranted. Everything is scoped under `.zine-controls`, and the colours come from
- * custom properties so a consumer can retheme without overriding rules.
+ * element is warranted. Everything is scoped under `.zine-controls`.
+ *
+ * Colours come from custom properties so a consumer can retheme without overriding rules. Left
+ * unset, each falls back to `light-dark(light, dark)`, which resolves against the element's used
+ * `color-scheme`: the toolbar follows the host page's scheme with no configuration, and a host
+ * with a theme toggle only has to set `color-scheme` on its root for the controls to match. The
+ * `colorScheme` control option can force `light` or `dark` regardless of the page, and a set
+ * `--zine-controls-*` token still wins over both.
  */
 const STYLE_ID = 'zine-controls-style';
 
@@ -34,7 +40,7 @@ export const CSS = `
   z-index: 2;
   box-sizing: border-box;
   font: 500 12px/1.2 system-ui, sans-serif;
-  color: var(--zine-controls-fg, #f4f4f5);
+  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
   touch-action: auto;
   -webkit-user-select: none;
   user-select: none;
@@ -52,14 +58,14 @@ export const CSS = `
   padding: 3px;
   border-radius: 8px;
   pointer-events: auto;
-  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
+  background: var(--zine-controls-bg, light-dark(rgba(255, 255, 255, 0.94), rgba(24, 24, 27, 0.82)));
   backdrop-filter: blur(8px);
 }
 /* Floating: lifted off the page it covers. Docked: flat, with an outline so it reads as a
    control strip rather than a shadow hanging in empty space. */
 .zine-controls-floating .zine-controls-bar { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28); }
 .zine-controls-docked .zine-controls-bar {
-  border: 1px solid var(--zine-controls-hover, rgba(255, 255, 255, 0.14));
+  border: 1px solid var(--zine-controls-hover, light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.14)));
 }
 .zine-controls-floating.zine-controls-bottom { inset: auto 0 0 0; justify-content: center; }
 .zine-controls-floating.zine-controls-top    { inset: 0 0 auto 0; justify-content: center; }
@@ -84,9 +90,9 @@ export const CSS = `
   font: inherit;
 }
 .zine-controls-btn svg { width: 15px; height: 15px; }
-.zine-controls-btn:hover:not(:disabled) { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-controls-btn:hover:not(:disabled) { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14))); }
 .zine-controls-btn:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 1px;
 }
 .zine-controls-btn:disabled { opacity: 0.38; cursor: default; }
@@ -94,7 +100,7 @@ export const CSS = `
 .zine-controls-off { opacity: 0.38; }
 .zine-controls-off[aria-disabled='true'] { pointer-events: none; }
 .zine-controls-btn[aria-pressed="true"],
-.zine-controls-btn[aria-expanded="true"] { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-controls-btn[aria-expanded="true"] { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14))); }
 
 .zine-controls-sep {
   width: 1px;
@@ -117,9 +123,9 @@ export const CSS = `
 .zine-controls-page input {
   width: 2.2em;
   padding: 2px 3px;
-  border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
+  border: 1px solid var(--zine-controls-hover, light-dark(rgba(0,0,0,0.14), rgba(255,255,255,0.2)));
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.25);
+  background: light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.25));
   color: inherit;
   font: inherit;
   text-align: center;
@@ -128,7 +134,7 @@ export const CSS = `
 .zine-controls-page input::-webkit-outer-spin-button,
 .zine-controls-page input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .zine-controls-page input:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 0;
 }
 
@@ -141,7 +147,7 @@ export const CSS = `
   padding: 4px;
   border-radius: 8px;
   pointer-events: auto;
-  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.94));
+  background: var(--zine-controls-bg, light-dark(rgba(255, 255, 255, 0.94), rgba(24, 24, 27, 0.94)));
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(8px);
 }
@@ -159,9 +165,9 @@ export const CSS = `
   flex: 0 0 auto;
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
+  border: 1px solid var(--zine-controls-hover, light-dark(rgba(0,0,0,0.14), rgba(255,255,255,0.2)));
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25);
+  background: light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.25));
   color: inherit;
   font: inherit;
   box-sizing: border-box;
@@ -186,9 +192,9 @@ export const CSS = `
   cursor: pointer;
   box-sizing: border-box;
 }
-.zine-search-hit:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-search-hit:hover { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14))); }
 .zine-search-hit:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: -2px;
 }
 .zine-search-page { display: block; font-size: 0.9em; opacity: 0.85; }
@@ -219,17 +225,20 @@ export const CSS = `
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
-  color: var(--zine-controls-fg, #f4f4f5);
+  background: var(--zine-controls-bg, light-dark(rgba(255, 255, 255, 0.94), rgba(24, 24, 27, 0.82)));
+  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
   cursor: pointer;
   backdrop-filter: blur(8px);
   -webkit-user-select: none;
   user-select: none;
 }
 .zine-arrow svg { width: 22px; height: 22px; }
-.zine-arrow:hover:not(:disabled) { background: var(--zine-controls-hover, rgba(255,255,255,0.22)); }
+/* Hover mixes toward the page in dark mode (a lighter circle) but away from it in light mode:
+   a light-mode hover that lightened would wash the arrow into a near-white disc against a light
+   page, so it darkens instead and keeps its edge. */
+.zine-arrow:hover:not(:disabled) { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.22))); }
 .zine-arrow:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 2px;
 }
 /* Nothing to turn to: invisible, but still occupying its slot so the book does not slide across
@@ -266,8 +275,8 @@ export const CSS = `
   padding: 6px;
   box-sizing: border-box;
   border-radius: 8px;
-  background: var(--zine-controls-bg, rgba(24, 24, 27, 0.82));
-  color: var(--zine-controls-fg, #f4f4f5);
+  background: var(--zine-controls-bg, light-dark(rgba(255, 255, 255, 0.94), rgba(24, 24, 27, 0.82)));
+  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
   font: 500 11px/1.2 system-ui, sans-serif;
   scrollbar-width: thin;
   touch-action: auto;
@@ -276,7 +285,7 @@ export const CSS = `
 }
 /* Overlay fallback, used when the container has no parent to wrap. */
 .zine-panel-overlay { position: absolute; inset: 0 auto 0 0; z-index: 3; }
-.zine-panel-active { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
+.zine-panel-active { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.18))); }
 .zine-panel-note { padding: 8px; opacity: 0.66; line-height: 1.4; }
 
 .zine-thumbs { align-items: center; }
@@ -296,13 +305,13 @@ export const CSS = `
   cursor: pointer;
   box-sizing: border-box;
 }
-.zine-thumbs-row:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-thumbs-row:hover { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14))); }
 .zine-thumbs-row:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: -2px;
 }
 .zine-thumbs-row.zine-panel-active .zine-thumbs-cell {
-  outline: 1px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 1px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
 }
 
 /* Outline: a single column of headings, indented by depth. */
@@ -323,10 +332,10 @@ export const CSS = `
   overflow-wrap: anywhere;
 }
 .zine-outline-row:hover:not(:disabled) {
-  background: var(--zine-controls-hover, rgba(255,255,255,0.14));
+  background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14)));
 }
 .zine-outline-row:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: -2px;
 }
 /* A heading whose destination could not be resolved: shown, but nothing to click through to. */
@@ -337,7 +346,7 @@ export const CSS = `
   min-width: 0;
   min-height: 24px;
   display: flex;
-  background: rgba(0, 0, 0, 0.3);
+  background: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.3));
   border-radius: 2px;
   overflow: hidden;
 }
@@ -359,7 +368,7 @@ export const CSS = `
   padding: 16px;
   background: rgba(0, 0, 0, 0.55);
   font: 500 13px/1.4 system-ui, sans-serif;
-  color: var(--zine-controls-fg, #f4f4f5);
+  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
 }
 .zine-share {
   width: min(320px, 100%);
@@ -370,7 +379,7 @@ export const CSS = `
   gap: 12px;
   padding: 14px;
   border-radius: 12px;
-  background: var(--zine-share-bg, #1c1c20);
+  background: var(--zine-share-bg, light-dark(#ffffff, #1c1c20));
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
 }
@@ -390,7 +399,7 @@ export const CSS = `
   cursor: pointer;
 }
 .zine-share-close svg { width: 16px; height: 16px; }
-.zine-share-close:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.14)); }
+.zine-share-close:hover { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14))); }
 
 .zine-share-qr {
   align-self: center;
@@ -406,9 +415,9 @@ export const CSS = `
   flex: 1 1 auto;
   min-width: 0;
   padding: 7px 9px;
-  border: 1px solid var(--zine-controls-hover, rgba(255,255,255,0.2));
+  border: 1px solid var(--zine-controls-hover, light-dark(rgba(0,0,0,0.14), rgba(255,255,255,0.2)));
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.3);
+  background: light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3));
   color: inherit;
   font: inherit;
 }
@@ -418,8 +427,8 @@ export const CSS = `
   padding: 7px 12px;
   border: 0;
   border-radius: 7px;
-  background: var(--zine-controls-accent, #7dd3fc);
-  color: #06202c;
+  background: var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
+  color: light-dark(#ffffff, #06202c);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -433,17 +442,17 @@ export const CSS = `
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
   color: inherit;
   text-decoration: none;
 }
 .zine-share-social svg { width: 19px; height: 19px; }
-.zine-share-social:hover { background: var(--zine-controls-hover, rgba(255,255,255,0.18)); }
+.zine-share-social:hover { background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.12), rgba(255,255,255,0.18))); }
 .zine-share-close:focus-visible,
 .zine-share-copy:focus-visible,
 .zine-share-social:focus-visible,
 .zine-share-link input:focus-visible {
-  outline: 2px solid var(--zine-controls-accent, #7dd3fc);
+  outline: 2px solid var(--zine-controls-accent, light-dark(#0284c7, #7dd3fc));
   outline-offset: 2px;
 }
 
@@ -459,4 +468,16 @@ export function ensureStyles(doc: Document): void {
   style.id = STYLE_ID;
   style.textContent = CSS;
   (doc.head ?? doc.documentElement)?.appendChild(style);
+}
+
+/**
+ * Pin an element's colour scheme so the `light-dark()` fallbacks resolve to one palette.
+ *
+ * `'auto'` does nothing: `color-scheme` inherits, so the element keeps the page's used scheme and
+ * `light-dark()` follows it. `'light'` / `'dark'` set the property on the element itself, which its
+ * themed descendants (buttons, menu, dialog) inherit in turn. An unset `--zine-controls-*` reads
+ * the forced palette; a set one still overrides it, since the tokens sit outside `light-dark()`.
+ */
+export function applyColorScheme(el: HTMLElement, scheme: 'light' | 'dark' | 'auto'): void {
+  if (scheme !== 'auto') el.style.colorScheme = scheme;
 }

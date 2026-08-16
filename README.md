@@ -151,6 +151,7 @@ new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the b
 | `docked` | `boolean` | `true` | Sit outside the book. `false` floats the toolbar over it. |
 | `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
 | `arrows` | `boolean` | `true` | Large page-turn arrows flanking the book. |
+| `colorScheme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Force the controls light or dark. `'auto'` follows the page. See [Styling](#styling). |
 | `className` | `string` | — | Extra class on the toolbar root, for styling. |
 
 ### Page arrows
@@ -258,7 +259,24 @@ relabels the built-in without reimplementing it.
 
 ### Styling
 
-The toolbar reads these custom properties, so it can be rethemed without overriding rules:
+**Light and dark come for free.** Left alone, the controls follow the page's own
+`color-scheme`: they render light on a light page and dark on a dark one, using CSS
+`light-dark()` under the hood. If your page has a theme toggle, set `color-scheme` on the root
+it themes and the controls follow along:
+
+```css
+:root { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+```
+
+To pin the controls to one scheme regardless of the page, pass `controls.colorScheme`:
+
+```js
+new Zine(el, { source, controls: { colorScheme: 'dark' } }); // always dark
+```
+
+**Branding.** For colours of your own, set these custom properties. Each overrides both schemes,
+so a value you set here wins over the automatic light/dark above:
 
 ```css
 .zine-controls {

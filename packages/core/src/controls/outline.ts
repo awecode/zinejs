@@ -16,6 +16,8 @@ const INDENT = 12;
  * column would only make them narrower.
  */
 export class Outline {
+  /** The panel's themed root, so the toolbar can stamp its colour scheme. */
+  readonly root: HTMLElement;
   #zine: Zine;
   #doc: Document;
   #bar: Sidebar;
@@ -31,6 +33,7 @@ export class Outline {
       label: 'Outline',
       width: RAIL_WIDTH,
     });
+    this.root = this.#bar.root;
 
     this.#note('Loading…');
     void this.#build();

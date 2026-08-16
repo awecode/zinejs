@@ -1,6 +1,8 @@
 import { createIcon, ICONS } from './icons';
 import { SOCIALS } from './socials';
 import { qrSvg } from './qr';
+import { applyColorScheme } from './styles';
+import type { ControlsColorScheme } from './types';
 import type { Zine } from '../zine';
 
 /** QR edge length in CSS px. */
@@ -22,7 +24,7 @@ export class ShareDialog {
   #timer: ReturnType<typeof setTimeout> | null = null;
   #onKey: (e: KeyboardEvent) => void;
 
-  constructor(zine: Zine, container: HTMLElement) {
+  constructor(zine: Zine, container: HTMLElement, colorScheme: ControlsColorScheme = 'auto') {
     const doc = container.ownerDocument!;
     this.#doc = doc;
     this.#lastFocus = doc.activeElement;
@@ -32,6 +34,9 @@ export class ShareDialog {
 
     this.#backdrop = doc.createElement('div');
     this.#backdrop.className = 'zine-share-backdrop';
+    // The dialog is mounted on <body>, outside the toolbar, so it does not inherit the stamp;
+    // apply it here. color-scheme then inherits down to the dialog and its fields.
+    applyColorScheme(this.#backdrop, colorScheme);
     this.#backdrop.addEventListener('pointerdown', (e) => {
       if (e.target === this.#backdrop) this.close();
     });

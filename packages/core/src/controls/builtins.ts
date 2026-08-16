@@ -100,7 +100,7 @@ export function registerBuiltins(): void {
       // The dialog, its brand marks and the QR encoder are a chunk of their own: a book nobody
       // shares never downloads any of it.
       void import('./share')
-        .then(({ ShareDialog }) => new ShareDialog(ctx.zine, ctx.zine.container))
+        .then(({ ShareDialog }) => new ShareDialog(ctx.zine, ctx.zine.container, ctx.colorScheme))
         .catch(() => {
           // No dialog, so fall back to the plain behaviour rather than doing nothing.
           void navigator.clipboard?.writeText(ctx.zine.pageLink()).catch(() => {});

@@ -20,6 +20,8 @@ const CELL_GAP = 2;
  * once the moment the rail opened.
  */
 export class Thumbnails {
+  /** The panel's themed root, so the toolbar can stamp its colour scheme. */
+  readonly root: HTMLElement;
   #zine: Zine;
   #doc: Document;
   #bar: Sidebar;
@@ -36,6 +38,7 @@ export class Thumbnails {
       label: 'Pages',
       width: THUMB_WIDTH + RAIL_PAD * 2,
     });
+    this.root = this.#bar.root;
 
     this.#build();
 

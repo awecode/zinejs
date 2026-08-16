@@ -2061,6 +2061,12 @@ function validateOptions(container: unknown, options: unknown): void {
       `Zine: controls.position must be 'top', 'bottom', 'left', or 'right'; got ${JSON.stringify(position)}.`,
     );
   }
+  const colorScheme = (controls as { colorScheme?: unknown } | undefined)?.colorScheme;
+  if (colorScheme !== undefined && !['light', 'dark', 'auto'].includes(colorScheme as string)) {
+    throw new Error(
+      `Zine: controls.colorScheme must be 'light', 'dark', or 'auto'; got ${JSON.stringify(colorScheme)}.`,
+    );
+  }
 
   const spreadMode = o.spreadMode;
   if (spreadMode !== undefined && !['double', 'single', 'cover', 'book'].includes(spreadMode as string)) {
