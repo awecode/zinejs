@@ -466,12 +466,15 @@ export const CSS = `
 }
 
 /* Outline: a single column of headings, indented by depth. */
-.zine-outline { gap: 1px; }
+/* No gap: a hairline between rows is the separator instead, so a title that wraps to two lines
+   still reads as one entry rather than blending into its neighbours. */
+.zine-outline { gap: 0; }
 .zine-outline-row {
   display: block;
   width: 100%;
   padding: 6px 8px;
   border: 0;
+  border-bottom: 1px solid var(--zine-controls-divider, light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.1)));
   border-radius: 5px;
   background: transparent;
   color: inherit;
@@ -482,6 +485,7 @@ export const CSS = `
   box-sizing: border-box;
   overflow-wrap: anywhere;
 }
+.zine-outline-row:last-child { border-bottom: 0; }
 .zine-outline-row:hover:not(:disabled) {
   background: var(--zine-controls-hover, light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.14)));
 }
