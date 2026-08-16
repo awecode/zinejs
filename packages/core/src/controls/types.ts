@@ -83,8 +83,13 @@ export interface ControlsOptions {
   /**
    * Large page-turn arrows flanking the book, as most flipbooks show. Default true. They sit
    * beside the pages rather than over them, so they never cover content.
+   *
+   * `true` shows them everywhere, `false` nowhere. `'desktop'` shows them only on wide screens
+   * (where they flank the book) and `'mobile'` only on narrow ones (where they overlay the book
+   * edges) — the split follows the same width breakpoint as the two layouts, so it tracks a live
+   * window resize rather than the device it first loaded on.
    */
-  arrows?: boolean;
+  arrows?: boolean | 'desktop' | 'mobile';
   /** Extra class on the toolbar root, for styling hooks. */
   className?: string;
   /**

@@ -150,7 +150,7 @@ new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the b
 | `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge of the book the toolbar sits on. |
 | `docked` | `boolean` | `true` | Sit outside the book. `false` floats the toolbar over it. |
 | `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
-| `arrows` | `boolean` | `true` | Large page-turn arrows flanking the book. |
+| `arrows` | `boolean \| 'desktop' \| 'mobile'` | `true` | Large page-turn arrows flanking the book. `'desktop'`/`'mobile'` limit them to wide/narrow screens. |
 | `colorScheme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Force the controls light or dark. `'auto'` follows the page. See [Styling](#styling). |
 | `className` | `string` | — | Extra class on the toolbar root, for styling. |
 
@@ -161,8 +161,13 @@ Large back/forward arrows sit either side of the book, as most flipbooks show. T
 row and puts them on the outside, leaving the container's own size untouched. In RTL they swap, so
 each arrow still points the way the page will turn. An arrow with nowhere to go is not shown —
 there is no back arrow on the first page — though it keeps its place in the layout so the book
-does not slide across as the reader reaches a cover. Both hide below 640px where there is no room
-to flank. Turn them off with `controls: { arrows: false }`.
+does not slide across as the reader reaches a cover. Below 640px there is no room to flank, so they
+overlay the book's edges instead.
+
+Turn them off with `controls: { arrows: false }`. To show them on only one kind of device, pass
+`'desktop'` (wide screens, where they flank the book) or `'mobile'` (narrow screens, where they
+overlay its edges) — the split follows the same 640px breakpoint as the two layouts, so it tracks a
+live window resize rather than the device the page first loaded on.
 
 A docked toolbar is placed as a **sibling** of your container, inside a flex wrapper the library
 adds around it — the container's own size is left alone, since the renderer measures it to size

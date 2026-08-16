@@ -2076,6 +2076,12 @@ function validateOptions(container: unknown, options: unknown): void {
       `Zine: controls.colorScheme must be 'light', 'dark', or 'auto'; got ${JSON.stringify(colorScheme)}.`,
     );
   }
+  const arrows = (controls as { arrows?: unknown } | undefined)?.arrows;
+  if (arrows !== undefined && typeof arrows !== 'boolean' && !['desktop', 'mobile'].includes(arrows as string)) {
+    throw new Error(
+      `Zine: controls.arrows must be a boolean, 'desktop', or 'mobile'; got ${JSON.stringify(arrows)}.`,
+    );
+  }
 
   const spreadMode = o.spreadMode;
   if (spreadMode !== undefined && !['double', 'single', 'cover', 'book'].includes(spreadMode as string)) {

@@ -259,6 +259,15 @@ export const CSS = `
 /* Nothing to turn to: invisible, but still occupying its slot so the book does not slide across
    as the reader reaches a cover. */
 .zine-arrow-hidden { visibility: hidden; }
+/* Device-scoped arrows (controls.arrows: 'desktop' | 'mobile'). The split follows the same 640px
+   breakpoint as the flank/overlay layouts below, so the arrows appear and disappear live as the
+   window crosses it. */
+@media (max-width: 640px) {
+  .zine-arrows-desktop > .zine-arrow { display: none; }
+}
+@media (min-width: 641px) {
+  .zine-arrows-mobile > .zine-arrow { display: none; }
+}
 /* Too narrow to flank without squeezing the pages, so overlay the arrows on the book's edges
    instead. The wrap sits outside the container, so painting them over it leaves the container's
    measured box (which sizes the book and maps taps) untouched. */

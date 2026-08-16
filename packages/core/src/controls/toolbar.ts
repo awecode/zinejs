@@ -149,9 +149,16 @@ export class Toolbar {
    *  search panel) can be registered against this toolbar first. */
   mount(options: ControlsOptions): void {
     this.#build(options.items ?? DEFAULT_ITEMS);
-    // After #place, so the arrows can wrap whatever it built around the book.
-    if (options.arrows ?? true)
-      this.#arrows = new Arrows(this.#zine, this.#container, this.#colorScheme);
+    // After #place, so the arrows can wrap whatever it built around the book. A string value picks
+    // the device the arrows show on; only an explicit false suppresses them entirely.
+    const arrows = options.arrows ?? true;
+    if (arrows !== false)
+      this.#arrows = new Arrows(
+        this.#zine,
+        this.#container,
+        this.#colorScheme,
+        arrows === true ? null : arrows,
+      );
     this.#refresh();
     this.#probeOutline();
   }

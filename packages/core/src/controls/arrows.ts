@@ -19,10 +19,19 @@ export class Arrows {
   #prev: HTMLButtonElement;
   #next: HTMLButtonElement;
   #wrap: HTMLElement | null = null;
+  #device: 'desktop' | 'mobile' | null;
   #unsubscribe: (() => void)[] = [];
 
-  constructor(zine: Zine, container: HTMLElement, colorScheme: ControlsColorScheme = 'auto') {
+  constructor(
+    zine: Zine,
+    container: HTMLElement,
+    colorScheme: ControlsColorScheme = 'auto',
+    // null: show everywhere. 'desktop'/'mobile': show only on that device; a class on the wrap
+    // lets CSS hide the arrows on the other side of the layout breakpoint (see styles.ts).
+    device: 'desktop' | 'mobile' | null = null,
+  ) {
     this.#zine = zine;
+    this.#device = device;
     const doc = container.ownerDocument!;
 
     const rtl = zine.getDirection() === 'rtl';
@@ -79,6 +88,7 @@ export class Arrows {
     if (!parent) return; // not in a document; nothing sensible to flank
     const wrap = doc.createElement('div');
     wrap.className = 'zine-arrows-wrap';
+    if (this.#device) wrap.classList.add(`zine-arrows-${this.#device}`);
     parent.insertBefore(wrap, outer);
     wrap.append(this.#prev, outer, this.#next);
     this.#wrap = wrap;
