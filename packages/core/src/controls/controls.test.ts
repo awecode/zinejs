@@ -758,6 +758,31 @@ describe('controls page arrows', () => {
     expect(arrows(el)).toHaveLength(0);
   });
 
+  it('still renders both arrows when scoped to a device', async () => {
+    // The scoping is CSS-only: the arrows always mount, and a class on the wrap lets a media
+    // query hide them on the other side of the breakpoint. So both buttons are always present.
+    const { el } = await mount({ controls: { arrows: 'desktop' } });
+    expect(arrows(el)).toHaveLength(2);
+  });
+
+  it('tags the wrap so CSS can scope arrows to one device', async () => {
+    const desktop = await mount({ controls: { arrows: 'desktop' } });
+    expect(desktop.el.closest('.zine-arrows-wrap')?.classList.contains('zine-arrows-desktop')).toBe(
+      true,
+    );
+    const mobile = await mount({ controls: { arrows: 'mobile' } });
+    expect(mobile.el.closest('.zine-arrows-wrap')?.classList.contains('zine-arrows-mobile')).toBe(
+      true,
+    );
+  });
+
+  it('leaves the wrap untagged when arrows show on every device', async () => {
+    const { el } = await mount({ controls: { arrows: true } });
+    const wrap = el.closest('.zine-arrows-wrap')!;
+    expect(wrap.classList.contains('zine-arrows-desktop')).toBe(false);
+    expect(wrap.classList.contains('zine-arrows-mobile')).toBe(false);
+  });
+
   it('leaves the DOM as it found it on destroy', async () => {
     const host = document.createElement('div');
     document.body.append(host);

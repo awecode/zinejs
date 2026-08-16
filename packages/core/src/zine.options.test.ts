@@ -153,6 +153,25 @@ describe('Zine option validation', () => {
     );
   });
 
+  it('rejects an unknown controls.arrows value', () => {
+    expect(
+      () => new Zine(fakeContainer(), { source: src(), controls: { arrows: 'tablet' as any } }),
+    ).toThrow(/arrows/);
+  });
+
+  it('accepts controls.arrows scoped to a device', () => {
+    // Like the other accepting cases, these get past validation into #init, so they need the
+    // renderer that will not reach for a real document.
+    for (const arrows of ['desktop', 'mobile', true, false] as const) {
+      const zine = new Zine(fakeContainer(), {
+        source: src(),
+        renderer: new MockRenderer(),
+        controls: { arrows },
+      });
+      expect(() => zine.destroy()).not.toThrow();
+    }
+  });
+
   it('accepts a well-formed options object', () => {
     expect(
       () => new Zine(fakeContainer(), { source: src(), renderer: new MockRenderer() }),
