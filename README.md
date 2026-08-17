@@ -25,41 +25,56 @@ Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.u
 
 ## Quick start
 
-The container needs a size — give it one via CSS, or the `width`/`height` options.
+An image book:
 
 ```js
 import { Zine, ImageSource } from '@zinejs/core'
 
-const zine = new Zine(document.getElementById('book'), {
+new Zine(document.getElementById('book'), {
   source: new ImageSource([
     '/pages/01.jpg',
     '/pages/02.jpg',
     '/pages/03.jpg',
     '/pages/04.jpg',
   ]),
-  spreadMode: 'cover', // lone first page, then paired
-  curl: 'cone',        // natural conical page turn (WebGL2)
-  zoom: { max: 4 },
 })
-
-await zine.ready
-
-zine.on('pageChanged', ({ page }) => console.log('now on page', page))
-
-document.querySelector('#next').addEventListener('click', () => zine.flipNext())
-document.querySelector('#prev').addEventListener('click', () => zine.flipPrev())
 ```
 
-PDFs are a drop-in swap of the source (bundlers auto-resolve the pdf.js worker):
+A PDF book:
 
 ```js
 import { Zine } from '@zinejs/core'
 import { PdfSource } from '@zinejs/pdf'
 
 new Zine(document.getElementById('book'), {
-  source: new PdfSource('/brochure.pdf', { progressive: true }),
+  source: new PdfSource('/brochure.pdf'),
 })
 ```
+
+Drag a corner or click near an edge to turn. Double-click, pinch, or Ctrl/Cmd+wheel to zoom.
+
+A few options and the API most books use:
+
+```js
+import { Zine } from '@zinejs/core'
+import { PdfSource } from '@zinejs/pdf'
+
+const zine = new Zine(document.getElementById('book'), {
+  source: new PdfSource('/brochure.pdf', { progressive: true }),
+  spreadMode: 'cover', // which is the default - lone first page, then paired; other options: book, single, double
+  zoom: { max: 4 },
+})
+
+await zine.ready
+
+zine.on('pageChanged', ({ page }) => console.log('now on page', page))
+zine.flipNext()
+zine.flipPrev()
+zine.flipTo(12)
+```
+
+> **📖 Full reference, live demos, and guides: [zinejs.com/docs](https://zinejs.com/docs/)**
+The rest of this page is the full options, methods, and events reference.
 
 ## `new Zine(container, options)`
 
