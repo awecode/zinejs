@@ -26,11 +26,13 @@ export class Search {
   /** Increments per query so a slow search that resolves late cannot overwrite a newer one. */
   #run = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
+  #onDismiss?: () => void;
 
   constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
+    this.#onDismiss = options.onDismiss;
     this.#bar = new Sidebar(doc, container, {
       className: 'zine-search',
       label: 'Search results',
@@ -99,7 +101,10 @@ export class Search {
         const excerpt = this.#doc.createElement('small');
         excerpt.textContent = hit.excerpt;
         row.append(label, excerpt);
-        row.addEventListener('click', () => this.#zine.flipTo(hit.page));
+        row.addEventListener('click', () => {
+          this.#zine.flipTo(hit.page);
+          this.#onDismiss?.(); // jump to the hit, then get the rail out of the way
+        });
         return row;
       }),
     );

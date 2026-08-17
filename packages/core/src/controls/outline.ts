@@ -23,11 +23,13 @@ export class Outline {
   #bar: Sidebar;
   #rows: { el: HTMLElement; page: number }[] = [];
   #unsubscribe: (() => void)[] = [];
+  #onDismiss?: () => void;
 
   constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
+    this.#onDismiss = options.onDismiss;
     this.#bar = new Sidebar(doc, container, {
       className: 'zine-outline',
       label: 'Outline',
@@ -81,7 +83,10 @@ export class Outline {
       } else {
         const page = item.page;
         row.setAttribute('aria-label', `${item.title}, page ${page + 1}`);
-        row.addEventListener('click', () => this.#zine.flipTo(page));
+        row.addEventListener('click', () => {
+          this.#zine.flipTo(page);
+          this.#onDismiss?.(); // clicking a heading has served its purpose; get the rail out of the way
+        });
         this.#rows.push({ el: row, page });
       }
       this.#bar.root.appendChild(row);

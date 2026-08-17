@@ -903,7 +903,7 @@ describe('controls outline panel', () => {
     expect(rows[1]!.style.paddingLeft).not.toBe(rows[0]!.style.paddingLeft);
   });
 
-  it('turns to a heading’s page when clicked', async () => {
+  it('turns to a heading’s page when clicked, then closes the rail', async () => {
     const { zine, el } = await mount({ source: new DocSource(8, toc()) });
     await openOutline(el);
     const results = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-outline-row')].find(
@@ -912,6 +912,8 @@ describe('controls outline panel', () => {
     results.click();
     await flush();
     expect(zine.getPage()).toBe(4);
+    // The reader picked a destination; the rail has done its job and gets out of the way.
+    expect(scope(el).querySelector('.zine-outline')).toBeNull();
   });
 
   it('shows an unresolvable heading but does not let it be clicked', async () => {
@@ -999,6 +1001,24 @@ describe('controls outline panel', () => {
     await flush();
     const wrap = scope(el).querySelector('.zine-panel-wrap')!;
     expect(wrap.classList.contains('zine-panel-wrap-overlay')).toBe(true);
+  });
+
+  it('turns to a hit’s page when clicked, then closes the rail', async () => {
+    const { zine, el } = await mount({
+      source: new TextSource(['nothing here', 'nor here', 'the invoice is due']),
+    });
+    byLabel(el, 'Search')!.click();
+    await flush();
+    const input = scope(el).querySelector<HTMLInputElement>('.zine-search-input')!;
+    input.value = 'invoice';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 220)); // outlast the 180ms search debounce
+    const hit = scope(el).querySelector<HTMLButtonElement>('.zine-search-hit')!;
+    expect(hit).not.toBeNull();
+    hit.click();
+    await flush();
+    expect(zine.getPage()).toBe(2);
+    expect(scope(el).querySelector('.zine-search')).toBeNull();
   });
 
   it('hides search on a book whose source has no text', async () => {
