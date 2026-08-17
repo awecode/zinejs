@@ -51,7 +51,7 @@ new Zine(document.getElementById('book'), {
 })
 ```
 
-Drag a corner or click near an edge to turn. Double-click, pinch, or Ctrl/Cmd+wheel to zoom.
+Drag a corner or click near an edge to turn. Arrow keys turn a focused book. Double-click, pinch, or Ctrl/Cmd+wheel to zoom.
 
 A few options and the API most books use:
 
@@ -78,17 +78,19 @@ The rest of this page is the full options, methods, and events reference.
 
 ## `new Zine(container, options)`
 
-`container` is an `HTMLElement`. Options (only `source` is required):
+`container` is an `HTMLElement`. The book takes the container's CSS width (a block element is enough). After the first paint it sets `aspect-ratio` from the spread so height follows. Pass `width` / `height` for a fixed pixel size; if both are set, that box wins and the ratio is ignored.
+
+Options (only `source` is required):
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** See [Sources](#sources). |
 | `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. See [Renderers](#renderers). |
-| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls`. See [Curl models](#curl-models). |
+| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls`. See [Curl models](#curl-models). Uses `simple` under [reduced motion](#accessibility). |
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads. See [`spreadMode`](#spreadmode). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
-| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). |
+| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). Overridden under [reduced motion](#accessibility). |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
 | `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). See [Covers](#covers-and-page-replacement). |
@@ -432,6 +434,10 @@ Passing an unbundled name as a string (`curl: 'silk'`) throws with the import li
 bundled names are valid in JSON config. A JSON Schema is published at
 `@zinejs/core/options.schema.json`.
 
+For anchored models (`cone`, `leaf`, `flick`, `silk`), the fold originates at the corner nearest where the reader taps/grabs.
+
+On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes longer than `flipDuration` and eases out harder: there is no facing landing to watch, only the peel and fade. `cone` also softens and slightly delays its flop on full-width lone pages so the peel stays over the sheet; the other models are otherwise unchanged.
+
 ### Custom curls
 
 A curl model is a plain object, so your own needs no registration:
@@ -453,13 +459,7 @@ new Zine(el, { source, curl: fold })
 
 ### Reduced motion
 
-Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short fixed duration,
-whatever `curl` and `flipDuration` say. Motion is reduced rather than removed: a page that swapped
-instantly would leave no cue as to which way the book moved.
-
-For anchored models (`cone`, `leaf`, `flick`, `silk`), the fold originates at the corner nearest where the reader taps/grabs.
-
-On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes longer than `flipDuration` and eases out harder — there is no facing landing to watch, only the peel and fade. `cone` also softens and slightly delays its flop on full-width lone pages so the peel stays over the sheet; the other models are otherwise unchanged.
+`prefers-reduced-motion: reduce` flattens the turn to `simple` at a short fixed duration. See [Accessibility](#accessibility).
 
 ## Methods
 
@@ -520,6 +520,14 @@ Subscribe with `zine.on(event, listener)`; it returns an unsubscribe function.
 | `progress` | `{ loaded: number; total: number }` | The document is downloading. Only sources that report byte progress (a PDF from a URL). Hide a custom indicator on `ready`. |
 | `sourceError` | `{ index: number; error: unknown }` | A page fails to load/decode. |
 | `rendererFallback` | `{ from: string; to: string }` | The renderer falls back (e.g. `webgl2` → `css`). |
+
+## Accessibility
+
+The container is made focusable (`tabindex="0"` unless you already set one) and labelled as a flipbook. With the book focused, Arrow keys turn a page in reading order (RTL swaps left and right), Home and End jump to the first and last page, and an `aria-live` region announces the current page.
+
+Built-in toolbar buttons have accessible names and a `:focus-visible` outline. The share dialog is a modal: it traps focus, closes on Escape, and restores focus when it shuts. Side panels (thumbnails, outline, search) close on Escape as well.
+
+Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short fixed duration, whatever `curl` and `flipDuration` say. Motion is reduced rather than removed: a page that swapped instantly would leave no cue as to which way the book moved. Decorative toolbar transitions stay off under the same preference.
 
 ## Sources
 
@@ -614,7 +622,7 @@ new PdfSource('/doc.pdf', { legacy: false })
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) · [github.com/awecode/zinejs](https://github.com/awecode/zinejs)
+Free for personal, education, and non-profit use under [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/). Commercial products and client work need a [one-time license](https://zinejs.com/license).
 
 ---
 
