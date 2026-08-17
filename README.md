@@ -534,7 +534,7 @@ new PdfSource('/doc.pdf', { renderScale: 1, progressive: true })
 | `maxCacheBytes` | `number` | ~256 MB | Soft cap on cached page bytes (LRU-evicted). |
 | `progressive` | `boolean` | `false` | Paint a low-res page first, then swap to crisp (faster first paint). |
 | `disableAutoFetch` | `boolean` | `false` | Fetch only the byte ranges visible pages need (range-capable servers). |
-| `legacy` | `boolean` | `true` | Load pdf.js's transpiled build (polyfills, broader reach). `false` serves the lean modern build. Picks the matching worker. Ignored when a pre-created document or `globalThis.pdfjsLib` is supplied. |
+| `legacy` | `boolean` | `true` | Load pdf.js's transpiled build (polyfills, broader reach). `false` serves the lean modern build. Picks the matching worker. Ignored when a pre-created document or `globalThis.pdfjsLib` is supplied. See [Browser support](#browser-support). |
 
 `pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
 
@@ -557,6 +557,30 @@ new Zine(el, {
 - **CSS** (`css`) — DOM/CSS-transform fallback with a plain spine rotation; used automatically when WebGL2 is unavailable.
 
 With `renderer: 'auto'` (default), zinejs picks WebGL2 when available and falls back to CSS, emitting `rendererFallback`.
+
+## Browser support
+
+zinejs is built for a wide range of browsers. Where WebGL2 is available it uses the GPU renderer
+(page-curl, lighting). Elsewhere it falls back to the CSS renderer on its own, so the book still
+turns, zooms, and reads the same way.
+
+Image books (`ImageSource`) work on very old browsers. They only need ordinary DOM, canvas, and
+`fetch` / `createImageBitmap`.
+
+PDF books go through [pdf.js](https://mozilla.github.io/pdf.js/). `PdfSource` loads pdf.js's
+**legacy** build by default: a transpiled, polyfilled copy that runs on both older engines and
+current ones, so PDF flipbooks stay broadly usable. Browsers that are both very old and rarely
+seen in the wild may still fail to rasterize pages.
+
+Mozilla documents the [legacy build](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#faq-support)
+as supporting Chrome 125+, Firefox ESR, Safari 18+, and Chromium Edge. In our own tests, PDF text
+rasterizes correctly back to Chrome 114.
+
+To skip the polyfills and load the smaller, slightly faster modern build (recent engines only):
+
+```js
+new PdfSource('/doc.pdf', { legacy: false })
+```
 
 ## License
 
