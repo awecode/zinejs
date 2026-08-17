@@ -28,7 +28,7 @@ Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.u
 The container needs a size — give it one via CSS, or the `width`/`height` options.
 
 ```js
-import { Zine, ImageSource } from '@zinejs/core';
+import { Zine, ImageSource } from '@zinejs/core'
 
 const zine = new Zine(document.getElementById('book'), {
   source: new ImageSource([
@@ -40,25 +40,25 @@ const zine = new Zine(document.getElementById('book'), {
   spreadMode: 'cover', // lone first page, then paired
   curl: 'cone',        // natural conical page turn (WebGL2)
   zoom: { max: 4 },
-});
+})
 
-await zine.ready;
+await zine.ready
 
-zine.on('pageChanged', ({ page }) => console.log('now on page', page));
+zine.on('pageChanged', ({ page }) => console.log('now on page', page))
 
-document.querySelector('#next').addEventListener('click', () => zine.flipNext());
-document.querySelector('#prev').addEventListener('click', () => zine.flipPrev());
+document.querySelector('#next').addEventListener('click', () => zine.flipNext())
+document.querySelector('#prev').addEventListener('click', () => zine.flipPrev())
 ```
 
 PDFs are a drop-in swap of the source (bundlers auto-resolve the pdf.js worker):
 
 ```js
-import { Zine } from '@zinejs/core';
-import { PdfSource } from '@zinejs/pdf';
+import { Zine } from '@zinejs/core'
+import { PdfSource } from '@zinejs/pdf'
 
 new Zine(document.getElementById('book'), {
   source: new PdfSource('/brochure.pdf', { progressive: true }),
-});
+})
 ```
 
 ## `new Zine(container, options)`
@@ -86,6 +86,7 @@ new Zine(document.getElementById('book'), {
 | `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
 | `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
+| `loading` | `boolean` | `true` | Overlay while a URL PDF downloads and the first spread prepares. `false` renders none; drive your own from the `progress` event and `ready`. |
 | `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
 | `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. |
 
@@ -113,12 +114,13 @@ every width, or change it later with `setResponsiveSpread()`.
 ### Sharpness while zoomed
 
 Zooming is a view transform, so by default it magnifies the pixels of a raster made to fit the
-screen. PDFs are vector, so `PdfSource` re-renders the visible region at the magnification being
+screen. PDFs are vector, so `PdfSource` re-renders each visible page at the magnification being
 viewed and the engine lays that over the page: text stays crisp all the way to `zoom.max`.
 
-Only the part on screen is rasterized, so the cost stays flat however far in you go, and the
-re-render is debounced so a pinch or pan does not rasterize on every frame. Image books are
-already at their source resolution and are unaffected.
+The whole page is rasterized (the renderer draws a page as one texture, so a crop of the viewport
+cannot be handed to it). Cost scales with zoom, not with pan. The re-render is debounced so a
+pinch does not rasterize on every frame. Image books are already at their source resolution and
+are unaffected.
 
 A custom `Source` can do the same. `get` takes an optional second argument while the reader is
 zoomed:
@@ -128,19 +130,20 @@ get(index: number, opts?: PageRequest): Promise<PageContent>
 // PageRequest: { scale: number, region: { x, y, width, height } }  // region in 0..1 of the page
 ```
 
-It is a hint. Ignore it and return the whole page as usual, which is what a source backed by a
-fixed-resolution original should do; the engine notices it did not get the region it asked for and
-leaves the normal raster on screen.
+It is a hint. The engine currently always requests the whole page (`region` of
+`{ x: 0, y: 0, width: 1, height: 1 }`). Ignore `opts` and return the whole page as usual, which is
+what a source backed by a fixed-resolution original should do. The engine notices a raster that is
+no sharper than what is already on screen and leaves it in place.
 
 ## Controls
 
 A toolbar is rendered below the book by default, in normal flow so it never covers a page.
 
 ```js
-new Zine(el, { source, controls: false });                    // no toolbar
-new Zine(el, { source, controls: { position: 'top' } });      // move it
-new Zine(el, { source, controls: { docked: false } });        // float it over the book
-new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the buttons
+new Zine(el, { source, controls: false })                    // no toolbar
+new Zine(el, { source, controls: { position: 'top' } })      // move it
+new Zine(el, { source, controls: { docked: false } })        // float it over the book
+new Zine(el, { source, controls: { items: ['prev', 'next'] } }) // choose the buttons
 ```
 
 ### `controls` options
@@ -233,9 +236,10 @@ source that can produce text — see [Search](#search).
 
 Controls hide themselves when they cannot work: `search` unless the source can produce text (see
 [Search](#search)), `download` unless there is an original file to save (see
-[Download](#download)), and `fullscreen` where the Fullscreen API is unavailable. A submenu whose
-entries have all hidden themselves hides too, rather than opening onto nothing — so `menu`
-disappears on a book with no downloadable file.
+[Download](#download)), `print` unless the book can be printed (see [Print](#print)),
+`thumbnails` / `outline` unless `isDocument()`, and `fullscreen` where the Fullscreen API is
+unavailable. A submenu whose entries have all hidden themselves hides too, rather than opening
+onto nothing. The `⋮` `menu` still shows on an image book (`first`, `last`, `spread` remain).
 
 ### Custom controls
 
@@ -243,19 +247,19 @@ Register one with `defineControl`, then name it in `items`. A control with `chil
 submenu, nested as deeply as you like.
 
 ```js
-import { Zine, defineControl } from '@zinejs/core';
+import { Zine, defineControl } from '@zinejs/core'
 
 defineControl({
   id: 'print',
   title: 'Print',
   icon: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
   action: ({ zine }) => window.print(),
-});
+})
 
 new Zine(el, {
   source,
   controls: { items: ['prev', 'next', '|', { id: 'tools', title: 'Tools', children: ['print', 'share'] }] },
-});
+})
 ```
 
 | Field | Type | Description |
@@ -264,7 +268,7 @@ new Zine(el, {
 | `title` | `string \| (ctx) => string` | Tooltip and accessible name. A function is re-read on every change, so a toggle can say what it will do next. |
 | `icon` | `string \| (ctx) => string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. A function is re-read on every change, so a glyph can mirror in RTL or follow state. |
 | `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
-| `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
+| `action` | `(ctx) => void \| Promise<void>` | What it does. `ctx` is `{ zine, close }`. A returned promise keeps the button busy (and a submenu open) until it settles. |
 | `render` | `(ctx) => HTMLElement` | Build a custom widget instead of a button. |
 | `isVisible` | `(ctx) => boolean` | Whether the control applies to this book at all — search with no text, download with no file. Failing it removes the control. For something that comes and goes as the reader moves, prefer `isDisabled`, so the bar does not reshuffle. |
 | `isDisabled` | `(ctx) => boolean` | Grey out and block the action. |
@@ -288,7 +292,7 @@ it themes and the controls follow along:
 To pin the controls to one scheme regardless of the page, pass `controls.colorScheme`:
 
 ```js
-new Zine(el, { source, controls: { colorScheme: 'dark' } }); // always dark
+new Zine(el, { source, controls: { colorScheme: 'dark' } }) // always dark
 ```
 
 **Branding.** For colours of your own, set these custom properties. Each overrides both schemes,
@@ -300,8 +304,12 @@ so a value you set here wins over the automatic light/dark above:
   --zine-controls-fg: #f4f4f5;
   --zine-controls-hover: rgba(255, 255, 255, 0.14);
   --zine-controls-accent: #7dd3fc;
+  --zine-controls-divider: rgba(255, 255, 255, 0.1);
 }
 ```
+
+The loading overlay uses `--zine-loading-bg`, `--zine-loading-fg`, `--zine-loading-accent`, and
+`--zine-loading-track`.
 
 ## Deep links
 
@@ -336,13 +344,15 @@ buttons are plain share links with no third-party scripts or trackers.
 
 ## Search
 
-`zine.search(query)` resolves to `{ page, excerpt }[]` for every page whose text contains `query`,
-case-insensitively. It needs a source that can produce text: `PdfSource` can, `ImageSource` cannot.
+`zine.search(query)` resolves to `{ page, excerpt }[]` for pages whose text contains `query`,
+case-insensitively: at most one hit per page, in page order, capped at 50 by default. Pass
+`{ limit }` to change the cap. It needs a source that can produce text: `PdfSource` can,
+`ImageSource` cannot.
 
 ```js
 if (zine.canSearch()) {
-  const hits = await zine.search('invoice');
-  zine.flipTo(hits[0].page);
+  const hits = await zine.search('invoice')
+  zine.flipTo(hits[0].page)
 }
 ```
 
@@ -359,11 +369,14 @@ from raw bytes; a PDF opened from a pdf.js document you created yourself has no 
 and an image book is not a single file at all — both resolve `false`.
 
 ```js
-if (zine.canDownload()) await zine.download();
+if (zine.canDownload()) await zine.download()
 ```
 
-The `download` control in the `⋮` menu calls this, and hides itself (taking the empty menu with
-it) when `canDownload()` is false.
+The `download` control in the `⋮` menu calls this, and hides itself when `canDownload()` is false.
+
+To make a custom source downloadable, implement the optional
+`getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
+when `url` came from `URL.createObjectURL` so it is released after the save.
 
 ## Print
 
@@ -372,10 +385,8 @@ frame rather than printing the host page — printing the page would capture the
 whichever single spread is on screen, while the browser paginates a PDF properly by itself.
 
 Like download, it needs a source with an original file, so the `print` control appears for PDFs
-and not for image books.
-To make a custom source downloadable, implement the optional
-`getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
-when `url` came from `URL.createObjectURL` so it is released after the save.
+and not for image books. It also hides when the browser reports `navigator.pdfViewerEnabled ===
+false` (Android Chrome has no inline PDF viewer, so print would do nothing).
 
 ## Curl models
 
@@ -385,10 +396,10 @@ Two are bundled and named by string. The other four are shipped as importable mo
 carries only the curl it actually uses:
 
 ```ts
-import { silk } from '@zinejs/core/curls';
+import { silk } from '@zinejs/core/curls'
 
-new Zine(el, { source, curl: silk });   // imported model
-new Zine(el, { source, curl: 'cone' }); // bundled, by name
+new Zine(el, { source, curl: silk })   // imported model
+new Zine(el, { source, curl: 'cone' }) // bundled, by name
 ```
 
 | `curl` | How to use | Motion | Anchored to tap? |
@@ -408,16 +419,16 @@ bundled names are valid in JSON config, which is why `options.schema.json` lists
 A curl model is a plain object, so your own needs no registration:
 
 ```ts
-import type { CurlModel } from '@zinejs/core';
+import type { CurlModel } from '@zinejs/core'
 
 const fold: CurlModel = {
   deform(mesh, W, H, t, anchor) { /* write mesh.positions, then computeNormals(mesh) */ },
   anchored: false,  // true to fold from the tapped corner (anchor.y)
   flat: true,       // sheet is flat by mid-turn: a lone page may dissolve earlier
   gloss: false,     // no specular highlight (for a sheet that never bends)
-};
+}
 
-new Zine(el, { source, curl: fold });
+new Zine(el, { source, curl: fold })
 ```
 
 `computeNormals` and `createPageMesh` are exported from `@zinejs/core/curls` for this.
@@ -455,12 +466,14 @@ On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it
 | `setResponsiveSpread(on)` | `void` | Allow or forbid that override, re-laying out at once. |
 | `isResponsiveSingle()` | `boolean` | Whether one page is showing *because* the container is narrow. |
 | `getPageImage(index)` | `Promise<PageContent \| null>` | One page's raster, for thumbnails or export. `null` if it cannot be decoded. |
+| `getPageBox()` | `{ x, y, width, height } \| null` | Where the book is painted inside the container, in container pixels (aspect-fitted). `null` before the first paint. |
 | `getZoom()` | `number` | Current zoom scale (`1` = fit). |
 | `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |
 | `canSearch()` | `boolean` | Whether this book's source can produce text. |
-| `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
+| `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`, at most one hit per page, default cap 50 (`{ limit }`). See [Search](#search). |
 | `canDownload()` | `boolean` | Whether the original document can be saved. |
 | `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
+| `getSourceFile()` | `Promise<DownloadInfo \| null>` | The original file, if any. Same payload `download()` uses. |
 | `canPrint()` | `boolean` | Whether the book can be printed. |
 | `print()` | `Promise<boolean>` | Print the original; `false` if there is nothing to print. |
 | `isDocument()` | `boolean` | Whether the book is a document (a PDF) rather than loose images. |
@@ -486,17 +499,18 @@ Subscribe with `zine.on(event, listener)`; it returns an unsubscribe function.
 | `pageChanged` | `{ page: number }` | The current page changes. |
 | `spreadChanged` | `{ mode: SpreadMode; singlePage: boolean }` | Pages regroup, from `setSpreadMode`/`toggleSpreadMode` or a narrow container. Useful for sizing your own chrome, since the book's proportions change with it. |
 | `zoomChanged` | `{ scale: number }` | The zoom scale changes. |
+| `progress` | `{ loaded: number; total: number }` | The document is downloading. Only sources that report byte progress (a PDF from a URL). Hide a custom indicator on `ready`. |
 | `sourceError` | `{ index: number; error: unknown }` | A page fails to load/decode. |
 | `rendererFallback` | `{ from: string; to: string }` | The renderer falls back (e.g. `webgl2` → `css`). |
 
 ## Sources
 
-A source resolves page indices to rasters. Two are built in; any object implementing the `Source` interface works.
+A source resolves page indices to rasters. `ImageSource` ships in `@zinejs/core`; `PdfSource` is the `@zinejs/pdf` plugin. Any object implementing the `Source` interface works.
 
 ### `ImageSource(urls, options?)`
 
 ```js
-new ImageSource(['/a.jpg', '/b.jpg'], { preload: 1, fit: 'contain' });
+new ImageSource(['/a.jpg', '/b.jpg'], { preload: 1, fit: 'contain' })
 ```
 
 | Option | Type | Default | Description |
@@ -509,7 +523,7 @@ new ImageSource(['/a.jpg', '/b.jpg'], { preload: 1, fit: 'contain' });
 `src` is a URL `string`, a PDF `ArrayBuffer`/`Uint8Array`, or a pre-created pdf.js document.
 
 ```js
-new PdfSource('/doc.pdf', { renderScale: 1, progressive: true });
+new PdfSource('/doc.pdf', { renderScale: 1, progressive: true })
 ```
 
 | Option | Type | Default | Description |
@@ -520,6 +534,7 @@ new PdfSource('/doc.pdf', { renderScale: 1, progressive: true });
 | `maxCacheBytes` | `number` | ~256 MB | Soft cap on cached page bytes (LRU-evicted). |
 | `progressive` | `boolean` | `false` | Paint a low-res page first, then swap to crisp (faster first paint). |
 | `disableAutoFetch` | `boolean` | `false` | Fetch only the byte ranges visible pages need (range-capable servers). |
+| `legacy` | `boolean` | `true` | Load pdf.js's transpiled build (polyfills, broader reach). `false` serves the lean modern build. Picks the matching worker. Ignored when a pre-created document or `globalThis.pdfjsLib` is supplied. |
 
 `pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
 
@@ -533,7 +548,7 @@ new Zine(el, {
   frontCover: '/cover.jpg',   // adds a lone front page
   backCover: '/back.jpg',     // adds a lone back page
   pages: { 0: '/hero.jpg', -1: '/last.jpg' }, // replace by index (negative = from end)
-});
+})
 ```
 
 ## Renderers
