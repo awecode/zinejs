@@ -1,13 +1,22 @@
 /**
- * Drive the demo against pinned Chrome-for-Testing majors (default 113, 128, 140, 144).
+ * Drive the demo against pinned Chrome-for-Testing majors.
+ *
+ * Default matrix: 113, 114, 125, 153
+ *
+ *   113  oldest Chrome-for-Testing major (CfT has nothing below this)
+ *   114  oldest version we found that rasterizes PDF text correctly
+ *        (113 paints the page colour but drops glyphs: worker TypeError
+ *        ArrayBuffer.prototype.transferToFixedLength)
+ *   125  minimum Chrome claimed by pdf.js's legacy build
+ *   153  current CfT Canary as of 2026-08 when this was written (152 is Stable)
  *
  * From the repo root, with the demo already running:
  *
  *   pnpm --filter @zinejs/demo dev
- *   pnpm test:chrome-matrix:install   # once: download Chrome 113/128/140/144 into ./chrome
+ *   pnpm test:chrome-matrix:install   # once: download the default majors into ./chrome
  *   pnpm test:chrome-matrix           # PDF + image, WebGL + CSS
  *
- * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=113,128 pnpm test:chrome-matrix
+ * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=114,125 pnpm test:chrome-matrix
  * Override a binary with CHROME_<major>_PATH=/path/to/chrome. Majors below 113 are not
  * on Chrome-for-Testing; install skips those.
  *
@@ -24,7 +33,7 @@ const REPO = join(scriptDir, '../../..')
 const CACHE = join(REPO, 'chrome')
 const SHOTS = join(CACHE, 'screenshots')
 const BASE = process.env.DEMO_URL ?? 'http://127.0.0.1:5173'
-const MAJORS = (process.env.CHROME_MAJORS ?? '113,128,140,144')
+const MAJORS = (process.env.CHROME_MAJORS ?? '113,114,125,153')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
@@ -252,7 +261,7 @@ if (args.includes('--help') || args.includes('-h')) {
   pnpm test:chrome-matrix
 
   DEMO_URL           default http://127.0.0.1:5173
-  CHROME_MAJORS      default 113,128,140,144
+  CHROME_MAJORS      default 113,114,125,153
   CHROME_<major>_PATH  override binary for a major
 `)
   process.exit(0)
