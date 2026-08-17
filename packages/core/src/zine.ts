@@ -593,13 +593,18 @@ export class Zine {
     const doc = this.#container.ownerDocument;
     if (!info || !doc) return false;
 
+    // A cross-origin PDF loads into the frame but the frame is then cross-origin, so calling
+    // print() on its window throws and the dialog never opens. Pull it into a same-origin blob so
+    // the frame is scriptable — the same fetch the download path uses.
+    const { url, revoke } = await this.#sameOriginFile(info, doc);
+
     const frame = doc.createElement('iframe');
     // Offscreen rather than display:none: a hidden frame does not always lay out its document,
     // and an unlaid-out frame has nothing to print.
     frame.style.cssText =
       'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0;';
     frame.setAttribute('aria-hidden', 'true');
-    frame.src = info.url;
+    frame.src = url;
 
     return new Promise<boolean>((resolve) => {
       let settled = false;
@@ -610,7 +615,7 @@ export class Zine {
         // the frame while it is open cancels the job.
         setTimeout(() => {
           frame.remove();
-          if (info.revoke) URL.revokeObjectURL(info.url);
+          if (revoke) URL.revokeObjectURL(url);
         }, 60_000);
         resolve(ok);
       };
@@ -676,22 +681,11 @@ export class Zine {
     if (!info) return false;
     const doc = this.#container.ownerDocument;
     if (!doc) return false;
-    let url = info.url;
-    let revoke = info.revoke ?? false;
     // The `download` attribute is honoured only for same-origin (and blob/data) URLs; for a
     // cross-origin one the browser ignores it and just navigates to the file, opening the PDF in
-    // a tab instead of saving it. Pull such a file into a same-origin blob so the save is forced
-    // with its filename. The server must allow CORS, which it already does — the viewer fetched
-    // the same PDF to render it. On failure fall back to the raw URL (opens in a tab, no worse).
-    if (!revoke && this.#isCrossOrigin(url, doc)) {
-      try {
-        const blob = await (await fetch(url)).blob();
-        url = URL.createObjectURL(blob);
-        revoke = true;
-      } catch {
-        /* keep the raw URL */
-      }
-    }
+    // a tab instead of saving it. Pulling the file into a same-origin blob forces the save with
+    // its filename.
+    const { url, revoke } = await this.#sameOriginFile(info, doc);
     const link = doc.createElement('a');
     link.href = url;
     link.download = info.filename;
@@ -702,6 +696,25 @@ export class Zine {
     // An object URL is ours to clean up; give the click a tick to start first.
     if (revoke) setTimeout(() => URL.revokeObjectURL(url), 10_000);
     return true;
+  }
+
+  /**
+   * A same-origin URL for the source file, so an `<a download>` saves it and a print frame can be
+   * scripted. A file that is already same-origin, or a blob we made ourselves (`revoke`), is
+   * returned unchanged; a cross-origin one is fetched into a blob. The server must allow CORS,
+   * which it already does — the viewer fetched the same PDF to render it. On a fetch failure the
+   * raw URL is returned (opens in a tab, no worse than before).
+   */
+  async #sameOriginFile(info: DownloadInfo, doc: Document): Promise<{ url: string; revoke: boolean }> {
+    if (info.revoke || !this.#isCrossOrigin(info.url, doc)) {
+      return { url: info.url, revoke: info.revoke ?? false };
+    }
+    try {
+      const blob = await (await fetch(info.url)).blob();
+      return { url: URL.createObjectURL(blob), revoke: true };
+    } catch {
+      return { url: info.url, revoke: false };
+    }
   }
 
   /** Whether `url` resolves to a different origin than the page, so an `<a download>` would be

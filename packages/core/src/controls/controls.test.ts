@@ -1114,6 +1114,56 @@ describe('Zine.print', () => {
       if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
     }
   });
+
+  it('prints a cross-origin file through a same-origin blob so the frame stays scriptable', async () => {
+    // A cross-origin frame cannot be driven with print(); pulling the PDF into a blob first makes
+    // the frame same-origin, so its window is scriptable and the dialog opens.
+    class RemoteSource extends FakeSource {
+      async getDownload(): Promise<{ url: string; filename: string }> {
+        return { url: 'https://cdn.example.com/issues/1084.pdf', filename: '1084.pdf' };
+      }
+    }
+    const g = globalThis as unknown as {
+      fetch: unknown;
+      URL: { createObjectURL: unknown; revokeObjectURL: unknown };
+    };
+    const realFetch = g.fetch;
+    const realCreate = g.URL.createObjectURL;
+    const realRevoke = g.URL.revokeObjectURL;
+    let fetched = '';
+    g.fetch = (input: string) => {
+      fetched = input;
+      return Promise.resolve({ blob: () => Promise.resolve(new Blob(['%PDF'])) });
+    };
+    g.URL.createObjectURL = () => 'blob:mock-object-url';
+    g.URL.revokeObjectURL = (): void => {};
+    const printed: string[] = [];
+    const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+      configurable: true,
+      get() {
+        const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
+        return { focus: () => {}, print: () => printed.push(src) };
+      },
+    });
+    try {
+      const { zine } = await mount({ source: new RemoteSource(8) });
+      const done = zine.print();
+      await flush(); // the file is fetched into a blob before the frame is created
+      const frame = document.querySelector('iframe')!;
+      expect(frame.getAttribute('src')).toBe('blob:mock-object-url'); // not the remote URL
+      frame.dispatchEvent(new Event('load'));
+      expect(await done).toBe(true);
+      expect(fetched).toBe('https://cdn.example.com/issues/1084.pdf');
+      expect(printed).toEqual(['blob:mock-object-url']);
+      frame.remove();
+    } finally {
+      if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
+      g.fetch = realFetch;
+      g.URL.createObjectURL = realCreate;
+      g.URL.revokeObjectURL = realRevoke;
+    }
+  });
 });
 
 describe('Zine.download', () => {
