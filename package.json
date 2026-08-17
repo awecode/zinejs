@@ -5,7 +5,7 @@
   "private": true,
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "packageManager": "pnpm@10.33.4",
   "devDependencies": {
     "@playwright/test": "^1.62.0",

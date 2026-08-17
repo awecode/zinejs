@@ -1,8 +1,10 @@
 # @zinejs/core
 
-Framework-agnostic flipbook engine: turn images or PDFs into a page-flipping book. Zero dependencies. Ships a **CSS renderer** (works everywhere, no GPU) and a **WebGL2 renderer** (page-curl, auto-selected where a GPU is available), behind one API — you never choose a renderer.
+Framework-agnostic flipbook engine for the web. Turn a list of images (or a PDF, via [`@zinejs/pdf`](https://www.npmjs.com/package/@zinejs/pdf)) into a page-flip book. Zero dependencies.
 
-> Pre-1.0 and under active development. Licensed **PolyForm Noncommercial 1.0.0** (free for non-commercial use).
+Where WebGL2 is available it uses the GPU renderer (page-curl, lighting). Elsewhere it falls back to CSS on its own.
+
+> **Docs, live demos, and guides:** [zinejs.com/docs](https://zinejs.com/docs/) · [examples](https://zinejs.com/examples)
 
 ## Install
 
@@ -10,79 +12,55 @@ Framework-agnostic flipbook engine: turn images or PDFs into a page-flipping boo
 npm install @zinejs/core
 ```
 
-Also ships a **UMD** build at `dist/index.umd.js` (global `ZineJS`) for CDN / `<script>` hosts. The ESM build code-splits the CSS and WebGL2 renderers; the UMD build inlines both so a single script is enough.
+Also ships a **UMD** build at `dist/index.umd.js` (global `ZineJS`) for [CDN / `<script>` hosts](https://zinejs.com/examples/html-cdn). The ESM build code-splits the CSS and WebGL2 renderers (and the toolbar); the UMD build inlines the renderers so a single script is enough.
 
 ## Image book
 
 ```js
-import { Zine, ImageSource } from '@zinejs/core';
+import { Zine, ImageSource } from '@zinejs/core'
 
-const book = new Zine(document.getElementById('book'), {
+new Zine(document.getElementById('book'), {
   source: new ImageSource([
     'page-01.png',
     'page-02.png',
     'page-03.png',
     'page-04.png',
   ]),
-});
+})
 ```
 
-Give the container a size (e.g. `#book { width: 900px; height: 560px; }`). Flip by dragging a corner or clicking near an edge; zoom with double-click, Ctrl/⌘+wheel, or pinch.
+Drag a corner or click near an edge to turn. Double-click, pinch, or Ctrl/Cmd+wheel to zoom.
 
 ## PDF book
 
-Install the plugin (see [`@zinejs/pdf`](https://www.npmjs.com/package/@zinejs/pdf)):
+Install [`@zinejs/pdf`](https://www.npmjs.com/package/@zinejs/pdf) as well:
 
 ```js
-import { Zine } from '@zinejs/core';
-import { PdfSource } from '@zinejs/pdf';
+import { Zine } from '@zinejs/core'
+import { PdfSource } from '@zinejs/pdf'
 
 new Zine(document.getElementById('book'), {
   source: new PdfSource('document.pdf'),
-});
+})
 ```
 
-## Options
+See [PdfSource](https://zinejs.com/docs) for worker setup, `legacy`, and CDN.
 
-```ts
-new Zine(container, {
-  source,                    // ImageSource | PdfSource (required)
-  direction: 'ltr',          // 'ltr' | 'rtl'
-  spreadMode: 'cover',       // 'double' | 'single' | 'cover' (lone first page) | 'book' (lone first & last)
-  curl: 'cone',              // WebGL2 only: 'cone' | 'roll' | 'leaf' | 'flick' | 'silk' | 'simple'
-  frontCover: 'front.jpg',   // optional image prepended as a lone front cover
-  backCover: 'back.jpg',     // optional image appended as a lone back cover
-  pages: { 4: 'ad.jpg' },    // optional: replace source pages with images (0-based; -1 = last)
-  startPage: 0,
-  flipDuration: 800,         // ms (spread timing; a lone page stretches it and eases out)
-  singlePageThreshold: 640,  // px: below this, show one page at a time
-  clickToFlip: 'edge',       // 'edge' | 'half' | 'off'
-  zoom: { enabled: true, max: 4, wheel: true, doubleClick: [1, 2, 4] },
-  renderer: 'auto',          // 'auto' | 'css' | 'webgl2' | a custom Renderer
-  controls: true,            // built-in toolbar; false for none, or { position, items, … }
-});
-```
+## Options and API
 
-## Controls
-
-A toolbar (paging, page number, zoom, search, share, a `⋮` menu with download, and fullscreen)
-is rendered below the book by default. Turn it off with `controls: false`, move it with
-`controls: { position: 'top' }`, float it over the book with `controls: { docked: false }`, or
-choose the buttons with `controls: { items: [...] }`. Register your own with `defineControl`.
-
-The toolbar and its icons load as a separate chunk, so a book with `controls: false` never
-downloads them. See the [full docs](https://github.com/awecode/zinejs#controls).
-
-See the [root README](../../README.md#curl-models) for what each curl model does.
-## Methods & events
+Only `source` is required. Common options: `spreadMode`, `curl` (`'cone'` or `'simple'` by name; other curls from `@zinejs/core/curls`), `zoom`, `controls`, `renderer` (`'auto'` prefers GPU). A JSON Schema is at `@zinejs/core/options.schema.json`.
 
 ```js
-book.flipNext(); book.flipPrev(); book.flipTo(12);
-book.getPage(); book.getPageCount();
-book.setZoom(2); book.resetZoom();
-book.update(); book.destroy();
+const zine = new Zine(el, {
+  source,
+  spreadMode: 'cover',
+  zoom: { max: 4 },
+})
 
-book.on('ready' | 'pageChanged' | 'flipStart' | 'flipEnd' | 'zoomChanged' | 'sourceError' | 'rendererFallback', handler);
+await zine.ready
+zine.on('pageChanged', ({ page }) => console.log(page))
+zine.flipNext()
+zine.flipTo(12)
 ```
 
-A JSON Schema for the options is published at `@zinejs/core/options.schema.json`.
+The toolbar loads as a separate chunk, so `controls: false` never downloads it. Full options, methods, events, and curl models: [zinejs.com/docs](https://zinejs.com/docs/) and the [GitHub README](https://github.com/awecode/zinejs#readme).

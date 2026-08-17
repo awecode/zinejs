@@ -10,7 +10,7 @@ The sections below are a compact reference for every option, method, and event. 
 
 | Package | What it is |
 | --- | --- |
-| [`@zinejs/core`](packages/core) | The flipbook engine (renderer, gestures, zoom, spreads, curls). |
+| [`@zinejs/core`](packages/core) | The flipbook engine (renderer, gestures, zoom, spreads, curls). Zero dependencies. |
 | [`@zinejs/pdf`](packages/pdf) | PDF content source, powered by pdf.js. |
 
 ## Install
@@ -21,7 +21,7 @@ npm install @zinejs/core
 npm install @zinejs/pdf
 ```
 
-Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.umd.js`). Core exposes the `ZineJS` global; the PDF package **extends** the same global (load core first). See [`@zinejs/pdf`](packages/pdf) for a full CDN example with pdf.js + `workerSrc`.
+Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.umd.js`). Core exposes the `ZineJS` global; the PDF package **extends** the same global (load core first). The ESM build code-splits the CSS and WebGL2 renderers (and the toolbar); the UMD build inlines the renderers so a single script is enough. See the [CDN example](https://zinejs.com/examples/html-cdn).
 
 ## Quick start
 
@@ -152,7 +152,9 @@ no sharper than what is already on screen and leaves it in place.
 
 ## Controls
 
-A toolbar is rendered below the book by default, in normal flow so it never covers a page.
+A toolbar is rendered below the book by default, in normal flow so it never covers a page. The
+toolbar, its icons, and the built-in control definitions load as a separate chunk, so a book with
+`controls: false` never downloads them.
 
 ```js
 new Zine(el, { source, controls: false })                    // no toolbar
@@ -427,7 +429,8 @@ new Zine(el, { source, curl: 'cone' }) // bundled, by name
 | `silk` | `import { silk }` | Hand-turned S-curve: spine-driven rotation with a true inflection (body bend + free-edge reverse curl), early peel lead, corner lag. | Yes |
 
 Passing an unbundled name as a string (`curl: 'silk'`) throws with the import line to use. Only the
-bundled names are valid in JSON config, which is why `options.schema.json` lists just those two.
+bundled names are valid in JSON config. A JSON Schema is published at
+`@zinejs/core/options.schema.json`.
 
 ### Custom curls
 
@@ -539,6 +542,8 @@ new ImageSource(['/a.jpg', '/b.jpg'], { preload: 1, fit: 'contain' })
 
 ```js
 new PdfSource('/doc.pdf', { renderScale: 1, progressive: true })
+new PdfSource(arrayBuffer)
+new PdfSource(await getDocument(...).promise) // a document you created; no workerSrc
 ```
 
 | Option | Type | Default | Description |
@@ -551,7 +556,17 @@ new PdfSource('/doc.pdf', { renderScale: 1, progressive: true })
 | `disableAutoFetch` | `boolean` | `false` | Fetch only the byte ranges visible pages need (range-capable servers). |
 | `legacy` | `boolean` | `true` | Load pdf.js's transpiled build (polyfills, broader reach). `false` serves the lean modern build. Picks the matching worker. Ignored when a pre-created document or `globalThis.pdfjsLib` is supplied. See [Browser support](#browser-support). |
 
-`pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
+`pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. If your app already depends on `pdfjs-dist`, keep major versions compatible so the worker matches the library.
+
+Under a bundler the worker is resolved for you:
+
+```js
+new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+```
+
+Vite, webpack 5, and esbuild rewrite that literal and emit the worker. Resolution order: an explicit `workerSrc` option, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then that auto-default. Pass `workerSrc` only for CDN / UMD or a file you copied yourself. If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off.
+
+CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
 
 ## Covers and page replacement
 

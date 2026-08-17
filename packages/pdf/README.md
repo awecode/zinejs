@@ -1,6 +1,8 @@
 # @zinejs/pdf
 
-PDF content source for [zinejs](https://github.com/), powered by [pdf.js](https://mozilla.github.io/pdf.js/). Renders PDF pages to canvases that the zinejs core paints as a flipbook.
+PDF content source for [zinejs](https://zinejs.com/docs/), powered by [pdf.js](https://mozilla.github.io/pdf.js/). Renders PDF pages to canvases that [`@zinejs/core`](https://www.npmjs.com/package/@zinejs/core) paints as a flipbook.
+
+> **Docs and examples:** [zinejs.com/docs](https://zinejs.com/docs/) · [CDN example](https://zinejs.com/examples/html-cdn)
 
 ## Install
 
@@ -8,118 +10,64 @@ PDF content source for [zinejs](https://github.com/), powered by [pdf.js](https:
 npm install @zinejs/core @zinejs/pdf
 ```
 
-`pdfjs-dist` is a normal dependency of `@zinejs/pdf`, so it installs with the package. The plugin still loads it lazily (dynamic `import`) so it never lands in the `@zinejs/core` bundle. If your app already depends on `pdfjs-dist`, the package manager will typically dedupe to one copy — keep major versions compatible so the worker matches the library.
+`pdfjs-dist` installs with this package. It is loaded lazily (dynamic `import`) so it never lands in the `@zinejs/core` bundle. If your app already depends on `pdfjs-dist`, keep major versions compatible so the worker matches the library.
 
 ## Usage
 
 ```js
-import { Zine } from '@zinejs/core';
-import { PdfSource } from '@zinejs/pdf';
+import { Zine } from '@zinejs/core'
+import { PdfSource } from '@zinejs/pdf'
 
-const book = new Zine(document.getElementById('book'), {
+new Zine(document.getElementById('book'), {
   source: new PdfSource('document.pdf'),
-});
+})
 ```
 
-Under a bundler that's all you need — the pdf.js worker is resolved for you.
+Under a bundler that is all you need: the pdf.js worker is resolved for you.
 
-### CDN / no bundler
+`src` can also be raw bytes or a pdf.js document you already opened:
 
-Both packages ship **UMD** builds (`dist/index.umd.js`) that share the `ZineJS` global — load **core first**, then pdf (the pdf build uses `extend: true` so it merges into `ZineJS` instead of replacing it).
-
-Modern `pdfjs-dist` is ESM-only, so load it in a module script first, expose
-`globalThis.pdfjsLib`, then use classic deferred `<script>` tags for the UMD
-builds (and pass an explicit `workerSrc` — no bundler rewrites the worker URL):
-
-```html
-<script type="module">
-  import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.min.mjs';
-  globalThis.pdfjsLib = pdfjsLib;
-</script>
-
-<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.js"></script>
-<script defer>
-  const book = new ZineJS.Zine(document.getElementById('book'), {
-    source: new ZineJS.PdfSource('document.pdf', {
-      workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.worker.min.mjs',
-    }),
-  });
-</script>
+```js
+new PdfSource(arrayBuffer)
+new PdfSource(await getDocument(url).promise)
 ```
 
-Image-only books can skip pdf.js and use a plain classic script:
+## The pdf.js worker
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
-<script>
-  new ZineJS.Zine(document.getElementById('book'), {
-    source: new ZineJS.ImageSource(['page-01.png', 'page-02.png']),
-  });
-</script>
-```
-
-`PdfSource` prefers `globalThis.pdfjsLib` when present (CDN), otherwise dynamic-imports `pdfjs-dist` (bundlers).
-
-## The pdf.js worker (`workerSrc`)
-
-pdf.js parses and rasterizes in a Web Worker, a separate file the host must locate. By default `PdfSource` resolves it to (the `legacy/` path since `legacy` defaults to true; `build/` when `legacy: false`):
+pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` points at the **legacy** worker (because `legacy` defaults to `true`):
 
 ```js
 new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
 ```
 
-Resolution precedence: an explicit `workerSrc` option → an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc` → the auto-default above. You only pass `workerSrc` when the default can't apply.
+Vite, webpack 5, and esbuild rewrite that literal and emit the asset. Resolution order: `workerSrc` option, then `pdfjsLib.GlobalWorkerOptions.workerSrc`, then the auto-default. Pass `workerSrc` only for CDN / UMD or a file you copied yourself, and keep it on the same build as the library (legacy vs modern).
 
-### Vite / webpack 5 / esbuild
+If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off. A pre-created pdf.js document needs no worker from this package.
 
-Nothing to do — these bundlers statically rewrite the `new URL(..., import.meta.url)` above and emit the worker asset:
-
-```js
-new PdfSource('document.pdf');
-```
-
-### Custom path
-
-Serving the worker yourself (copied to your public dir, etc.):
-
-```js
-new PdfSource('document.pdf', { workerSrc: '/assets/pdf.worker.min.mjs' });
-```
-
-### Already configuring pdf.js yourself
-
-If your app sets `GlobalWorkerOptions.workerSrc`, `PdfSource` leaves it alone — no `workerSrc` needed.
-
-## Passing bytes or a pre-created document
-
-```js
-new PdfSource(arrayBuffer);              // raw PDF bytes (ArrayBuffer | Uint8Array)
-new PdfSource(await getDocument(...).promise); // a pdf.js document you created; no workerSrc needed
-```
+CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
 
 ## Options
 
-```ts
+```js
 new PdfSource(src, {
-  workerSrc,          // string — override the auto-resolved worker URL (see above)
+  workerSrc,           // override the auto-resolved worker URL
   renderScale: 1,      // pages rasterize at renderScale × devicePixelRatio
-  preload: 1,          // adjacent pages to prefetch around a requested page
-  maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB); LRU-evicts beyond it
-  progressive: true,   // paint a low-res page first, then swap to crisp (faster first paint)
-  disableAutoFetch: true, // fetch only the byte ranges visible pages need (range-capable servers)
-  legacy: true,        // load pdf.js's transpiled build (default); false serves the lean modern build
-});
+  preload: 1,          // adjacent pages to prefetch (default 1)
+  maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB)
+  progressive: false,  // true: low-res first, then crisp
+  disableAutoFetch: false, // true: fetch only the ranges visible pages need
+  legacy: true,        // false: lean modern pdf.js (recent engines only)
+})
 ```
 
-`src` is a URL string, `ArrayBuffer`/`Uint8Array` of PDF bytes, or a pre-created pdf.js document.
+### Legacy vs modern (`legacy`)
 
-### Legacy vs modern build (`legacy`)
-
-pdf.js ships two builds. The `legacy` build is transpiled with polyfills and runs on both older and current browsers; the `modern` build is smaller and a touch faster but needs a recent engine. `PdfSource` defaults to `legacy: true`, favouring reach. Pass `legacy: false` to load the modern build when your audience is on current browsers:
+pdf.js ships two builds. The **legacy** build is transpiled with polyfills and is the default, so PDF books stay usable on older engines as well as current ones. The **modern** build is smaller and a touch faster. Pass `legacy: false` when your audience is on recent browsers:
 
 ```js
-new PdfSource('document.pdf', { legacy: false });
+new PdfSource('document.pdf', { legacy: false })
 ```
 
-The flag also picks the matching worker (`legacy/build/pdf.worker.min.mjs` vs `build/pdf.worker.min.mjs`) — the two must be a matched pair. It's ignored when you pass a pre-created document or set `globalThis.pdfjsLib`, since those already chose their build.
+The flag also picks the matching worker. It is ignored when you pass a pre-created document or set `globalThis.pdfjsLib`, since those already chose their build.
+
+Mozilla documents legacy as Chrome 125+, Firefox ESR, Safari 18+, and Chromium Edge. We have seen PDF text rasterize correctly back to Chrome 114. Full notes: [browser support](https://github.com/awecode/zinejs#browser-support).
