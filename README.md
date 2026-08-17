@@ -4,7 +4,7 @@ A framework-agnostic, GPU-accelerated flipbook for the web. Turn a list of image
 
 > **📖 Full reference, live demos, and guides: [zinejs.com/docs](https://zinejs.com/docs/)**
 
-The sections below are a compact reference for every option, method, and event. See the docs for detailed explanations and examples.
+The sections below are a compact reference for every [option](#new-zinecontainer-options), [method](#methods), and [event](#events). See the docs for detailed explanations and examples.
 
 ## Packages
 
@@ -82,27 +82,27 @@ The rest of this page is the full options, methods, and events reference.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** |
-| `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. |
-| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls` — see [Curl models](#curl-models). |
-| `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
+| `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** See [Sources](#sources). |
+| `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. See [Renderers](#renderers). |
+| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls`. See [Curl models](#curl-models). |
+| `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads. See [`spreadMode`](#spreadmode). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
 | `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
-| `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). |
-| `backCover` | `string` (URL) | — | Image appended as a lone back cover (adds a page). |
-| `pages` | `Record<number, string>` | — | Replace source pages with image URLs, keyed by 0-based index (negative = from the end). |
+| `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). See [Covers](#covers-and-page-replacement). |
+| `backCover` | `string` (URL) | — | Image appended as a lone back cover (adds a page). See [Covers](#covers-and-page-replacement). |
+| `pages` | `Record<number, string>` | — | Replace source pages with image URLs, keyed by 0-based index (negative = from the end). See [Covers](#covers-and-page-replacement). |
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
 | `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread. |
 | `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
-| `zoom` | `ZoomOptions` | see below | Zoom behavior. |
-| `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
-| `loading` | `boolean` | `true` | Overlay while a URL PDF downloads and the first spread prepares. `false` renders none; drive your own from the `progress` event and `ready`. |
-| `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
+| `zoom` | `ZoomOptions` | [zoom options](#zoom-options) | Zoom behavior. |
+| `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar. `false` renders none. See [Controls](#controls). |
+| `loading` | `boolean` | `true` | Overlay while a URL PDF downloads and the first spread prepares. `false` renders none; drive your own from the [`progress`](#events) event and `ready`. |
+| `deepLink` | `boolean` | `true` | Keep the page in the URL hash. See [Deep links](#deep-links). |
 | `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. |
 
 ### `spreadMode`
@@ -169,7 +169,7 @@ new Zine(el, { source, controls: { items: ['prev', 'next'] } }) // choose the bu
 | --- | --- | --- | --- |
 | `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge of the book the toolbar sits on. |
 | `docked` | `boolean` | `true` | Sit outside the book. `false` floats the toolbar over it. |
-| `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
+| `items` | `ControlItem[]` | [default layout](#built-in-controls) | The layout. Replaces the default set entirely. |
 | `arrows` | `boolean \| 'desktop' \| 'mobile'` | `true` | Large page-turn arrows flanking the book. `'desktop'`/`'mobile'` limit them to wide/narrow screens. |
 | `colorScheme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Force the controls light or dark. `'auto'` follows the page. See [Styling](#styling). |
 | `className` | `string` | — | Extra class on the toolbar root, for styling. |
@@ -583,7 +583,7 @@ new Zine(el, {
 
 ## Renderers
 
-- **WebGL2** (`webgl2`) — GPU mesh curl with per-pixel lighting and the [curl models](#curl-models) above.
+- **WebGL2** (`webgl2`) — GPU mesh curl with per-pixel lighting and the [curl models](#curl-models).
 - **CSS** (`css`) — DOM/CSS-transform fallback with a plain spine rotation; used automatically when WebGL2 is unavailable.
 
 With `renderer: 'auto'` (default), zinejs picks WebGL2 when available and falls back to CSS, emitting `rendererFallback`.
