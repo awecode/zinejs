@@ -6,6 +6,7 @@ import type {
   PageRequest,
   Source,
 } from '@zinejs/core';
+import { wrapPdfWorkerSrc } from './mapUpsertPolyfill';
 
 /** Minimal shapes of the pdf.js API we rely on (avoids a hard type dependency). */
 interface PdfPageLike {
@@ -184,12 +185,12 @@ export class PdfSource implements Source {
 
   /** Precedence: an explicit `workerSrc` → an already-configured global → an auto-resolved default. */
   #resolveWorkerSrc(configured: string): string {
-    if (this.#workerSrc) return this.#workerSrc;
-    if (configured) return configured;
+    if (this.#workerSrc) return wrapPdfWorkerSrc(this.#workerSrc);
+    if (configured) return wrapPdfWorkerSrc(configured);
     try {
       // Bundlers (Vite / webpack 5 / esbuild) statically rewrite this and emit the worker,
       // so the common case needs no `workerSrc`. Non-bundler / UMD hosts pass it explicitly.
-      return new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+      return wrapPdfWorkerSrc(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href);
     } catch {
       throw new Error(
         "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +

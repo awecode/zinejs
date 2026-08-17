@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PdfSource, type PdfSrc } from './pdfSource';
+import { wrapPdfWorkerSrc } from './mapUpsertPolyfill';
 
 type PdfjsGlobal = { GlobalWorkerOptions: { workerSrc: string } };
 const pdfjsMock = async () => (await import('pdfjs-dist')) as unknown as PdfjsGlobal;
@@ -51,21 +52,27 @@ describe('PdfSource', () => {
   it('auto-resolves the worker when none is provided', async () => {
     const src = new PdfSource('doc.pdf');
     await src.open();
-    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/pdf\.worker\.min\.mjs$/);
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(
+      /pdf\.worker\.min\.mjs$|^blob:/,
+    );
     expect(src.pageCount).toBe(3);
   });
 
   it('prefers an explicit workerSrc over the default', async () => {
     const src = new PdfSource('doc.pdf', { workerSrc: '/custom-worker.mjs' });
     await src.open();
-    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/custom-worker.mjs');
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe(
+      wrapPdfWorkerSrc('/custom-worker.mjs'),
+    );
   });
 
   it('respects an already-configured global workerSrc', async () => {
     (await pdfjsMock()).GlobalWorkerOptions.workerSrc = '/preset-worker.mjs';
     const src = new PdfSource('doc.pdf'); // no explicit option
     await src.open();
-    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/preset-worker.mjs');
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe(
+      wrapPdfWorkerSrc('/preset-worker.mjs'),
+    );
   });
 
   it('uses globalThis.pdfjsLib when present (CDN / UMD host)', async () => {
@@ -85,7 +92,7 @@ describe('PdfSource', () => {
       await src.open();
       expect(src.pageCount).toBe(2);
       expect((g.pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc).toBe(
-        '/from-global-worker.mjs',
+        wrapPdfWorkerSrc('/from-global-worker.mjs'),
       );
       // Prefer the global: the module mock's getDocument must not have been used for this open.
       expect(mock.getDocument).not.toHaveBeenCalled();
