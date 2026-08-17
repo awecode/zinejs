@@ -11,15 +11,17 @@ The sections below are a compact reference for every option, method, and event. 
 | Package | What it is |
 | --- | --- |
 | [`@zinejs/core`](packages/core) | The flipbook engine (renderer, gestures, zoom, spreads, curls). |
-| [`@zinejs/pdf`](packages/pdf) | PDF content source, powered by pdf.js (peer dependency). |
+| [`@zinejs/pdf`](packages/pdf) | PDF content source, powered by pdf.js. |
 
 ## Install
 
 ```bash
 npm install @zinejs/core
 # for PDFs, also:
-npm install @zinejs/pdf pdfjs-dist
+npm install @zinejs/pdf
 ```
+
+Both packages also ship **UMD** builds for CDN / `<script>` hosts (`dist/index.umd.js`). Core exposes the `ZineJS` global; the PDF package **extends** the same global (load core first). See [`@zinejs/pdf`](packages/pdf) for a full CDN example with pdf.js + `workerSrc`.
 
 ## Quick start
 
@@ -36,7 +38,7 @@ const zine = new Zine(document.getElementById('book'), {
     '/pages/04.jpg',
   ]),
   spreadMode: 'cover', // lone first page, then paired
-  curl: 'roll',        // paper-roll page turn (WebGL2)
+  curl: 'cone',        // natural conical page turn (WebGL2)
   zoom: { max: 4 },
 });
 
@@ -67,11 +69,11 @@ new Zine(document.getElementById('book'), {
 | --- | --- | --- | --- |
 | `source` | `Source` | — | Content source, e.g. `new ImageSource(urls)` or `new PdfSource(...)`. **Required.** |
 | `renderer` | `'auto' \| 'css' \| 'webgl2'` \| `('css' \| 'webgl2')[]` \| `Renderer` | `'auto'` | Renderer or ordered fallback list. `'auto'` prefers GPU, falls back to CSS. |
-| `curl` | `'roll' \| 'simple' \| 'fold' \| 'peel'` | `'roll'` | Page-curl model (WebGL2 only — see [Curl models](#curl-models)). |
+| `curl` | `'cone' \| 'simple' \| CurlModel` | `'cone'` | Page-curl model (WebGL2 only). Bundled curls by name; the rest imported from `@zinejs/core/curls` — see [Curl models](#curl-models). |
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads (see below). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
-| `flipDuration` | `number` (ms) | `800` | Flip animation duration. |
+| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
 | `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). |
@@ -80,8 +82,12 @@ new Zine(document.getElementById('book'), {
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
-| `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread; `0` disables the responsive fallback. |
+| `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread. |
+| `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
 | `zoom` | `ZoomOptions` | see below | Zoom behavior. |
+| `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar (see [Controls](#controls)). `false` renders none. |
+| `deepLink` | `boolean` | `true` | Keep the page in the URL hash (see [Deep links](#deep-links)). |
+| `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. |
 
 ### `spreadMode`
 
@@ -89,6 +95,10 @@ new Zine(document.getElementById('book'), {
 - `single` — one page per spread.
 - `cover` — lone first page, then paired (magazine/catalog cover).
 - `book` — lone first **and** last page.
+
+Below `singlePageThreshold` the container is too narrow for two pages, so the book shows one at a
+time whatever `spreadMode` says. Pass `responsiveSpread: false` to hold the configured mode at
+every width, or change it later with `setResponsiveSpread()`.
 
 ### `zoom` options
 
@@ -100,18 +110,327 @@ new Zine(document.getElementById('book'), {
 | `doubleClick` | `number[] \| false` | `[1, 2, 4]` | Zoom levels cycled by double-click (wraps); `false` disables. |
 | `doubleClickInFlipZone` | `boolean` | off in `'edge'`, on in `'half'` | Listen for double-click zoom inside click-to-flip zones. Enabling makes clicks wait out `clickFlipDelay`. |
 
+### Sharpness while zoomed
+
+Zooming is a view transform, so by default it magnifies the pixels of a raster made to fit the
+screen. PDFs are vector, so `PdfSource` re-renders the visible region at the magnification being
+viewed and the engine lays that over the page: text stays crisp all the way to `zoom.max`.
+
+Only the part on screen is rasterized, so the cost stays flat however far in you go, and the
+re-render is debounced so a pinch or pan does not rasterize on every frame. Image books are
+already at their source resolution and are unaffected.
+
+A custom `Source` can do the same. `get` takes an optional second argument while the reader is
+zoomed:
+
+```ts
+get(index: number, opts?: PageRequest): Promise<PageContent>
+// PageRequest: { scale: number, region: { x, y, width, height } }  // region in 0..1 of the page
+```
+
+It is a hint. Ignore it and return the whole page as usual, which is what a source backed by a
+fixed-resolution original should do; the engine notices it did not get the region it asked for and
+leaves the normal raster on screen.
+
+## Controls
+
+A toolbar is rendered below the book by default, in normal flow so it never covers a page.
+
+```js
+new Zine(el, { source, controls: false });                    // no toolbar
+new Zine(el, { source, controls: { position: 'top' } });      // move it
+new Zine(el, { source, controls: { docked: false } });        // float it over the book
+new Zine(el, { source, controls: { items: ['prev', 'next'] } }); // choose the buttons
+```
+
+### `controls` options
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `position` | `'top' \| 'bottom' \| 'left' \| 'right'` | `'bottom'` | Which edge of the book the toolbar sits on. |
+| `docked` | `boolean` | `true` | Sit outside the book. `false` floats the toolbar over it. |
+| `items` | `ControlItem[]` | see below | The layout. Replaces the default set entirely. |
+| `arrows` | `boolean \| 'desktop' \| 'mobile'` | `true` | Large page-turn arrows flanking the book. `'desktop'`/`'mobile'` limit them to wide/narrow screens. |
+| `colorScheme` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Force the controls light or dark. `'auto'` follows the page. See [Styling](#styling). |
+| `className` | `string` | — | Extra class on the toolbar root, for styling. |
+
+### Page arrows
+
+Large back/forward arrows sit either side of the book, as most flipbooks show. They are placed
+*beside* it, not over it, so they never cover a page — the library wraps your container in a flex
+row and puts them on the outside, leaving the container's own size untouched. In RTL they swap, so
+each arrow still points the way the page will turn. An arrow with nowhere to go is not shown —
+there is no back arrow on the first page — though it keeps its place in the layout so the book
+does not slide across as the reader reaches a cover. Below 640px there is no room to flank, so they
+overlay the book's edges instead.
+
+Turn them off with `controls: { arrows: false }`. To show them on only one kind of device, pass
+`'desktop'` (wide screens, where they flank the book) or `'mobile'` (narrow screens, where they
+overlay its edges) — the split follows the same 640px breakpoint as the two layouts, so it tracks a
+live window resize rather than the device the page first loaded on.
+
+A docked toolbar is placed as a **sibling** of your container, inside a flex wrapper the library
+adds around it — the container's own size is left alone, since the renderer measures it to size
+the book. `destroy()` unwraps it again. A floating toolbar is a child of the container instead,
+absolutely positioned, and lets clicks through everywhere except the buttons themselves.
+
+### Built-in controls
+
+`prev`, `next`, `first`, `last`, `pageInput` (an editable page number), `zoomIn`, `zoomOut`,
+`search`, `thumbnails`, `outline`, `spread`, `print`, `download`, `share`, `fullscreen`, `menu`. A
+`'|'` in `items` draws a separator.
+
+The default layout is:
+
+```js
+['prev', 'pageInput', 'next', '|', 'zoomOut', 'zoomIn', 'search', 'share', 'menu', 'fullscreen']
+```
+
+`menu` is the `⋮` overflow, holding
+`['first', 'last', 'spread', 'thumbnails', 'outline', 'print', 'download']`.
+
+`spread` switches between one page and two — reading "Show one page" or "Show two pages"
+accordingly. Returning to two restores the layout the book was built with, so a `cover` book gets
+its lone first page back rather than becoming a plain `double`. It hides itself while a narrow
+container is already forcing one page, where it could not honour two.
+
+### Side panels
+
+`thumbnails`, `outline` and `search` each open a rail beside the book. They share that space, so
+opening one closes the others, and all are as tall as the book and scroll internally — a long list
+never runs past the bottom. All three are for documents (a PDF), not image books.
+
+On a wide screen `thumbnails` flanks the book: the rail takes its width beside the book, and the
+book shrinks only if the two would not otherwise both fit. That shrink needs the book's width to be
+elastic (`100%`, a `max-width`, or the demo's `min(920px, 100%, …)`); a book pinned to a fixed pixel
+width has nothing to give and would overflow its slot instead. The narrower `outline` and `search`
+rails float over the book's start edge instead, so the book never resizes at all; clicking the page
+behind such a rail closes it, as does pressing Escape or the toolbar button.
+
+Below 640px there is no room for either, so every rail becomes a drawer that slides in over a dimmed
+book (from the reading-start edge, so it follows RTL); tapping the dimmed area or pressing Escape
+closes it, as does the toolbar button. The book itself does not move at that size.
+
+**`thumbnails`** shows the pages. Its rows mirror the book's own spread grouping, so it always
+matches what the reader sees, including the responsive fallback on a narrow container:
+
+- `double` — two pages per row, and the rail is two thumbs wide.
+- `single` — one page per row, and the rail narrows to a single thumb.
+- `cover` / `book` — two columns for the paired interior, with the lone first (and last) page
+  centred between them rather than stretched across.
+
+Clicking a row turns to that spread, and pages decode only as they scroll into view.
+
+**`outline`** shows the document's table of contents: one heading per row, nested entries indented,
+in a single column. Clicking a heading turns to its page, and the entry containing the current page
+stays highlighted. A heading whose destination cannot be resolved is still listed, just not
+clickable. Many PDFs carry no outline, so the control only appears once the document is known to
+have one.
+
+**`search`** puts a query field over its results: one row per matching page, showing the page
+number and the matching text in context. Clicking a row turns to that page. It appears only for a
+source that can produce text — see [Search](#search).
+
+Controls hide themselves when they cannot work: `search` unless the source can produce text (see
+[Search](#search)), `download` unless there is an original file to save (see
+[Download](#download)), and `fullscreen` where the Fullscreen API is unavailable. A submenu whose
+entries have all hidden themselves hides too, rather than opening onto nothing — so `menu`
+disappears on a book with no downloadable file.
+
+### Custom controls
+
+Register one with `defineControl`, then name it in `items`. A control with `children` becomes a
+submenu, nested as deeply as you like.
+
+```js
+import { Zine, defineControl } from '@zinejs/core';
+
+defineControl({
+  id: 'print',
+  title: 'Print',
+  icon: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+  action: ({ zine }) => window.print(),
+});
+
+new Zine(el, {
+  source,
+  controls: { items: ['prev', 'next', '|', { id: 'tools', title: 'Tools', children: ['print', 'share'] }] },
+});
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | Unique key; how `items` refers to it. Reusing an id replaces that control. |
+| `title` | `string \| (ctx) => string` | Tooltip and accessible name. A function is re-read on every change, so a toggle can say what it will do next. |
+| `icon` | `string \| (ctx) => string` | Inner SVG markup, drawn in a 24×24 `viewBox` with `currentColor`. A function is re-read on every change, so a glyph can mirror in RTL or follow state. |
+| `children` | `ControlItem[]` | Nested controls; makes this a submenu. |
+| `action` | `(ctx) => void` | What it does. `ctx` is `{ zine, close }`. |
+| `render` | `(ctx) => HTMLElement` | Build a custom widget instead of a button. |
+| `isVisible` | `(ctx) => boolean` | Whether the control applies to this book at all — search with no text, download with no file. Failing it removes the control. For something that comes and goes as the reader moves, prefer `isDisabled`, so the bar does not reshuffle. |
+| `isDisabled` | `(ctx) => boolean` | Grey out and block the action. |
+| `isActive` | `(ctx) => boolean` | Mark as currently on. |
+
+Naming an id in `items` with only some fields overrides just those: `{ id: 'next', title: 'Forward' }`
+relabels the built-in without reimplementing it.
+
+### Styling
+
+**Light and dark come for free.** Left alone, the controls follow the page's own
+`color-scheme`: they render light on a light page and dark on a dark one, using CSS
+`light-dark()` under the hood. If your page has a theme toggle, set `color-scheme` on the root
+it themes and the controls follow along:
+
+```css
+:root { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+```
+
+To pin the controls to one scheme regardless of the page, pass `controls.colorScheme`:
+
+```js
+new Zine(el, { source, controls: { colorScheme: 'dark' } }); // always dark
+```
+
+**Branding.** For colours of your own, set these custom properties. Each overrides both schemes,
+so a value you set here wins over the automatic light/dark above:
+
+```css
+.zine-controls {
+  --zine-controls-bg: rgba(24, 24, 27, 0.82);
+  --zine-controls-fg: #f4f4f5;
+  --zine-controls-hover: rgba(255, 255, 255, 0.14);
+  --zine-controls-accent: #7dd3fc;
+}
+```
+
+## Deep links
+
+The current page lives in the URL hash, so a link opens where the reader was and back/forward move
+through the book:
+
+```
+yoursite.com/brochure#page=12
+```
+
+Only the `page` key is read or written — anything else in the hash is left alone, so an app routing
+on it is unaffected — and updates use `replaceState`, so turning fifty pages does not put fifty
+entries in the reader's history. A page in the URL takes precedence over `startPage`, since the
+reader followed a link to it.
+
+`zine.pageLink(page?)` returns the URL for a page, defaulting to the current one. Pass
+`deepLink: false` if your app owns the hash.
+
+Only one book per page can own the hash — with two on a page they would overwrite each other, and
+the second to load would open on the first one's page. The first claims it; the rest work
+normally, they just do not appear in the address bar.
+
+## Share
+
+The `share` control opens a dialog with a QR code for the current page, the link with a copy
+button, and buttons for Facebook, X (Twitter), LinkedIn, WhatsApp, Pinterest and email.
+
+The dialog, its brand marks and the QR encoder are a separate lazy chunk, downloaded the first
+time a reader presses Share — a book nobody shares pays nothing for it. The QR is generated
+locally rather than through an image service, so no reader's URL leaves the page, and the social
+buttons are plain share links with no third-party scripts or trackers.
+
+## Search
+
+`zine.search(query)` resolves to `{ page, excerpt }[]` for every page whose text contains `query`,
+case-insensitively. It needs a source that can produce text: `PdfSource` can, `ImageSource` cannot.
+
+```js
+if (zine.canSearch()) {
+  const hits = await zine.search('invoice');
+  zine.flipTo(hits[0].page);
+}
+```
+
+Text is pulled per page on demand and cached, so the first search over a long document costs one
+extraction per page and later ones are cheap. Pages replaced by an image (`pages`, `frontCover`,
+`backCover`) report no text, since the PDF text underneath is not what the reader sees.
+
+To make a custom source searchable, implement the optional `getText(index): Promise<string>`.
+
+## Download
+
+`zine.download()` saves the original document. It works for a `PdfSource` created from a URL or
+from raw bytes; a PDF opened from a pdf.js document you created yourself has no file of its own,
+and an image book is not a single file at all — both resolve `false`.
+
+```js
+if (zine.canDownload()) await zine.download();
+```
+
+The `download` control in the `⋮` menu calls this, and hides itself (taking the empty menu with
+it) when `canDownload()` is false.
+
+## Print
+
+`zine.print()` prints the document. It hands the original file to the browser in an offscreen
+frame rather than printing the host page — printing the page would capture the toolbar and
+whichever single spread is on screen, while the browser paginates a PDF properly by itself.
+
+Like download, it needs a source with an original file, so the `print` control appears for PDFs
+and not for image books.
+To make a custom source downloadable, implement the optional
+`getDownload(): Promise<DownloadInfo | null>`, returning `{ url, filename, revoke? }`. Set `revoke`
+when `url` came from `URL.createObjectURL` so it is released after the save.
+
 ## Curl models
 
-The WebGL2 renderer bends the turning leaf with one of four models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
+The WebGL2 renderer bends the turning leaf with one of six models (`curl` option). The CSS fallback ignores this and does a plain spine rotation.
 
-| `curl` | Motion | Anchored to tap? |
-| --- | --- | --- |
-| `roll` (default) | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
-| `simple` | Rotates around the spine while bending into a cylinder — one continuous motion. | No |
-| `fold` | Flat origami fold with a hard crease; folds from the tapped corner. | Yes |
-| `peel` | Smooth diagonal corner peel; lifts from the tapped corner. | Yes |
+Two are bundled and named by string. The other four are shipped as importable models, so a book
+carries only the curl it actually uses:
 
-For anchored models (`fold`, `peel`), the fold originates at the corner nearest where the reader taps/grabs.
+```ts
+import { silk } from '@zinejs/core/curls';
+
+new Zine(el, { source, curl: silk });   // imported model
+new Zine(el, { source, curl: 'cone' }); // bundled, by name
+```
+
+| `curl` | How to use | Motion | Anchored to tap? |
+| --- | --- | --- | --- |
+| `cone` (default) | bundled: `curl: 'cone'` | Natural conical curl (PARC / iBooks-style): stiff paper wraps a breathing cone, then settles flat. | Yes |
+| `simple` | bundled: `curl: 'simple'` | Plain flat page turn: a rigid spine rotation, edge-on at the midpoint, no bend. | No |
+| `roll` | `import { roll }` | Rolls up into a cylinder in place, then unwraps and flops onto the far side. | No |
+| `leaf` | `import { leaf }` | Traveling smooth-curvature wave: flat paper bends without stretching, then leaves as a flat turned flap. | Yes |
+| `flick` | `import { flick }` | Inertial follow-through: the sheet trails the accelerating turn, swings through vertical, then overtakes and settles as it brakes. | Yes |
+| `silk` | `import { silk }` | Hand-turned S-curve: spine-driven rotation with a true inflection (body bend + free-edge reverse curl), early peel lead, corner lag. | Yes |
+
+Passing an unbundled name as a string (`curl: 'silk'`) throws with the import line to use. Only the
+bundled names are valid in JSON config, which is why `options.schema.json` lists just those two.
+
+### Custom curls
+
+A curl model is a plain object, so your own needs no registration:
+
+```ts
+import type { CurlModel } from '@zinejs/core';
+
+const fold: CurlModel = {
+  deform(mesh, W, H, t, anchor) { /* write mesh.positions, then computeNormals(mesh) */ },
+  anchored: false,  // true to fold from the tapped corner (anchor.y)
+  flat: true,       // sheet is flat by mid-turn: a lone page may dissolve earlier
+  gloss: false,     // no specular highlight (for a sheet that never bends)
+};
+
+new Zine(el, { source, curl: fold });
+```
+
+`computeNormals` and `createPageMesh` are exported from `@zinejs/core/curls` for this.
+
+### Reduced motion
+
+Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short fixed duration,
+whatever `curl` and `flipDuration` say. Motion is reduced rather than removed: a page that swapped
+instantly would leave no cue as to which way the book moved.
+
+For anchored models (`cone`, `leaf`, `flick`, `silk`), the fold originates at the corner nearest where the reader taps/grabs.
+
+On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes longer than `flipDuration` and eases out harder — there is no facing landing to watch, only the peel and fade. `cone` also softens and slightly delays its flop on full-width lone pages so the peel stays over the sheet; the other models are otherwise unchanged.
 
 ## Methods
 
@@ -123,7 +442,32 @@ For anchored models (`fold`, `peel`), the fold originates at the corner nearest 
 | `flipTo(page)` | `void` | Animate to the spread containing zero-based `page`. |
 | `getPage()` | `number` | Current leading page index. |
 | `getPageCount()` | `number` | Total page count (including covers/replacements). |
+| `canFlipNext()` | `boolean` | Whether a spread follows the current one. |
+| `canFlipPrev()` | `boolean` | Whether a spread precedes the current one. |
+| `getSpreads()` | `readonly Spread[]` | How pages are grouped, one entry per spread. Reflects `spreadMode` and the responsive fallback. |
+| `getSpreadIndex()` | `number` | Which spread is on screen; indexes into `getSpreads()`. |
+| `getDirection()` | `'ltr' \| 'rtl'` | Reading direction. |
+| `getSpreadMode()` | `SpreadMode` | The configured grouping, ignoring any narrow-container override. |
+| `setSpreadMode(mode)` | `void` | Regroup the pages, keeping the reader on the same page. |
+| `toggleSpreadMode()` | `void` | Switch between one page and two; back restores the configured mode. |
+| `isSinglePage()` | `boolean` | Whether one page is showing, for whatever reason. |
+| `getResponsiveSpread()` | `boolean` | Whether a narrow container may override `spreadMode`. |
+| `setResponsiveSpread(on)` | `void` | Allow or forbid that override, re-laying out at once. |
+| `isResponsiveSingle()` | `boolean` | Whether one page is showing *because* the container is narrow. |
+| `getPageImage(index)` | `Promise<PageContent \| null>` | One page's raster, for thumbnails or export. `null` if it cannot be decoded. |
 | `getZoom()` | `number` | Current zoom scale (`1` = fit). |
+| `getMaxZoom()` | `number` | The ceiling `setZoom` clamps to. |
+| `canSearch()` | `boolean` | Whether this book's source can produce text. |
+| `search(query, opts?)` | `Promise<SearchHit[]>` | Pages matching `query`; see [Search](#search). |
+| `canDownload()` | `boolean` | Whether the original document can be saved. |
+| `download()` | `Promise<boolean>` | Save the original; `false` if there is nothing to save. |
+| `canPrint()` | `boolean` | Whether the book can be printed. |
+| `print()` | `Promise<boolean>` | Print the original; `false` if there is nothing to print. |
+| `isDocument()` | `boolean` | Whether the book is a document (a PDF) rather than loose images. |
+| `pageLink(page?)` | `string` | URL that opens the book at `page` (default: current). |
+| `canOutline()` | `boolean` | Whether the source can supply a table of contents. |
+| `getOutline()` | `Promise<OutlineItem[]>` | The table of contents; empty when there is none. |
+| `container` (getter) | `HTMLElement` | The element the flipbook was mounted into. |
 | `setZoom(scale, center?)` | `void` | Zoom to `scale`, keeping container-local `center` `{x, y}` fixed. |
 | `resetZoom()` | `void` | Zoom back to `1`. |
 | `on(event, listener)` | `() => void` | Subscribe to an event; returns an unsubscribe function. |
@@ -140,6 +484,7 @@ Subscribe with `zine.on(event, listener)`; it returns an unsubscribe function.
 | `flipStart` | `{ from: number; to: number }` | A page turn begins. |
 | `flipEnd` | `{ page: number }` | A page turn finishes. |
 | `pageChanged` | `{ page: number }` | The current page changes. |
+| `spreadChanged` | `{ mode: SpreadMode; singlePage: boolean }` | Pages regroup, from `setSpreadMode`/`toggleSpreadMode` or a narrow container. Useful for sizing your own chrome, since the book's proportions change with it. |
 | `zoomChanged` | `{ scale: number }` | The zoom scale changes. |
 | `sourceError` | `{ index: number; error: unknown }` | A page fails to load/decode. |
 | `rendererFallback` | `{ from: string; to: string }` | The renderer falls back (e.g. `webgl2` → `css`). |
@@ -176,7 +521,7 @@ new PdfSource('/doc.pdf', { renderScale: 1, progressive: true });
 | `progressive` | `boolean` | `false` | Paint a low-res page first, then swap to crisp (faster first paint). |
 | `disableAutoFetch` | `boolean` | `false` | Fetch only the byte ranges visible pages need (range-capable servers). |
 
-`pdfjs-dist` is a **peer dependency** — install it yourself; the plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
+`pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. See [`@zinejs/pdf`](packages/pdf) for worker setup under Vite, webpack, CDN, and custom paths.
 
 ## Covers and page replacement
 

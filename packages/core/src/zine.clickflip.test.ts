@@ -45,8 +45,13 @@ function tap(el: EventTarget, x: number, y: number): void {
   el.dispatchEvent(Object.assign(new Event('pointerdown', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }));
   el.dispatchEvent(Object.assign(new Event('pointerup', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }));
 }
+/** The library pairs two raw clicks into its own double-click (the browser's `dblclick` is
+ *  unreliable on rapid streaks), so drive it with two same-spot clicks in the pairing window. */
 function doubleClick(el: EventTarget, x: number, y: number): void {
-  el.dispatchEvent(Object.assign(new Event('dblclick', { bubbles: true, cancelable: true }), { clientX: x, clientY: y }));
+  const click = (): boolean =>
+    el.dispatchEvent(Object.assign(new Event('click', { bubbles: true, cancelable: true }), { clientX: x, clientY: y }));
+  click();
+  click();
 }
 
 beforeEach(() => {
@@ -98,6 +103,50 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
+  it('a tap on the opposite edge mid-flip turns back, not the same way again', async () => {
+    // 8 pages → spreads [0,1] [2,3] [4,5] [6,7]; start in the middle so both ways are open.
+    const { zine, el } = await makeZine(2, { source: new FakeSource(8) });
+    expect(zine.getPage()).toBe(2);
+
+    tap(el, 790, 300); // right edge → forward
+    tap(el, 10, 300); // left edge while that flip is still in flight → must go backward
+    await settleInstant();
+    await settleInstant();
+
+    // Forward then back lands where it started. Reading a stale press instead would turn
+    // forward twice and end on page 6.
+    expect(zine.getPage()).toBe(2);
+  });
+
+  it('a reversing tap mid-flip turns back from where the book landed', async () => {
+    const { zine, el } = await makeZine(4, { source: new FakeSource(12) });
+    expect(zine.getPage()).toBe(4); // spread 2
+
+    tap(el, 790, 300); // forward: spread 2 → 3
+    await flush(); // let the fold actually start animating, so the next tap interrupts it
+    tap(el, 10, 300); // reverse
+    await settleInstant();
+    await settleInstant();
+
+    // Interrupting lands the forward turn on spread 3, and the reversal steps back from
+    // there to spread 2 — the neighbour of what is now on screen. What must never happen is
+    // the reversal moving the book *forward* again.
+    expect(zine.getPage()).toBe(4); // spread 2
+  });
+
+  it('flipPrev during a flipNext moves back, never further forward', async () => {
+    const { zine } = await makeZine(4, { source: new FakeSource(12) });
+    expect(zine.getPage()).toBe(4); // spread 2
+
+    zine.flipNext(); // → spread 3
+    await flush();
+    zine.flipPrev(); // reverse, from spread 3 → spread 2
+    await settleInstant();
+    await settleInstant();
+
+    expect(zine.getPage()).toBe(4); // spread 2, not 6
+  });
+
   it('does nothing when the tap would go past the ends', async () => {
     const { zine, el } = await makeZine(0);
     tap(el, 10, 300); // left edge at the first spread
@@ -124,6 +173,155 @@ describe('Zine — click to flip (edge default: instant, no delay)', () => {
     doubleClick(el, 400, 300);
     await flush();
     expect(zine.getZoom()).toBe(2);
+  });
+
+  it('does not pair two clicks that fall outside the double-click window', async () => {
+    const { zine, el } = await makeZine();
+    const click = (): void =>
+      void el.dispatchEvent(Object.assign(new Event('click', { bubbles: true }), { clientX: 400, clientY: 300 }));
+    click();
+    now += 400; // > the 250ms pairing window
+    click();
+    await flush();
+    expect(zine.getZoom()).toBe(1); // two lone clicks, no double-click, no zoom
+  });
+
+  it('zooms on a double-click in the dead back zone of the first spread', async () => {
+    // Left edge at the first spread: the zone is real but the flip has nowhere to land,
+    // so it must zoom rather than defer to a turn that can never happen.
+    const { zine, el } = await makeZine(0);
+    doubleClick(el, 10, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('zooms on a double-click in the dead forward zone of the last spread', async () => {
+    // 4 pages, double mode → spreads [0,1] [2,3]; start on the last one.
+    const { zine, el } = await makeZine(2);
+    expect(zine.getPage()).toBe(2);
+    doubleClick(el, 790, 300); // right edge with no next spread → dead → zoom
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('still leaves a live forward zone to the flip (no zoom) on the first spread', async () => {
+    const { zine, el } = await makeZine(0);
+    doubleClick(el, 790, 300); // right edge, next spread exists → flip zone, not zoom
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('does not zoom in the dead forward zone when a flip just landed (streak tail)', async () => {
+    // Rapid-flip to the last spread, then keep tapping the same edge: those trailing clicks are
+    // the reader still flipping, not asking to zoom. A flip landing on their heels suppresses it.
+    const { zine, el } = await makeZine(0); // spreads [0,1] [2,3]
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    expect(zine.getPage()).toBe(2); // last spread; forward zone now dead
+    now += 100; // a fast tap, well inside the streak window
+    doubleClick(el, 790, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1); // swallowed, not zoomed
+  });
+
+  it('still zooms in the dead forward zone once the reader pauses past the streak window', async () => {
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    expect(zine.getPage()).toBe(2);
+    now += 600; // paused on the end page, past 2 × DOUBLE_CLICK_MS (500ms)
+    doubleClick(el, 790, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2); // a deliberate zoom
+  });
+
+  it('does not zoom in the centre dead zone when a flip just landed (layout shifted under the pair)', async () => {
+    // The cover/lone-page glitch generalised: the flip zone can sit mid-screen, so the first click
+    // turns the page and the second — same spot — lands in the centre of the spread it flipped to.
+    // A centre double-click normally zooms; on a streak tail it must not.
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300); // forward: spread 0 → 1
+    await settleInstant();
+    now += 100; // fast pair, inside the streak window
+    doubleClick(el, 400, 300); // centre dead zone
+    await flush();
+    expect(zine.getZoom()).toBe(1); // swallowed, not zoomed
+  });
+
+  it('does not zoom in the centre dead zone while a flip is still folding', async () => {
+    // A long flip is mid-fold when the paired click arrives: the machine is animating, so even
+    // before any landing this is plainly a streak, not a zoom.
+    const { zine, el } = await makeZine(0, { flipDuration: 500 });
+    tap(el, 790, 300); // start a forward flip
+    await flush(); // staged + first frame scheduled, but not ticked → still animating
+    doubleClick(el, 400, 300); // centre, mid-fold
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('still zooms in the centre dead zone once the reader pauses past the streak window', async () => {
+    const { zine, el } = await makeZine(0);
+    tap(el, 790, 300);
+    await settleInstant();
+    now += 600; // paused, past the window
+    doubleClick(el, 400, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2); // a deliberate centre zoom
+  });
+});
+
+// A book narrower than its container is letterboxed, so container x and book x differ.
+// Everything that hit-tests a pointer has to subtract that offset or the zones drift.
+class LetterboxedRenderer extends MockRenderer {
+  override measure(): LayoutMetrics {
+    // 800px container holding a 600px-wide book → 100px bars on each side.
+    return {
+      containerWidth: 800,
+      containerHeight: 600,
+      pageWidth: 300,
+      pageHeight: 600,
+      book: { x: 100, y: 0, width: 600, height: 600 },
+      content: { x: 100, y: 0, width: 600, height: 600 },
+    };
+  }
+}
+
+describe('Zine — click zones on a letterboxed book', () => {
+  const letterboxed = { renderer: new LetterboxedRenderer() } as Partial<ZineOptions>;
+
+  it('leaves the flip zones near a letterbox bar to the flip, not zoom', async () => {
+    // 6 pages, double mode → spreads [0,1] [2,3] [4,5]; start on the middle one so both
+    // edge zones have somewhere to turn (otherwise a dead zone would zoom, tested elsewhere).
+    const { zine, el } = await makeZine(2, { ...letterboxed, source: new FakeSource(6) });
+    // x=110 is 10px into the book: inside the left bar's shadow, but the book's own
+    // left edge zone ends at 100+64=164, so this IS a live flip zone → must not zoom.
+    doubleClick(el, 110, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+
+    // x=700 sits on the book's right edge (100+600); the dead zone runs 164..636 in
+    // container px, so 700 is an edge zone too → still no zoom.
+    doubleClick(el, 700, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
+  });
+
+  it('does not zoom in the center, and does zoom outside the flip zones', async () => {
+    const { zine, el } = await makeZine(0, letterboxed);
+    // Dead center of the book (100 + 300 = 400) is a dead zone → zoom is allowed.
+    doubleClick(el, 400, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(2);
+  });
+
+  it('treats the far right of the book as a flip zone, not a zoom', async () => {
+    const { zine, el } = await makeZine(0, letterboxed);
+    // 690 is 590px into the 600px-wide book — deep inside the right edge zone.
+    // Measured against the *container* width (800) it would look like the dead
+    // zone, which is exactly the bug: the double-click would zoom instead of flip.
+    doubleClick(el, 690, 300);
+    await flush();
+    expect(zine.getZoom()).toBe(1);
   });
 });
 
@@ -156,11 +354,13 @@ describe('Zine — click to flip (config overrides)', () => {
   });
 
   it('clickFlipDelay 0 flips instantly and suppresses double-click zoom in flip zones (even half)', async () => {
-    const { zine, el } = await makeZine(0, { clickToFlip: 'half', clickFlipDelay: 0 });
+    // 6 pages so the forward zone still has somewhere to turn after the first flip; a dead
+    // zone would zoom regardless of the delay, which is a separate rule tested elsewhere.
+    const { zine, el } = await makeZine(0, { clickToFlip: 'half', clickFlipDelay: 0, source: new FakeSource(6) });
     tap(el, 500, 300);
     await settleInstant();
     expect(zine.getPage()).toBe(2); // instant, no delay
-    doubleClick(el, 500, 300); // whole area is a flip zone → suppressed
+    doubleClick(el, 500, 300); // live flip zone (spread 1 of 3) → suppressed
     await flush();
     expect(zine.getZoom()).toBe(1);
   });

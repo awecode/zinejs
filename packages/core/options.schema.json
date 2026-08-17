@@ -48,9 +48,9 @@
     },
     "curl": {
       "type": "string",
-      "enum": ["roll", "simple", "fold", "peel"],
-      "default": "roll",
-      "description": "Page-curl model for the WebGL2 renderer: 'roll' (roll up then flop over), 'simple' (rotate-and-bend cylinder), 'fold' (flat origami fold, anchored at tap), 'peel' (smooth diagonal corner peel, anchored at tap)."
+      "enum": ["cone", "simple"],
+      "default": "cone",
+      "description": "Page-curl model for the WebGL2 renderer. Only the bundled names are valid JSON: 'cone' (natural conical curl, PARC/iBooks-style, anchored at tap; default) and 'simple' (plain flat page turn, no bend). Four more are shipped as importable models rather than names, so a book carries only the curl it uses: 'roll' (roll up then flop over; a lone page turns the same way and dissolves as it lands), 'leaf' (traveling smooth-curvature wave with flat paper before and after the bend, anchored at tap), 'flick' (inertial follow-through: the sheet trails the turn, then swings past and settles, anchored at tap), 'silk' (hand-turned S-curve: spine-driven rotation with body bend + free-edge reverse curl forming a true inflection, early peel lead, anchored at tap). In code, import one from '@zinejs/core/curls' and pass the model; a custom model of the same shape works too."
     },
     "frontCover": {
       "type": "string",
@@ -75,7 +75,7 @@
       "type": "number",
       "minimum": 0,
       "default": 800,
-      "description": "Flip animation duration in milliseconds."
+      "description": "Flip animation duration in milliseconds. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing half to land on)."
     },
     "clickToFlip": {
       "type": "string",
@@ -121,6 +121,59 @@
       "minimum": 0,
       "default": 640,
       "description": "Container widths (px) below this switch to one page per spread; 0 disables the responsive fallback."
+    },
+    "deepLink": {
+      "type": "boolean",
+      "default": true,
+      "description": "Keep the current page in the URL hash (#page=12), so a link opens where the reader was. Only the 'page' key is touched."
+    },
+    "responsiveSpread": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether a narrow container may override spreadMode and show one page at a time. False holds the configured mode at every width."
+    },
+    "disableContextMenu": {
+      "type": "boolean",
+      "default": false,
+      "description": "Suppress the browser's right-click menu over the book. A deterrent, not protection: the pages remain in the DOM."
+    },
+    "controls": {
+      "default": true,
+      "description": "Built-in toolbar. true for the default set, false for none, or an object to configure it.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["top", "bottom", "left", "right"],
+              "default": "bottom",
+              "description": "Which edge of the book the toolbar sits on."
+            },
+            "docked": {
+              "type": "boolean",
+              "default": true,
+              "description": "Sit outside the book in normal flow; false floats the toolbar over it."
+            },
+            "items": {
+              "type": "array",
+              "description": "Toolbar layout: control ids, '|' separators, or inline control definitions. Omit for the default set.",
+              "items": { "type": ["string", "object"] }
+            },
+            "arrows": {
+              "type": "boolean",
+              "default": true,
+              "description": "Large page-turn arrows flanking the book."
+            },
+            "className": {
+              "type": "string",
+              "description": "Extra class on the toolbar root, for styling."
+            }
+          }
+        }
+      ]
     }
   }
 }

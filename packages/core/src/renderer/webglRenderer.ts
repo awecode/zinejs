@@ -1,11 +1,8 @@
-import {
-  CURLS,
-  createPageMesh,
-  DEFAULT_CURL,
-  type CurlAnchor,
-  type CurlType,
-  type PageMesh,
-} from '../geometry/curls';
+// Imported from the leaf modules, not the barrel: the barrel pulls in every curl, which would
+// defeat the point of only bundling the two the engine can name.
+import { createPageMesh, type PageMesh } from '../geometry/curls/mesh';
+import { BUNDLED_CURLS, resolveCurl } from '../geometry/curls/bundled';
+import { DEFAULT_CURL, type CurlAnchor, type CurlModel, type CurlSpec } from '../geometry/curls/types';
 import type { Spread } from '../engine/spread';
 import type {
   FlipDirection,
@@ -68,7 +65,10 @@ void main() {
   float bookX = uOriginX + uDir * aPos.x;
   float bookY = aPos.y;
   float Z = aPos.z;
-  float D = uLeafW * 3.0;
+  // Eye distance, in leaf widths. Keeps the perspective resolution-independent. 5.3 puts the
+  // roll's deepest point ~14% larger than flat; stronger than that (a nearer eye) balloons the
+  // turning sheet and reads more like a fisheye than a page lifting.
+  float D = uLeafW * 5.3;
   float persp = D / max(D - Z, 1.0);
   float cx = uViewport.x * 0.5;
   float cy = uViewport.y * 0.5;
@@ -90,6 +90,9 @@ in float vU;
 uniform sampler2D uFront;
 uniform sampler2D uBack;
 uniform highp float uDir;
+uniform float uGloss; // 0 disables the specular highlight (e.g. the flat 'simple' curl)
+uniform float uAlpha; // leaf opacity; a lone page dissolves into the page landing beneath it
+uniform float uCrease; // spine-crease strength: 1 matches a spread's gutter; ramps from 0 for a lone leaf
 out vec4 outColor;
 void main() {
   // The turn mesh carries its own facing in the normal; the front points at the viewer
@@ -103,18 +106,30 @@ void main() {
   // rolled edge reads as a deep crease with a soft highlight riding the ridge.
   float diff = clamp(abs(vFacing), 0.0, 1.0);
   float lit = mix(0.42, 1.0, diff);
-  lit *= mix(0.7, 1.0, smoothstep(0.0, 0.12, vU)); // spine crease matches the gutter shadow
+  // Spine crease matches the gutter shadow on a spread. A lone page has no gutter, so uCrease
+  // ramps it in from 0 as the leaf lifts — otherwise a still-flat leaf paints a shadow band on
+  // the anchor edge before the turn even begins.
+  lit *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.12, vU)), uCrease);
 
   // Glossy specular: brightest where the surface tilts ~30 deg from facing the viewer,
   // so a thin glossy highlight rides across the sheet as it rolls.
-  float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22;
+  float spec = pow(max(cos(acos(diff) - 0.52), 0.0), 220.0) * 0.22 * uGloss;
 
   c.rgb = clamp(c.rgb * lit + spec, 0.0, 1.0);
-  outColor = c;
+  // Premultiplied alpha (blendFunc ONE, ONE_MINUS_SRC_ALPHA): scale colour as well as alpha,
+  // or fading would brighten the sheet additively instead of dissolving it.
+  outColor = vec4(c.rgb * uAlpha, c.a * uAlpha);
 }`;
 
 const GRID_COLS = 28;
 const GRID_ROWS = 36;
+/** Progress at which a lone page starts dissolving. A full-width leaf has no facing half to
+ *  flop onto, so instead of landing on empty space it fades into the page arriving beneath it
+ *  over the rest of the turn. Roll is already flat by mid-turn; curling models stay bent
+ *  longer, so they dissolve later. The fade itself eases so the leaf settles rather than
+ *  vanishing while still swinging. */
+const FILL_FADE_START_ROLL = 0.7;
+const FILL_FADE_START_CURL = 0.8;
 const RESTORE_TIMEOUT_MS = 4000;
 const MAX_TEXTURE_CACHE_BYTES = 256 * 1024 * 1024;
 
@@ -176,7 +191,7 @@ export class WebglRenderer implements Renderer {
   #fill = false;
   #flip: FlipState | null = null;
   #flipT = 0;
-  #curlType: CurlType = DEFAULT_CURL;
+  #curlModel: CurlModel = BUNDLED_CURLS[DEFAULT_CURL];
   #anchor: CurlAnchor = { y: 0.5 };
   // A lone page (cover / book front-back) sits on one half; these center it by shifting
   // the view a quarter-width, interpolated across a flip so the open/close doesn't jump.
@@ -266,7 +281,7 @@ export class WebglRenderer implements Renderer {
   ): void {
     const fill = options?.fill ?? false;
     this.#flipT = 0;
-    if (options?.curl) this.#curlType = options.curl;
+    if (options?.curl) this.#curlModel = resolveCurl(options.curl);
     if (options?.anchor) this.#anchor = options.anchor;
     this.#fromShiftUnit = fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = fill ? 0 : shiftUnit(to);
@@ -277,7 +292,9 @@ export class WebglRenderer implements Renderer {
         underRight: null,
         underFull: to.right ?? to.left,
         front: from.right ?? from.left,
-        back: to.right ?? to.left,
+        // A lone page has no facing "next" leaf on its back; show the same page mirrored
+        // (the shader flips the back UV) so it reads as the sheet's own reverse side.
+        back: from.right ?? from.left,
         dir: direction === 'forward' ? 1 : -1,
         fill: true,
       };
@@ -319,11 +336,34 @@ export class WebglRenderer implements Renderer {
     const el = this.#container;
     const w = el?.clientWidth ?? 0;
     const h = el?.clientHeight ?? 0;
-    const book = this.#pageAspect > 0 ? this.#bookBox() : undefined;
-    return { containerWidth: w, containerHeight: h, pageWidth: w / 2, pageHeight: h, book };
+    const known = this.#pageAspect > 0;
+    const book = known ? this.#bookBox() : undefined;
+    const content = known ? this.#contentBox() : undefined;
+    const screenAt = content
+      ? (scale: number): { x: number; y: number; width: number; height: number } => {
+          // The shader applies `px * scale + view.t + shiftX`, so the lone-page shift sits
+          // *outside* the scale: a fixed screen offset, not part of the magnified geometry.
+          const shiftCss = this.#shiftX / this.#dpr;
+          return {
+            x: (content.x - shiftCss) * scale + shiftCss,
+            y: content.y * scale,
+            width: content.width * scale,
+            height: content.height * scale,
+          };
+        }
+      : undefined;
+    return {
+      containerWidth: w,
+      containerHeight: h,
+      pageWidth: w / 2,
+      pageHeight: h,
+      book,
+      content,
+      screenAt,
+    };
   }
 
-  /** The fitted book rect in container CSS px (letterbox aware), for hit-testing/zones. */
+  /** The fitted book rect in container CSS px (letterbox aware) — a stable 2-page area. */
   #bookBox(): { x: number; y: number; width: number; height: number } {
     const el = this.#container;
     const cw = el?.clientWidth ?? 0;
@@ -335,6 +375,14 @@ export class WebglRenderer implements Renderer {
     if (ba > cw / ch) bh = cw / ba;
     else bw = ch * ba;
     return { x: (cw - bw) / 2, y: (ch - bh) / 2, width: bw, height: bh };
+  }
+
+  /** Where the current spread is actually painted: the book, or its centered half for a lone
+   *  page (mirrors the draw-time #shiftX centering). This is what the engine hit-tests against. */
+  #contentBox(): { x: number; y: number; width: number; height: number } {
+    const b = this.#bookBox();
+    const lone = !this.#fill && this.#content !== null && shiftUnit(this.#content) !== 0;
+    return lone ? { x: b.x + b.width / 4, y: b.y, width: b.width / 2, height: b.height } : b;
   }
 
   // --- context loss / restore ---------------------------------------------------
@@ -380,7 +428,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack']) {
+    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss', 'uAlpha', 'uCrease']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -542,7 +590,10 @@ export class WebglRenderer implements Renderer {
     // Deform the leaf mesh with the selected curl model on the CPU, upload it, then draw.
     const leafW = flip.fill ? w : w / 2;
     const originX = flip.fill ? (flip.dir > 0 ? 0 : w) : w / 2;
-    CURLS[this.#curlType].deform(this.#mesh, leafW, h, this.#flipT, this.#anchor);
+    this.#curlModel.deform(this.#mesh, leafW, h, this.#flipT, {
+      y: this.#anchor.y,
+      fill: flip.fill,
+    });
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#posBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.#mesh.positions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#normBuf);
@@ -564,7 +615,24 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
+    gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlModel.gloss === false ? 0 : 1);
+    gl.uniform1f(this.#curlU.uAlpha ?? null, flip.fill ? this.#fillFade() : 1);
+    // Spreads carry the full gutter crease; a lone leaf ramps it in over the first fifth of the
+    // turn so a still-flat sheet shows no shadow band at its anchor before it lifts.
+    gl.uniform1f(this.#curlU.uCrease ?? null, flip.fill ? Math.min(1, this.#flipT / 0.2) : 1);
     gl.drawElements(gl.TRIANGLES, this.#idxCount, gl.UNSIGNED_SHORT, 0);
+  }
+
+  /** Leaf opacity for a lone page: solid until the curl-appropriate fade start, then
+   *  dissolving to 0 as it lands, so the turn resolves into the destination page rather
+   *  than onto blank space. The fade eases so opacity hangs longer then finishes cleanly. */
+  #fillFade(): number {
+    const start = this.#curlModel.flat ? FILL_FADE_START_ROLL : FILL_FADE_START_CURL;
+    const over = (this.#flipT - start) / (1 - start);
+    if (over <= 0) return 1;
+    if (over >= 1) return 0;
+    // Ease-out the remaining opacity: stay readable through most of the window, then settle.
+    return Math.pow(1 - over, 1.5);
   }
 
   #useFlat(): void {

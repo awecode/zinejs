@@ -10,6 +10,8 @@ Framework-agnostic flipbook engine: turn images or PDFs into a page-flipping boo
 npm install @zinejs/core
 ```
 
+Also ships a **UMD** build at `dist/index.umd.js` (global `ZineJS`) for CDN / `<script>` hosts. The ESM build code-splits the CSS and WebGL2 renderers; the UMD build inlines both so a single script is enough.
+
 ## Image book
 
 ```js
@@ -47,18 +49,31 @@ new Zine(container, {
   source,                    // ImageSource | PdfSource (required)
   direction: 'ltr',          // 'ltr' | 'rtl'
   spreadMode: 'cover',       // 'double' | 'single' | 'cover' (lone first page) | 'book' (lone first & last)
+  curl: 'cone',              // WebGL2 only: 'cone' | 'roll' | 'leaf' | 'flick' | 'silk' | 'simple'
   frontCover: 'front.jpg',   // optional image prepended as a lone front cover
   backCover: 'back.jpg',     // optional image appended as a lone back cover
   pages: { 4: 'ad.jpg' },    // optional: replace source pages with images (0-based; -1 = last)
   startPage: 0,
-  flipDuration: 800,         // ms
+  flipDuration: 800,         // ms (spread timing; a lone page stretches it and eases out)
   singlePageThreshold: 640,  // px: below this, show one page at a time
   clickToFlip: 'edge',       // 'edge' | 'half' | 'off'
   zoom: { enabled: true, max: 4, wheel: true, doubleClick: [1, 2, 4] },
   renderer: 'auto',          // 'auto' | 'css' | 'webgl2' | a custom Renderer
+  controls: true,            // built-in toolbar; false for none, or { position, items, … }
 });
 ```
 
+## Controls
+
+A toolbar (paging, page number, zoom, search, share, a `⋮` menu with download, and fullscreen)
+is rendered below the book by default. Turn it off with `controls: false`, move it with
+`controls: { position: 'top' }`, float it over the book with `controls: { docked: false }`, or
+choose the buttons with `controls: { items: [...] }`. Register your own with `defineControl`.
+
+The toolbar and its icons load as a separate chunk, so a book with `controls: false` never
+downloads them. See the [full docs](https://github.com/awecode/zinejs#controls).
+
+See the [root README](../../README.md#curl-models) for what each curl model does.
 ## Methods & events
 
 ```js

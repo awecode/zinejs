@@ -1,5 +1,5 @@
 import type { PageContent } from '../renderer/types';
-import type { Source } from './types';
+import type { DownloadInfo, LoadProgress, OutlineItem, PageRequest, Source } from './types';
 
 export interface CompositionOptions {
   /** Image URL prepended as a lone front cover (adds a page). */
@@ -42,6 +42,10 @@ class CompositeSource implements Source {
   #cache = new Map<string, Promise<ImageBitmap>>();
   open?: () => Promise<void>;
   onPageUpdate?: (handler: (index: number) => void) => void;
+  onProgress?: (handler: (progress: LoadProgress) => void) => void;
+  getText?: (index: number) => Promise<string>;
+  getDownload?: () => Promise<DownloadInfo | null>;
+  getOutline?: () => Promise<OutlineItem[]>;
 
   constructor(base: Source, options: CompositionOptions) {
     this.#base = base;
@@ -65,19 +69,62 @@ class CompositeSource implements Source {
         base.onPageUpdate!((src) => handler(src + (this.#front !== null ? 1 : 0)));
       };
     }
+
+    if (typeof base.onProgress === 'function') {
+      // Download progress is about the whole document, not any one page, so it passes straight
+      // through: covers and replacements do not shift it.
+      this.onProgress = (handler) => base.onProgress!(handler);
+    }
+
+    if (typeof base.getText === 'function') {
+      // Mirrors get(): covers and replaced pages are images, so they have no text of their own —
+      // returning the base page's text there would describe content the reader cannot see.
+      this.getText = async (index) => {
+        const frontOffset = this.#front !== null ? 1 : 0;
+        if (this.#front !== null && index === 0) return '';
+        if (this.#back !== null && index === this.pageCount - 1) return '';
+        const src = index - frontOffset;
+        if (this.#resolved.has(src)) return '';
+        return base.getText!(src);
+      };
+    }
+
+    if (typeof base.getDownload === 'function') {
+      // Covers and replacements change what is displayed, not the original document, so the
+      // download is the base source's file either way.
+      this.getDownload = () => base.getDownload!();
+    }
+
+    if (typeof base.getOutline === 'function') {
+      // The outline points at base pages; a front cover pushes every one of them along by one.
+      this.getOutline = async () => {
+        const items = await base.getOutline!();
+        const offset = this.#front !== null ? 1 : 0;
+        if (offset === 0) return items;
+        const shift = (list: OutlineItem[]): OutlineItem[] =>
+          list.map((item) => ({
+            ...item,
+            page: item.page === null ? null : item.page + offset,
+            children: shift(item.children),
+          }));
+        return shift(items);
+      };
+    }
   }
 
   get pageCount(): number {
     return this.#base.pageCount + (this.#front !== null ? 1 : 0) + (this.#back !== null ? 1 : 0);
   }
 
-  get(index: number): Promise<PageContent> {
+  get(index: number, opts?: PageRequest): Promise<PageContent> {
     const frontOffset = this.#front !== null ? 1 : 0;
+    // Covers and page overrides are images: they have no detail beyond their own resolution, so
+    // the zoom request has nothing to act on and is dropped rather than forwarded.
     if (this.#front !== null && index === 0) return this.#image(this.#front);
     if (this.#back !== null && index === this.pageCount - 1) return this.#image(this.#back);
     const src = index - frontOffset;
     const override = this.#resolved.get(src);
-    return override !== undefined ? this.#image(override) : this.#base.get(src);
+    return override !== undefined ? this.#image(override) : this.#base.get(src, opts);
   }
 
   prefetch(indices: number[]): void {

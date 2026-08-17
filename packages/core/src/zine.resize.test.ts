@@ -58,7 +58,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 describe('Zine — slice 5 (resize + single-page mode)', () => {
   it('opens in single-page mode when the container is narrow', async () => {
@@ -116,5 +116,78 @@ describe('Zine — slice 5 (resize + single-page mode)', () => {
     renderer.width = 400;
     zine.update(); // ignored: not idle
     expect(renderer.rendered.length).toBe(rerenders); // no extra static render
+  });
+});
+
+describe('Zine — responsiveSpread', () => {
+  const narrow = async (options: Record<string, unknown> = {}) => {
+    const renderer = new MockRenderer();
+    renderer.width = 500; // below the default 640 threshold
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer,
+      spreadMode: 'double',
+      ...options,
+    });
+    await zine.ready;
+    return { zine, renderer };
+  };
+
+  it('holds the configured mode on a narrow container when turned off', async () => {
+    const { zine, renderer } = await narrow({ responsiveSpread: false });
+    expect(zine.isResponsiveSingle()).toBe(false);
+    expect(renderer.rendered.at(-1)).toEqual({ left: 0, right: 1 }); // still two pages
+  });
+
+  it('collapses to one page by default', async () => {
+    const { zine, renderer } = await narrow();
+    expect(zine.isResponsiveSingle()).toBe(true);
+    expect(renderer.rendered.at(-1)).toEqual({ left: null, right: 0 });
+  });
+
+  it('restores the configured mode when switched off at runtime', async () => {
+    const { zine, renderer } = await narrow();
+    expect(zine.isResponsiveSingle()).toBe(true);
+
+    zine.setResponsiveSpread(false);
+    await flush();
+    expect(zine.getResponsiveSpread()).toBe(false);
+    expect(zine.isResponsiveSingle()).toBe(false);
+    expect(renderer.rendered.at(-1)).toEqual({ left: 0, right: 1 });
+  });
+
+  it('collapses again when switched back on', async () => {
+    const { zine, renderer } = await narrow({ responsiveSpread: false });
+    zine.setResponsiveSpread(true);
+    await flush();
+    expect(zine.isResponsiveSingle()).toBe(true);
+    expect(renderer.rendered.at(-1)).toEqual({ left: null, right: 0 });
+  });
+
+  it('keeps the reader on the same page across the switch', async () => {
+    // A page's spread index moves when the grouping changes; the page itself must not.
+    const renderer = new MockRenderer();
+    renderer.width = 500;
+    const zine = new Zine(el, {
+      source: new FakeSource(8),
+      renderer,
+      spreadMode: 'double',
+      startPage: 5,
+    });
+    await zine.ready;
+    expect(zine.getPage()).toBe(5);
+    zine.setResponsiveSpread(false);
+    await flush();
+    expect(zine.getPage()).toBe(5);
+  });
+
+  it('leaves a wide book alone either way', async () => {
+    const renderer = new MockRenderer(); // 800, comfortably above the threshold
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, spreadMode: 'double' });
+    await zine.ready;
+    const before = renderer.rendered.length;
+    zine.setResponsiveSpread(false);
+    expect(zine.isResponsiveSingle()).toBe(false);
+    expect(renderer.rendered.length).toBe(before); // nothing was being overridden
   });
 });

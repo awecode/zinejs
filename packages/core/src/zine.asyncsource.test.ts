@@ -38,7 +38,7 @@ class MockRenderer implements Renderer {
   }
 }
 
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 describe('Zine — async source (open)', () => {
   it('opens the source before building spreads, then exposes its page count', async () => {

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { bookRect } from './helpers';
 
 // Pinch and touch have no native Playwright API; since the input layer is built
 // on Pointer Events, we dispatch synthetic PointerEvents in the page to drive
@@ -15,8 +16,8 @@ test('RTL: ArrowLeft flips forward', async ({ page }) => {
 
 test('a touch drag across the book flips the page', async ({ page }) => {
   await page.goto('/fixture.html');
-  const box = (await page.locator('#book').boundingBox())!;
-  const y = box.y + 12;
+  const book = await bookRect(page);
+  const y = book.y + 12;
   // Dispatch each touch pointer event in its own step so the flip's async
   // staging flushes between them (as it does under real, timed mouse input).
   const fire = (type: string, x: number): Promise<void> =>
@@ -28,10 +29,10 @@ test('a touch drag across the book flips the page', async ({ page }) => {
       },
       { type, x, y },
     );
-  await fire('pointerdown', box.x + box.width - 12); // top-right corner
-  await fire('pointermove', box.x + box.width / 2);
-  await fire('pointermove', box.x + 12);
-  await fire('pointerup', box.x + 12);
+  await fire('pointerdown', book.x + book.width - 12); // top-right corner
+  await fire('pointermove', book.x + book.width / 2);
+  await fire('pointermove', book.x + 12);
+  await fire('pointerup', book.x + 12);
   await expect(page.locator('#page')).toHaveText('page 3 / 20');
 });
 

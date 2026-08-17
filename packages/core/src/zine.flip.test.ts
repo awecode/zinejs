@@ -77,7 +77,7 @@ afterEach(() => {
 
 // EventTarget + appendChild satisfies option validation and the input binding;
 // these tests drive flips programmatically and never dispatch pointer events.
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 async function makeZine(pageCount = 4, startPage = 0): Promise<{ zine: Zine; renderer: MockRenderer; source: FakeSource }> {
   const source = new FakeSource(pageCount);
@@ -101,6 +101,26 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(renderer.flips.length).toBeGreaterThanOrEqual(2);
     expect(renderer.rendered.at(-1)).toEqual({ left: 2, right: 3 });
     expect(zine.getPage()).toBe(2);
+  });
+
+  it('eases the turn symmetrically, without loitering then lurching', async () => {
+    const { zine, renderer } = await makeZine(4); // flipDuration 500
+    zine.flipNext();
+    await flush();
+    for (let i = 0; i < 20; i++) tick(25); // 20 even frames across the turn
+    await flush();
+
+    const ts = renderer.flips.map(([t]) => t);
+    // Progress only ever moves forward, and spans the full turn.
+    for (let i = 1; i < ts.length; i++) expect(ts[i]!).toBeGreaterThanOrEqual(ts[i - 1]!);
+    expect(ts.at(-1)).toBeCloseTo(1, 5);
+    // Frames fire on a fixed 25ms cadence over the 500ms turn, so frame i is at raw time 0.05*(i+1);
+    // index by that known clock position. Frame 9 is raw 0.5, frame 3 is raw 0.2.
+    // Symmetric about the midpoint: halfway through the time is halfway through the turn.
+    expect(ts[9]).toBeCloseTo(0.5, 1);
+    // A quadratic ease has reached ~8% by 20% of the way in. A cubic sits near 3% and then has
+    // to catch up through the middle, which is what read as a lurch rather than a page turning.
+    expect(ts[3]!).toBeGreaterThan(0.05);
   });
 
   it('emits flipStart then pageChanged and flipEnd', async () => {
@@ -130,20 +150,41 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(zine.getPage()).toBe(0);
   });
 
-  it('ignores a flip while one is already animating', async () => {
-    const { zine } = await makeZine(6); // 3 spreads, so a second flip has somewhere to go
-    const starts = vi.fn();
-    zine.on('flipStart', starts);
+  it('interrupts an in-flight fold and starts the requested flip at once', async () => {
+    const { zine } = await makeZine(6); // spreads [0,1] [2,3] [4,5]
+    const starts: string[] = [];
+    zine.on('flipStart', (p) => starts.push(`${p.from}->${p.to}`));
 
-    zine.flipNext();
-    zine.flipNext(); // busy → ignored (state locks synchronously)
-    expect(starts).toHaveBeenCalledTimes(1);
-
+    zine.flipNext(); // 0 -> 2
+    await flush(); // stage content + schedule frames; the fold is now animating
+    tick(100); // partway through (duration 500)
+    zine.flipNext(); // interrupt: land 0->2 immediately, then begin 2->4
     await flush();
     tick(500);
     await flush();
-    zine.flipNext(); // now idle again → allowed
-    expect(starts).toHaveBeenCalledTimes(2);
+
+    // Both turns took effect; the second stepped on from where the first landed.
+    expect(starts).toEqual(['0->2', '2->4']);
+    expect(zine.getPage()).toBe(4);
+  });
+
+  it('queues a flip requested before the fold begins animating, replaying it on settle', async () => {
+    const { zine } = await makeZine(6);
+    const starts: string[] = [];
+    zine.on('flipStart', (p) => starts.push(`${p.from}->${p.to}`));
+
+    zine.flipNext(); // locks state synchronously; #runFlip staging is still async
+    zine.flipNext(); // no animation to cut short yet → queued, not dropped
+    expect(starts).toEqual(['0->2']);
+
+    await flush();
+    tick(500); // first flip settles → queued flip replays
+    await flush();
+    tick(500);
+    await flush();
+
+    expect(starts).toEqual(['0->2', '2->4']);
+    expect(zine.getPage()).toBe(4);
   });
 
   it('is a no-op at the ends of the book', async () => {
@@ -152,6 +193,54 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     zine.on('flipStart', starts);
     zine.flipNext(); // nowhere to go
     expect(starts).not.toHaveBeenCalled();
+  });
+
+  it('applies a page upgrade that lands mid-flip once the book settles', async () => {
+    // A progressive PDF paints low-res, then swaps in the crisp render. Jumping straight to a
+    // page — from a search hit, the page field, the outline — puts that swap right in the middle
+    // of the flip, where repainting would disturb the animation. Deferring is fine; dropping it
+    // left the page stuck at low resolution for good, since the upgrade only fires once.
+    const source = new FakeSource(8);
+    let notify: ((index: number) => void) | undefined;
+    (source as Source).onPageUpdate = (handler) => {
+      notify = handler;
+    };
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, { source, renderer, spreadMode: 'double', flipDuration: 500 });
+    await zine.ready;
+
+    zine.flipTo(4); // spread 2 → pages 4 and 5
+    await flush();
+    const painted = renderer.rendered.length;
+    notify!(4); // the crisp page arrives while the flip is still running
+    expect(renderer.rendered.length).toBe(painted); // not repainted mid-flip
+
+    tick(500);
+    await flush();
+    await flush();
+    // The landing paints the spread once; the deferred upgrade paints it again.
+    expect(renderer.rendered.length).toBeGreaterThan(painted + 1);
+    expect(renderer.rendered.at(-1)).toEqual({ left: 4, right: 5 });
+  });
+
+  it('ignores an upgrade for a page that is no longer on screen', async () => {
+    const source = new FakeSource(8);
+    let notify: ((index: number) => void) | undefined;
+    (source as Source).onPageUpdate = (handler) => {
+      notify = handler;
+    };
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, { source, renderer, spreadMode: 'double', flipDuration: 500 });
+    await zine.ready;
+
+    zine.flipTo(4);
+    await flush();
+    notify!(0); // page 0 upgrades, but we are flipping away from it
+    tick(500);
+    await flush();
+    const painted = renderer.rendered.length;
+    await flush();
+    expect(renderer.rendered.length).toBe(painted); // no needless repaint
   });
 
   it('debug.setFlipProgress seeks without animating or changing state', async () => {

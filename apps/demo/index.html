@@ -4,78 +4,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>zinejs — demos</title>
-    <style>
-      :root {
-        color-scheme: dark;
-      }
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #16161d;
-        color: #eaeaf0;
-      }
-      .wrap {
-        max-width: 720px;
-        margin: 0 auto;
-        padding: 64px 24px;
-      }
-      h1 {
-        font-size: 26px;
-        margin: 0 0 6px;
-      }
-      p.sub {
-        opacity: 0.6;
-        margin: 0 0 32px;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-      a.card {
-        display: block;
-        padding: 20px;
-        background: #1e1e27;
-        border: 1px solid #2a2a36;
-        border-radius: 12px;
-        text-decoration: none;
-        color: inherit;
-      }
-      a.card:hover {
-        background: #262633;
-        border-color: #3a4a7a;
-      }
-      a.card .t {
-        font-size: 16px;
-        font-weight: 600;
-      }
-      a.card .d {
-        opacity: 0.6;
-        font-size: 13px;
-        margin-top: 4px;
-      }
-      footer {
-        margin-top: 32px;
-        font-size: 13px;
-        opacity: 0.7;
-      }
-      a {
-        color: #8ab4ff;
-      }
-    </style>
+    <script>
+      (function () {
+        var k = 'zine-demo-theme';
+        var t = localStorage.getItem(k);
+        if (t !== 'light' && t !== 'dark') {
+          t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
   </head>
   <body>
     <div class="wrap">
-      <h1>zinejs demos</h1>
-      <p class="sub">Each demo forces one renderer and lets you change options live.</p>
+      <div class="header-row">
+        <div>
+          <h1>zinejs demos</h1>
+          <p class="sub">Each demo forces one renderer and lets you change options live.</p>
+        </div>
+      </div>
       <div class="grid">
         <a class="card" href="/image-webgl.html">
           <div class="t">ImageBook · WebGL2</div>
-          <div class="d">Image source, GPU mesh curl.</div>
+          <div class="d">Image source, GPU mesh curl (default: cone).</div>
         </a>
         <a class="card" href="/pdf-webgl.html">
           <div class="t">PDF · WebGL2</div>
-          <div class="d">pdf.js source, GPU mesh curl.</div>
+          <div class="d">pdf.js source, GPU mesh curl (default: cone).</div>
         </a>
         <a class="card" href="/image-css.html">
           <div class="t">ImageBook · CSS</div>
@@ -88,5 +43,6 @@
       </div>
       <footer>Full reference: <a href="https://zinejs.com/docs/">zinejs.com/docs</a></footer>
     </div>
+    <script type="module" src="/src/landing.ts"></script>
   </body>
 </html>

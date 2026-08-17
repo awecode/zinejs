@@ -35,7 +35,7 @@ class MockRenderer implements Renderer {
   }
 }
 
-const el = Object.assign(new EventTarget(), { appendChild() {} }) as unknown as HTMLElement;
+const el = Object.assign(new EventTarget(), { appendChild() {}, style: {} }) as unknown as HTMLElement;
 
 describe('Zine — source errors', () => {
   it('emits sourceError with the page index and renders that page blank', async () => {

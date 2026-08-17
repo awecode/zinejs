@@ -1,5 +1,5 @@
 import type { Spread } from '../engine/spread';
-import type { CurlType, CurlAnchor } from '../geometry/curls/types';
+import type { CurlSpec, CurlAnchor } from '../geometry/curls/types';
 
 /** A decoded, ready-to-paint raster for one page (produced by a content source). */
 export type PageContent = ImageBitmap | HTMLCanvasElement;
@@ -16,7 +16,7 @@ export interface RenderOptions {
   /** Render a lone page filling the container (single-page mode), not a half panel. */
   fill?: boolean;
   /** Which page-curl model the WebGL2 renderer bends the leaf with (ignored by CSS). */
-  curl?: CurlType;
+  curl?: CurlSpec;
   /** Corner the fold originates from for anchored curls; y in [0,1] (where the reader tapped). */
   anchor?: CurlAnchor;
 }
@@ -27,9 +27,23 @@ export interface LayoutMetrics {
   containerHeight: number;
   pageWidth: number;
   pageHeight: number;
-  /** The letterboxed book area (aspect-fitted, centered) in container px — the interactive
-   *  region. Omit to fall back to the full container. */
+  /** The letterboxed book area (aspect-fitted, centered) in container px — a stable 2-page
+   *  (or 1-page in fill) region used for aspect sizing. Omit to fall back to the full container. */
   book?: { x: number; y: number; width: number; height: number };
+  /** Where the current spread is actually painted, in container px — equal to `book` for a
+   *  full spread, but the centered half for a lone page (cover / book front-back). This is the
+   *  region the engine hit-tests against so taps track the visible page. Omit to fall back. */
+  content?: { x: number; y: number; width: number; height: number };
+  /**
+   * Where `content` would land at zoom `scale` with no pan, in container px.
+   *
+   * Reported by the renderer rather than derived by the engine because the two place a lone page
+   * differently: WebGL2 offsets it outside the view scale, so the offset is fixed in screen space,
+   * while CSS applies it inside and it magnifies. The engine adds the translate to this to bound
+   * panning; without it a lone page can be dragged until its content is off screen. Omit to fall
+   * back to the container.
+   */
+  screenAt?(scale: number): { x: number; y: number; width: number; height: number };
 }
 
 /**

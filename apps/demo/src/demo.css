@@ -1,26 +1,29 @@
-:root {
-  color-scheme: dark;
-}
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
-  background: #16161d;
-  color: #eaeaf0;
+  background: var(--demo-bg);
+  color: var(--demo-fg);
 }
 .wrap {
   max-width: 1080px;
   margin: 0 auto;
   padding: 24px 24px 48px;
 }
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
 header h1 {
   font-size: 20px;
   margin: 0 0 2px;
 }
 header .sub {
-  opacity: 0.6;
+  color: var(--demo-muted);
   font-size: 13px;
 }
 nav {
@@ -31,17 +34,17 @@ nav {
   font-size: 13px;
 }
 nav a {
-  color: #8ab4ff;
+  color: var(--demo-link);
   text-decoration: none;
   padding: 5px 11px;
   border-radius: 999px;
-  background: #20202a;
+  background: var(--demo-nav-bg);
   border: 1px solid transparent;
 }
 nav a.active {
-  background: #33406e;
-  color: #fff;
-  border-color: #4a5da0;
+  background: var(--demo-nav-active-bg);
+  color: var(--demo-nav-active-fg);
+  border-color: var(--demo-nav-active-border);
 }
 .controls {
   display: flex;
@@ -50,7 +53,7 @@ nav a.active {
   align-items: flex-end;
   margin-bottom: 18px;
   padding: 14px 16px;
-  background: #1e1e27;
+  background: var(--demo-surface);
   border-radius: 10px;
 }
 .control {
@@ -60,7 +63,7 @@ nav a.active {
   font-size: 12px;
 }
 .control label {
-  opacity: 0.65;
+  color: var(--demo-muted);
 }
 .control .val {
   opacity: 0.9;
@@ -68,9 +71,9 @@ nav a.active {
 }
 .control select,
 .control input[type='number'] {
-  background: #0c0c11;
-  color: #eaeaf0;
-  border: 1px solid #34343f;
+  background: var(--demo-input-bg);
+  color: var(--demo-fg);
+  border: 1px solid var(--demo-input-border);
   border-radius: 6px;
   padding: 5px 8px;
   font: inherit;
@@ -84,17 +87,19 @@ nav a.active {
   gap: 8px;
   align-items: center;
 }
-button {
-  background: #2b2b38;
-  color: #eaeaf0;
-  border: 1px solid #3a3a48;
+/* Demo chrome buttons only. Excludes the library's own controls (all `zine-`prefixed), whose
+   injected styles this global box/border/hover would otherwise leak into. */
+button:not([class^='zine-']) {
+  background: var(--demo-btn-bg);
+  color: var(--demo-fg);
+  border: 1px solid var(--demo-btn-border);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
   font: inherit;
 }
-button:hover {
-  background: #3a3a4a;
+button:not([class^='zine-']):hover {
+  background: var(--demo-btn-hover);
 }
 #book {
   position: relative;
@@ -103,9 +108,9 @@ button:hover {
   width: min(920px, 100%, calc(78vh * var(--book-ar, 1.55)));
   aspect-ratio: var(--book-ar, 1.55);
   margin: 0 auto;
-  background: #0c0c11;
+  background: var(--demo-book-bg);
   border-radius: 6px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--demo-book-shadow);
   touch-action: none;
   user-select: none;
 }
@@ -120,8 +125,8 @@ footer {
 .debug {
   margin-top: 12px;
   padding: 12px 14px;
-  background: #101017;
-  border: 1px solid #262633;
+  background: var(--demo-debug-bg);
+  border: 1px solid var(--demo-debug-border);
   border-radius: 8px;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 12px;
@@ -132,10 +137,10 @@ footer {
   opacity: 0.55;
 }
 .ok {
-  color: #6ee787;
+  color: var(--demo-ok);
 }
 .bad {
-  color: #ff7b72;
+  color: var(--demo-bad);
 }
 .hidden {
   display: none;

@@ -5,10 +5,10 @@ PDF content source for [zinejs](https://github.com/), powered by [pdf.js](https:
 ## Install
 
 ```bash
-npm install @zinejs/core @zinejs/pdf pdfjs-dist
+npm install @zinejs/core @zinejs/pdf
 ```
 
-`pdfjs-dist` is a **peer dependency** — you install it, and the plugin loads it lazily so it never lands in the core bundle.
+`pdfjs-dist` is a normal dependency of `@zinejs/pdf`, so it installs with the package. The plugin still loads it lazily (dynamic `import`) so it never lands in the `@zinejs/core` bundle. If your app already depends on `pdfjs-dist`, the package manager will typically dedupe to one copy — keep major versions compatible so the worker matches the library.
 
 ## Usage
 
@@ -23,12 +23,50 @@ const book = new Zine(document.getElementById('book'), {
 
 Under a bundler that's all you need — the pdf.js worker is resolved for you.
 
+### CDN / no bundler
+
+Both packages ship **UMD** builds (`dist/index.umd.js`) that share the `ZineJS` global — load **core first**, then pdf (the pdf build uses `extend: true` so it merges into `ZineJS` instead of replacing it).
+
+Modern `pdfjs-dist` is ESM-only, so load it in a module script first, expose
+`globalThis.pdfjsLib`, then use classic deferred `<script>` tags for the UMD
+builds (and pass an explicit `workerSrc` — no bundler rewrites the worker URL):
+
+```html
+<script type="module">
+  import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.min.mjs';
+  globalThis.pdfjsLib = pdfjsLib;
+</script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@zinejs/pdf/dist/index.umd.js"></script>
+<script defer>
+  const book = new ZineJS.Zine(document.getElementById('book'), {
+    source: new ZineJS.PdfSource('document.pdf', {
+      workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.worker.min.mjs',
+    }),
+  });
+</script>
+```
+
+Image-only books can skip pdf.js and use a plain classic script:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@zinejs/core/dist/index.umd.js"></script>
+<script>
+  new ZineJS.Zine(document.getElementById('book'), {
+    source: new ZineJS.ImageSource(['page-01.png', 'page-02.png']),
+  });
+</script>
+```
+
+`PdfSource` prefers `globalThis.pdfjsLib` when present (CDN), otherwise dynamic-imports `pdfjs-dist` (bundlers).
+
 ## The pdf.js worker (`workerSrc`)
 
-pdf.js parses and rasterizes in a Web Worker, a separate file the host must locate. By default `PdfSource` resolves it to:
+pdf.js parses and rasterizes in a Web Worker, a separate file the host must locate. By default `PdfSource` resolves it to (the `legacy/` path since `legacy` defaults to true; `build/` when `legacy: false`):
 
 ```js
-new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
+new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
 ```
 
 Resolution precedence: an explicit `workerSrc` option → an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc` → the auto-default above. You only pass `workerSrc` when the default can't apply.
@@ -39,16 +77,6 @@ Nothing to do — these bundlers statically rewrite the `new URL(..., import.met
 
 ```js
 new PdfSource('document.pdf');
-```
-
-### CDN / `<script>` (UMD)
-
-No bundler to rewrite the URL, so point at a hosted worker matching your pdf.js version:
-
-```js
-new ZineJS.PdfSource('document.pdf', {
-  workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.worker.min.mjs',
-});
 ```
 
 ### Custom path
@@ -80,7 +108,18 @@ new PdfSource(src, {
   maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB); LRU-evicts beyond it
   progressive: true,   // paint a low-res page first, then swap to crisp (faster first paint)
   disableAutoFetch: true, // fetch only the byte ranges visible pages need (range-capable servers)
+  legacy: true,        // load pdf.js's transpiled build (default); false serves the lean modern build
 });
 ```
 
 `src` is a URL string, `ArrayBuffer`/`Uint8Array` of PDF bytes, or a pre-created pdf.js document.
+
+### Legacy vs modern build (`legacy`)
+
+pdf.js ships two builds. The `legacy` build is transpiled with polyfills and runs on both older and current browsers; the `modern` build is smaller and a touch faster but needs a recent engine. `PdfSource` defaults to `legacy: true`, favouring reach. Pass `legacy: false` to load the modern build when your audience is on current browsers:
+
+```js
+new PdfSource('document.pdf', { legacy: false });
+```
+
+The flag also picks the matching worker (`legacy/build/pdf.worker.min.mjs` vs `build/pdf.worker.min.mjs`) — the two must be a matched pair. It's ignored when you pass a pre-created document or set `globalThis.pdfjsLib`, since those already chose their build.
