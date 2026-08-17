@@ -188,6 +188,8 @@ controlsEl.appendChild(actions);
 // ---- Mount (once) ------------------------------------------------------------
 let activeRenderer = renderer as string;
 let rendererError: string | null = null;
+const sourceErrors: string[] = [];
+let rasterProbe = '';
 
 const zine = new Zine(book, {
   source: makeSource(),
@@ -236,6 +238,12 @@ if (q.get('clickdebug') !== '0') {
 
 zine.on('pageChanged', updateStatus);
 zine.on('zoomChanged', updateStatus);
+zine.on('sourceError', (e) => {
+  const err = e.error;
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  sourceErrors.push(`p${e.index} ${msg}`);
+  updateDebug();
+});
 // Keep the width cap in step with the layout, however it changed: the toolbar's page-layout
 // switch, or the responsive fallback on a narrow window.
 zine.on('spreadChanged', (e) => hintAspect(e.singlePage));
@@ -244,9 +252,10 @@ zine.on('rendererFallback', (e) => {
   updateDebug();
 });
 zine.ready
-  .then(() => {
+  .then(async () => {
     updateStatus();
     updateDebug();
+    await probePdfRaster();
   })
   .catch((err: unknown) => {
     rendererError = err instanceof Error ? err.message : String(err);
@@ -279,13 +288,45 @@ function updateDebug(): void {
   const auto = probe.supported ? 'webgl2' : 'css';
   const activeCls = rendererError ? 'bad' : 'ok';
   const activeTxt = rendererError ? `failed — ${rendererError}` : activeRenderer;
-  debugEl.innerHTML = [
+  const lines = [
     `<span class="k">WebGL2 support   :</span> <span class="${supportCls}">${supportTxt}</span>`,
     `<span class="k">GPU              :</span> ${probe.gpu}`,
     `<span class="k">'auto' would pick:</span> ${auto}`,
     `<span class="k">this demo forces :</span> ${renderer}`,
     `<span class="k">active renderer  :</span> <span class="${activeCls}">${activeTxt}</span>`,
-  ].join('\n');
+  ];
+  if (sourceErrors.length) {
+    lines.push(
+      `<span class="k">sourceError       :</span> <span class="bad">${sourceErrors.join(' | ')}</span>`,
+    );
+  }
+  if (rasterProbe) lines.push(rasterProbe);
+  debugEl.innerHTML = lines.join('\n');
+}
+
+async function probePdfRaster(): Promise<void> {
+  if (kind !== 'pdf') return;
+  try {
+    const img = await zine.getPageImage(0);
+    if (!img) {
+      rasterProbe = `<span class="k">pdf source        :</span> <span class="bad">none</span>`;
+      updateDebug();
+      return;
+    }
+    const kindName =
+      img instanceof ImageBitmap ? 'ImageBitmap' : img instanceof HTMLCanvasElement ? 'canvas' : typeof img;
+    const c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 1;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx?.drawImage(img as CanvasImageSource, Math.floor(img.width / 2), Math.floor(img.height / 2), 1, 1, 0, 0, 1, 1);
+    const px = ctx ? [...ctx.getImageData(0, 0, 1, 1).data] : [];
+    const ink = px[3] > 8 && (px[0] < 250 || px[1] < 250 || px[2] < 250);
+    rasterProbe = `<span class="k">pdf source        :</span> ${kindName} ${img.width}×${img.height}  px ${px.join(',')}  <span class="${ink ? 'ok' : 'bad'}">${ink ? 'has ink' : 'blank/white'}</span>`;
+  } catch (err) {
+    rasterProbe = `<span class="k">pdf source        :</span> <span class="bad">${err instanceof Error ? err.message : String(err)}</span>`;
+  }
+  updateDebug();
 }
 
 updateDebug();
