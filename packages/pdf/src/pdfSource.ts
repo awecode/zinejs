@@ -64,6 +64,14 @@ export interface PdfSourceOptions {
   progressive?: boolean;
   /** Ask pdf.js to fetch only the byte ranges visible pages need (range-capable servers). Default false. */
   disableAutoFetch?: boolean;
+  /**
+   * Load pdf.js's legacy build (transpiled with polyfills) instead of the modern one. The legacy
+   * build runs on both old and modern browsers; the modern build is smaller and a touch faster but
+   * needs a recent engine. Default true, favouring reach. Set false to serve the lean modern build
+   * when your audience is on current browsers. Ignored when a pre-created pdf.js document or a
+   * global `pdfjsLib` is supplied — those already picked their build.
+   */
+  legacy?: boolean;
 }
 
 const DEFAULT_MAX_CACHE_BYTES = 256 * 1024 * 1024;
@@ -111,11 +119,16 @@ function filenameFromUrl(url: string): string {
 /**
  * Load pdf.js. CDN / UMD hosts typically expose `globalThis.pdfjsLib` from a
  * `<script>` of pdf.js; bundlers have no global and resolve the dynamic import.
+ *
+ * `legacy` picks the transpiled build, which runs on older engines too. Its entry and worker are a
+ * matched pair, so `#resolveWorkerSrc` reads the same flag. Each specifier is a plain string literal
+ * so a bundler can see and emit the chosen chunk; the branch means only the selected one is fetched.
  */
-async function loadPdfjs(): Promise<PdfjsModule> {
+async function loadPdfjs(legacy: boolean): Promise<PdfjsModule> {
   const g = globalThis as typeof globalThis & { pdfjsLib?: PdfjsModule };
   if (g.pdfjsLib) return g.pdfjsLib;
-  return (await import('pdfjs-dist')) as unknown as PdfjsModule;
+  const mod = legacy ? await import('pdfjs-dist/legacy/build/pdf.mjs') : await import('pdfjs-dist');
+  return mod as unknown as PdfjsModule;
 }
 
 /**
@@ -134,6 +147,7 @@ export class PdfSource implements Source {
   #maxCacheBytes: number;
   #progressive: boolean;
   #disableAutoFetch: boolean;
+  #legacy: boolean;
   #onProgress: ((progress: LoadProgress) => void) | null = null;
   #cache = new Map<number, CacheEntry>();
   #cachedBytes = 0;
@@ -154,6 +168,7 @@ export class PdfSource implements Source {
     this.#maxCacheBytes = options.maxCacheBytes ?? DEFAULT_MAX_CACHE_BYTES;
     this.#progressive = options.progressive ?? false;
     this.#disableAutoFetch = options.disableAutoFetch ?? false;
+    this.#legacy = options.legacy ?? true;
   }
 
   /** Register a handler called when a page upgrades from its progressive low-res pass to crisp. */
@@ -170,7 +185,7 @@ export class PdfSource implements Source {
     if (isPdfDocument(this.#src)) {
       this.#doc = this.#src;
     } else {
-      const pdfjs = await loadPdfjs();
+      const pdfjs = await loadPdfjs(this.#legacy);
       pdfjs.GlobalWorkerOptions.workerSrc = this.#resolveWorkerSrc(pdfjs.GlobalWorkerOptions.workerSrc);
       const params: DocParams =
         typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
@@ -187,9 +202,13 @@ export class PdfSource implements Source {
     if (this.#workerSrc) return this.#workerSrc;
     if (configured) return configured;
     try {
-      // Bundlers (Vite / webpack 5 / esbuild) statically rewrite this and emit the worker,
-      // so the common case needs no `workerSrc`. Non-bundler / UMD hosts pass it explicitly.
-      return new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+      // Bundlers (Vite / webpack 5 / esbuild) statically rewrite these and emit the worker,
+      // so the common case needs no `workerSrc`. Non-bundler / UMD hosts pass it explicitly. The
+      // worker must match the build loaded in loadPdfjs — a legacy main with a modern worker (or
+      // vice versa) mismatches — so the same #legacy flag chooses here too.
+      return this.#legacy
+        ? new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+        : new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
     } catch {
       throw new Error(
         "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +

@@ -63,10 +63,10 @@ Image-only books can skip pdf.js and use a plain classic script:
 
 ## The pdf.js worker (`workerSrc`)
 
-pdf.js parses and rasterizes in a Web Worker, a separate file the host must locate. By default `PdfSource` resolves it to:
+pdf.js parses and rasterizes in a Web Worker, a separate file the host must locate. By default `PdfSource` resolves it to (the `legacy/` path since `legacy` defaults to true; `build/` when `legacy: false`):
 
 ```js
-new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
+new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
 ```
 
 Resolution precedence: an explicit `workerSrc` option → an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc` → the auto-default above. You only pass `workerSrc` when the default can't apply.
@@ -108,7 +108,18 @@ new PdfSource(src, {
   maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB); LRU-evicts beyond it
   progressive: true,   // paint a low-res page first, then swap to crisp (faster first paint)
   disableAutoFetch: true, // fetch only the byte ranges visible pages need (range-capable servers)
+  legacy: true,        // load pdf.js's transpiled build (default); false serves the lean modern build
 });
 ```
 
 `src` is a URL string, `ArrayBuffer`/`Uint8Array` of PDF bytes, or a pre-created pdf.js document.
+
+### Legacy vs modern build (`legacy`)
+
+pdf.js ships two builds. The `legacy` build is transpiled with polyfills and runs on both older and current browsers; the `modern` build is smaller and a touch faster but needs a recent engine. `PdfSource` defaults to `legacy: true`, favouring reach. Pass `legacy: false` to load the modern build when your audience is on current browsers:
+
+```js
+new PdfSource('document.pdf', { legacy: false });
+```
+
+The flag also picks the matching worker (`legacy/build/pdf.worker.min.mjs` vs `build/pdf.worker.min.mjs`) — the two must be a matched pair. It's ignored when you pass a pre-created document or set `globalThis.pdfjsLib`, since those already chose their build.

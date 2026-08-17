@@ -11,13 +11,16 @@ const mock = vi.hoisted(() => {
     render: () => ({ promise: Promise.resolve() }),
   };
   const doc = { numPages: 3, getPage: async () => page, destroy: () => {} };
-  return { getDocument: vi.fn(() => ({ promise: Promise.resolve(doc) })) };
+  const getDocument = vi.fn(() => ({ promise: Promise.resolve(doc) }));
+  // One shared namespace for both the modern and legacy specifiers: PdfSource defaults to the
+  // legacy build, so open() imports the legacy path, yet the tests read GlobalWorkerOptions through
+  // 'pdfjs-dist'. Sharing the object keeps that global observable whichever build is loaded.
+  const ns = { GlobalWorkerOptions: { workerSrc: '' }, getDocument };
+  return { getDocument, ns };
 });
 
-vi.mock('pdfjs-dist', () => ({
-  GlobalWorkerOptions: { workerSrc: '' },
-  getDocument: mock.getDocument,
-}));
+vi.mock('pdfjs-dist', () => mock.ns);
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => mock.ns);
 
 describe('PdfSource', () => {
   beforeEach(async () => {
@@ -53,6 +56,19 @@ describe('PdfSource', () => {
     await src.open();
     expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/pdf\.worker\.min\.mjs$/);
     expect(src.pageCount).toBe(3);
+  });
+
+  it('auto-resolves the legacy worker by default, the modern one when legacy is off', async () => {
+    const legacy = new PdfSource('doc.pdf'); // legacy defaults to true
+    await legacy.open();
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/legacy\/build\/pdf\.worker\.min\.mjs$/);
+
+    (await pdfjsMock()).GlobalWorkerOptions.workerSrc = ''; // clear the shared global before the next resolve
+    const modern = new PdfSource('doc.pdf', { legacy: false });
+    await modern.open();
+    const src = (await pdfjsMock()).GlobalWorkerOptions.workerSrc;
+    expect(src).toMatch(/build\/pdf\.worker\.min\.mjs$/);
+    expect(src).not.toMatch(/legacy\//);
   });
 
   it('prefers an explicit workerSrc over the default', async () => {
