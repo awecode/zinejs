@@ -1,17 +1,15 @@
 /**
- * Drive the demo against pinned Chrome-for-Testing majors (default 109, 128, 140, 144).
+ * Drive the demo against pinned Chrome-for-Testing majors (default 113, 128, 140, 144).
  *
  * From the repo root, with the demo already running:
  *
  *   pnpm --filter @zinejs/demo dev
- *   pnpm test:chrome-matrix:install   # once: download Chrome 128/140/144 into ./chrome
+ *   pnpm test:chrome-matrix:install   # once: download Chrome 113/128/140/144 into ./chrome
  *   pnpm test:chrome-matrix           # PDF + image, WebGL + CSS
  *
- * Chrome 109 is included in the default matrix but is not on Chrome-for-Testing (min 113).
- * For 109, extract a binary under ./chrome/linux-109.<patch>/chrome-linux64/chrome, or set
- * CHROME_109_PATH=/path/to/chrome. Install skips 109 and fetches 128+ only.
- *
- * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=109,128 pnpm test:chrome-matrix
+ * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=113,128 pnpm test:chrome-matrix
+ * Override a binary with CHROME_<major>_PATH=/path/to/chrome. Majors below 113 are not
+ * on Chrome-for-Testing; install skips those.
  *
  * Binaries and screenshots stay in ./chrome (gitignored). This file is the runner.
  */
@@ -26,7 +24,7 @@ const REPO = join(scriptDir, '../../..')
 const CACHE = join(REPO, 'chrome')
 const SHOTS = join(CACHE, 'screenshots')
 const BASE = process.env.DEMO_URL ?? 'http://127.0.0.1:5173'
-const MAJORS = (process.env.CHROME_MAJORS ?? '109,128,140,144')
+const MAJORS = (process.env.CHROME_MAJORS ?? '113,128,140,144')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
@@ -254,8 +252,8 @@ if (args.includes('--help') || args.includes('-h')) {
   pnpm test:chrome-matrix
 
   DEMO_URL           default http://127.0.0.1:5173
-  CHROME_MAJORS      default 109,128,140,144
-  CHROME_<major>_PATH  override binary for a major (required for 109)
+  CHROME_MAJORS      default 113,128,140,144
+  CHROME_<major>_PATH  override binary for a major
 `)
   process.exit(0)
 }
