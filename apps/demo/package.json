@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:chrome-matrix": "node scripts/chrome-matrix.mjs",
+    "test:chrome-matrix:install": "node scripts/chrome-matrix.mjs --install"
   },
   "devDependencies": {
     "vite": "^8.1.5"

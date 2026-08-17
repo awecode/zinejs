@@ -16,5 +16,9 @@
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
+  },
+  "scripts": {
+    "test:chrome-matrix": "node apps/demo/scripts/chrome-matrix.mjs",
+    "test:chrome-matrix:install": "node apps/demo/scripts/chrome-matrix.mjs --install"
   }
 }
