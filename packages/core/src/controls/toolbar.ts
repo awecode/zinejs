@@ -254,8 +254,26 @@ export class Toolbar {
       else this.#openMenu(def, trigger);
       return;
     }
-    def.action?.(this.#context());
+    if (trigger.classList.contains('zine-controls-busy')) return; // a slow action already running
+    const result = def.action?.(this.#context());
+    // A synchronous action is done; a promise means slow work (fetching a cross-origin file to save
+    // or print). Mark the button busy and hold it there until the work settles. The action closes
+    // its own menu when ready, so the spinner stays visible on the still-open item meanwhile.
+    if (result && typeof result.then === 'function') {
+      this.#setBusy(trigger, true);
+      void result.finally(() => {
+        this.#setBusy(trigger, false);
+        this.#refresh();
+      });
+    }
     this.#refresh();
+  }
+
+  /** Toggle the pending-action state on a button: a trailing spinner, disabled while it spins. */
+  #setBusy(btn: HTMLButtonElement, busy: boolean): void {
+    btn.classList.toggle('zine-controls-busy', busy);
+    btn.setAttribute('aria-busy', String(busy));
+    btn.disabled = busy;
   }
 
   #openMenu(def: ControlDef, trigger: HTMLButtonElement): void {
@@ -356,7 +374,9 @@ export class Toolbar {
       const applies = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
       if (applies !== undefined) el.style.display = applies ? '' : 'none';
 
-      const disabled = def.isDisabled?.(ctx) ?? false;
+      // A button running a slow action stays disabled until it settles, whatever its predicate says.
+      const busy = el.classList.contains('zine-controls-busy');
+      const disabled = (def.isDisabled?.(ctx) ?? false) || busy;
       // A wrapper element cannot be disabled, so mark it and disable the fields inside.
       for (const field of this.#formFields(el)) field.disabled = disabled;
       if (!this.#formFields(el).length) el.setAttribute('aria-disabled', String(disabled));

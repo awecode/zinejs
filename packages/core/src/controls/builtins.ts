@@ -115,8 +115,10 @@ export function registerBuiltins(): void {
     // Hidden for image books and for PDFs opened from a caller-owned pdf.js document, which
     // have no file of their own to save.
     isVisible: (ctx) => ctx.zine.canDownload(),
-    action: (ctx) => {
-      void ctx.zine.download();
+    // Async: a cross-origin PDF is fetched into a blob first, which takes a beat. Returning the
+    // promise lets the toolbar hold the menu open with a spinner until the save starts, then close.
+    action: async (ctx) => {
+      await ctx.zine.download();
       ctx.close();
     },
   });
@@ -141,8 +143,10 @@ export function registerBuiltins(): void {
     icon: ICONS.print,
     // Same reach as download: there has to be an original document to print.
     isVisible: (ctx) => ctx.zine.canPrint(),
-    action: (ctx) => {
-      void ctx.zine.print();
+    // Async like download: the print frame needs a same-origin blob for a cross-origin file, so
+    // hold the menu open with a spinner until the frame is ready, then close.
+    action: async (ctx) => {
+      await ctx.zine.print();
       ctx.close();
     },
   });

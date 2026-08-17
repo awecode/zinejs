@@ -39,8 +39,13 @@ export interface ControlDef {
   readonly icon?: string | ((ctx: ControlContext) => string);
   /** Nested controls. A control with children opens a submenu instead of acting. */
   readonly children?: readonly ControlItem[];
-  /** What the button does. Ignored when `children` is present. */
-  action?(ctx: ControlContext): void;
+  /**
+   * What the button does. Ignored when `children` is present. May return a promise: while it is
+   * pending the toolbar marks the button busy (a spinner, disabled) and — for a control in a
+   * submenu — holds the menu open until it settles, so a slow action (fetching a cross-origin file
+   * to download or print) shows progress rather than appearing to do nothing.
+   */
+  action?(ctx: ControlContext): void | Promise<void>;
   /** Build a custom element instead of a button — for inputs and other non-button widgets. */
   render?(ctx: ControlContext): HTMLElement;
   /**

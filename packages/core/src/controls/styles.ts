@@ -96,6 +96,35 @@ export const CSS = `
   outline-offset: 1px;
 }
 .zine-controls-btn:disabled { opacity: 0.38; cursor: default; }
+/* A button mid-slow-action (fetching a file to save or print): a spinner, kept full-strength
+   rather than dimmed so it reads as "working", not "disabled". */
+.zine-controls-btn.zine-controls-busy { opacity: 1; cursor: default; position: relative; }
+.zine-controls-btn.zine-controls-busy::after {
+  content: '';
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.7;
+  animation: zine-controls-spin 0.7s linear infinite;
+}
+/* Icon-only bar button: hide the glyph and center the spinner over its place. */
+.zine-controls-btn.zine-controls-busy > svg { visibility: hidden; }
+.zine-controls-btn.zine-controls-busy::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -7px 0 0 -7px;
+}
+/* Menu item (glyph + label): let the glyph and label stand, and trail the spinner after them. */
+.zine-controls-menu .zine-controls-btn.zine-controls-busy > svg { visibility: visible; }
+.zine-controls-menu .zine-controls-btn.zine-controls-busy::after { position: static; }
+@keyframes zine-controls-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .zine-controls-btn.zine-controls-busy::after { animation-duration: 1.6s; }
+}
 /* A custom widget cannot always be disabled itself, so it is marked instead and reads the same. */
 .zine-controls-off { opacity: 0.38; }
 .zine-controls-off[aria-disabled='true'] { pointer-events: none; }

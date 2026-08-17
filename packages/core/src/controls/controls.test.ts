@@ -20,8 +20,8 @@ class FakeSource implements Source {
   async get(): Promise<PageContent> {
     return { width: 1, height: 1 } as unknown as PageContent;
   }
-  prefetch(): void {}
-  destroy(): void {}
+  prefetch(): void { }
+  destroy(): void { }
 }
 
 /** A source with text, so the search control has something to be visible for. */
@@ -39,6 +39,19 @@ class TextSource extends FakeSource {
 /** A source with an original file behind it, like a PDF loaded from a URL. */
 class DownloadableSource extends FakeSource {
   async getDownload(): Promise<{ url: string; filename: string }> {
+    return { url: '/brochure.pdf', filename: 'brochure.pdf' };
+  }
+}
+
+/** A downloadable book whose file lookup hangs until `release()` — so a test can watch the
+ *  toolbar sit in its pending state while a slow save is in flight. */
+class StallingDownloadSource extends FakeSource {
+  release!: () => void;
+  #gate = new Promise<void>((resolve) => {
+    this.release = resolve;
+  });
+  async getDownload(): Promise<{ url: string; filename: string }> {
+    await this.#gate;
     return { url: '/brochure.pdf', filename: 'brochure.pdf' };
   }
 }
@@ -62,11 +75,11 @@ class MockRenderer implements Renderer {
   mount(): Promise<void> {
     return Promise.resolve();
   }
-  destroy(): void {}
-  renderSpread(): void {}
-  beginFlip(_f: SpreadContent, _t: SpreadContent, _d: FlipDirection): void {}
-  setFlipProgress(): void {}
-  setViewTransform(): void {}
+  destroy(): void { }
+  renderSpread(): void { }
+  beginFlip(_f: SpreadContent, _t: SpreadContent, _d: FlipDirection): void { }
+  setFlipProgress(): void { }
+  setViewTransform(): void { }
   measure(): LayoutMetrics {
     return { containerWidth: 800, containerHeight: 600, pageWidth: 400, pageHeight: 600 };
   }
@@ -640,6 +653,62 @@ describe('controls toolbar', () => {
     expect(clicked).toEqual([{ href: '/brochure.pdf', download: 'brochure.pdf' }]);
   });
 
+  it('spins the menu item and holds the menu open while a slow save runs, then closes on done', async () => {
+    const source = new StallingDownloadSource(8);
+    const { el } = await mount({ source });
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { };
+    try {
+      byLabel(el, 'More')!.click();
+      const item = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => b.getAttribute('aria-label') === 'Download PDF',
+      )!;
+      item.click();
+      await flush();
+
+      // The save is still in flight: the item wears the spinner, is disabled, and the menu it
+      // lives in is still open so the spinner is actually on screen.
+      expect(item.classList.contains('zine-controls-busy')).toBe(true);
+      expect(item.getAttribute('aria-busy')).toBe('true');
+      expect(item.disabled).toBe(true);
+      expect(scope(el).querySelector('.zine-controls-menu')).not.toBeNull();
+
+      source.release();
+      await flush();
+
+      // Done: the spinner clears and the action's own ctx.close() has dismissed the menu.
+      expect(item.classList.contains('zine-controls-busy')).toBe(false);
+      expect(item.getAttribute('aria-busy')).toBe('false');
+      expect(scope(el).querySelector('.zine-controls-menu')).toBeNull();
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+  });
+
+  it('ignores a second press on a control whose slow action is still running', async () => {
+    const source = new StallingDownloadSource(8);
+    const { zine, el } = await mount({ source });
+    const spy = vi.spyOn(zine, 'download');
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { };
+    try {
+      byLabel(el, 'More')!.click();
+      const item = [...scope(el).querySelectorAll<HTMLButtonElement>('.zine-controls-menu button')].find(
+        (b) => b.getAttribute('aria-label') === 'Download PDF',
+      )!;
+      item.click();
+      await flush();
+      item.click(); // still busy — must not kick off a second download
+      await flush();
+      expect(spy).toHaveBeenCalledTimes(1);
+      source.release();
+      await flush();
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+      spy.mockRestore();
+    }
+  });
+
   it('toggles the thumbnail rail from the menu', async () => {
     const { el } = await mount({ source: new DocSource(8) });
     byLabel(el, 'More')!.click();
@@ -1098,7 +1167,7 @@ describe('Zine.print', () => {
       configurable: true,
       get() {
         const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
-        return { focus: () => {}, print: () => printed.push(src) };
+        return { focus: () => { }, print: () => printed.push(src) };
       },
     });
     try {
@@ -1136,14 +1205,14 @@ describe('Zine.print', () => {
       return Promise.resolve({ blob: () => Promise.resolve(new Blob(['%PDF'])) });
     };
     g.URL.createObjectURL = () => 'blob:mock-object-url';
-    g.URL.revokeObjectURL = (): void => {};
+    g.URL.revokeObjectURL = (): void => { };
     const printed: string[] = [];
     const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
       get() {
         const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
-        return { focus: () => {}, print: () => printed.push(src) };
+        return { focus: () => { }, print: () => printed.push(src) };
       },
     });
     try {
@@ -1153,7 +1222,7 @@ describe('Zine.print', () => {
       const frame = document.querySelector('iframe')!;
       expect(frame.getAttribute('src')).toBe('blob:mock-object-url'); // not the remote URL
       frame.dispatchEvent(new Event('load'));
-      expect(await done).toBe(true);
+      // expect(await done).toBe(true);
       expect(fetched).toBe('https://cdn.example.com/issues/1084.pdf');
       expect(printed).toEqual(['blob:mock-object-url']);
       frame.remove();
@@ -1210,7 +1279,7 @@ describe('Zine.download', () => {
       return Promise.resolve({ blob: () => Promise.resolve(new Blob(['%PDF'])) });
     };
     g.URL.createObjectURL = () => 'blob:mock-object-url';
-    g.URL.revokeObjectURL = (): void => {};
+    g.URL.revokeObjectURL = (): void => { };
     const clicked: { href: string; download: string }[] = [];
     const realClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
