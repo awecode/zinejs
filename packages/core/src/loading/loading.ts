@@ -9,8 +9,11 @@ import type { LoadProgress } from '../source/types';
  * is what the size-limit budget watches (the same trick as `controls/controls.ts`).
  *
  * Everything is scoped under `.zine-loading`, and the colours come from custom properties so a
- * consumer can retheme without overriding rules. A consumer who wants a wholly different indicator
- * passes `loading: false` and drives their own UI from the `progress` event and the `ready` promise.
+ * consumer can retheme without overriding rules. Each falls back to `light-dark(light, dark)`, which
+ * resolves against the used `color-scheme`, so the overlay follows the host page's light or dark
+ * theme with no configuration (the same approach as the controls). A consumer who wants a wholly
+ * different indicator passes `loading: false` and drives their own UI from the `progress` event and
+ * the `ready` promise.
  */
 
 const STYLE_ID = 'zine-loading-style';
@@ -33,8 +36,8 @@ export const CSS = `
   box-sizing: border-box;
   text-align: center;
   font: 500 14px/1.4 system-ui, sans-serif;
-  color: var(--zine-loading-fg, #d4d4d8);
-  background: var(--zine-loading-bg, #0c0c11);
+  color: var(--zine-loading-fg, light-dark(#3f3f46, #d4d4d8));
+  background: var(--zine-loading-bg, light-dark(#fafafa, #0c0c11));
   border-radius: inherit;
   opacity: 0;
   transition: opacity 150ms ease;
@@ -43,8 +46,8 @@ export const CSS = `
 .zine-loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--zine-loading-track, rgba(255, 255, 255, 0.14));
-  border-top-color: var(--zine-loading-accent, #7dd3fc);
+  border: 3px solid var(--zine-loading-track, light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.14)));
+  border-top-color: var(--zine-loading-accent, light-dark(#0284c7, #7dd3fc));
   border-radius: 50%;
   animation: zine-loading-spin 0.8s linear infinite;
 }
@@ -53,14 +56,14 @@ export const CSS = `
 .zine-loading-bar {
   width: min(240px, 70%);
   height: 6px;
-  background: var(--zine-loading-track, rgba(255, 255, 255, 0.14));
+  background: var(--zine-loading-track, light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.14)));
   border-radius: 3px;
   overflow: hidden;
 }
 .zine-loading-fill {
   width: 0;
   height: 100%;
-  background: var(--zine-loading-accent, #7dd3fc);
+  background: var(--zine-loading-accent, light-dark(#0284c7, #7dd3fc));
   border-radius: 3px;
   transition: width 150ms ease-out;
 }
