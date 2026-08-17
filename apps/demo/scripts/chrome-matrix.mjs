@@ -1,5 +1,5 @@
 /**
- * Drive the demo against pinned Chrome-for-Testing majors (default 128, 140, 144).
+ * Drive the demo against pinned Chrome-for-Testing majors (default 109, 128, 140, 144).
  *
  * From the repo root, with the demo already running:
  *
@@ -7,7 +7,11 @@
  *   pnpm test:chrome-matrix:install   # once: download Chrome 128/140/144 into ./chrome
  *   pnpm test:chrome-matrix           # PDF + image, WebGL + CSS
  *
- * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=128,140 pnpm test:chrome-matrix
+ * Chrome 109 is included in the default matrix but is not on Chrome-for-Testing (min 113).
+ * For 109, extract a binary under ./chrome/linux-109.<patch>/chrome-linux64/chrome, or set
+ * CHROME_109_PATH=/path/to/chrome. Install skips 109 and fetches 128+ only.
+ *
+ * Optional: DEMO_URL=http://127.0.0.1:5173 CHROME_MAJORS=109,128 pnpm test:chrome-matrix
  *
  * Binaries and screenshots stay in ./chrome (gitignored). This file is the runner.
  */
@@ -22,12 +26,17 @@ const REPO = join(scriptDir, '../../..')
 const CACHE = join(REPO, 'chrome')
 const SHOTS = join(CACHE, 'screenshots')
 const BASE = process.env.DEMO_URL ?? 'http://127.0.0.1:5173'
-const MAJORS = (process.env.CHROME_MAJORS ?? '128,140,144')
+const MAJORS = (process.env.CHROME_MAJORS ?? '109,128,140,144')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 
 const PAGES = ['/pdf-webgl.html', '/pdf-css.html', '/image-webgl.html', '/image-css.html']
+const MIN_CFT_MAJOR = 113
+
+function chromePathEnv(major) {
+  return process.env[`CHROME_${major}_PATH`]
+}
 
 function chromeFolderPrefix() {
   if (process.platform === 'linux') return 'linux'
@@ -45,6 +54,16 @@ function chromeExeRel() {
 }
 
 async function findChrome(major) {
+  const fromEnv = chromePathEnv(major)
+  if (fromEnv) {
+    try {
+      await access(fromEnv, fsConstants.X_OK)
+      return fromEnv
+    } catch {
+      throw new Error(`chrome-matrix: CHROME_${major}_PATH is not executable: ${fromEnv}`)
+    }
+  }
+
   const prefix = `${chromeFolderPrefix()}-${major}.`
   const roots = [CACHE, join(CACHE, 'chrome')]
   for (const root of roots) {
@@ -68,7 +87,17 @@ async function findChrome(major) {
 }
 
 function installBrowsers() {
+  let installed = 0
   for (const major of MAJORS) {
+    if (Number(major) < MIN_CFT_MAJOR) {
+      console.error(
+        `chrome-matrix: skipping chrome@${major} (Chrome-for-Testing starts at ${MIN_CFT_MAJOR}).`,
+      )
+      console.error(
+        `  For ${major}, extract under ${CACHE}/linux-${major}.<patch>/chrome-linux64/chrome or set CHROME_${major}_PATH.`,
+      )
+      continue
+    }
     console.error(`Installing chrome@${major} into ${CACHE} …`)
     const r = spawnSync(
       'npx',
@@ -78,6 +107,10 @@ function installBrowsers() {
     if (r.status !== 0) {
       throw new Error(`chrome-matrix: install chrome@${major} failed (exit ${r.status ?? 'null'})`)
     }
+    installed += 1
+  }
+  if (!installed && MAJORS.every((major) => Number(major) < MIN_CFT_MAJOR)) {
+    console.error('chrome-matrix: nothing to install via Chrome-for-Testing; add manual binaries for older majors.')
   }
 }
 
@@ -221,7 +254,8 @@ if (args.includes('--help') || args.includes('-h')) {
   pnpm test:chrome-matrix
 
   DEMO_URL           default http://127.0.0.1:5173
-  CHROME_MAJORS      default 128,140,144
+  CHROME_MAJORS      default 109,128,140,144
+  CHROME_<major>_PATH  override binary for a major (required for 109)
 `)
   process.exit(0)
 }
@@ -238,9 +272,11 @@ const browsers = []
 for (const major of MAJORS) {
   const path = await findChrome(major)
   if (!path) {
-    console.error(
-      `chrome-matrix: no Chrome ${major} under ${CACHE}. Run: pnpm test:chrome-matrix:install`,
-    )
+    const hint =
+      Number(major) < MIN_CFT_MAJOR
+        ? ` Chrome-for-Testing starts at ${MIN_CFT_MAJOR}; extract under ${CACHE}/linux-${major}.<patch>/chrome-linux64/chrome or set CHROME_${major}_PATH.`
+        : ''
+    console.error(`chrome-matrix: no Chrome ${major} under ${CACHE}.${hint} Run: pnpm test:chrome-matrix:install`)
     process.exit(1)
   }
   browsers.push({ name: `chrome-${major}`, path })
