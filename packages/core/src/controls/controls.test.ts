@@ -1204,15 +1204,20 @@ describe('Zine.print', () => {
       fetched = input;
       return Promise.resolve({ blob: () => Promise.resolve(new Blob(['%PDF'])) });
     };
-    g.URL.createObjectURL = () => 'blob:mock-object-url';
-    g.URL.revokeObjectURL = (): void => { };
+    // A real object URL is `blob:...`, which is same-origin and so scriptable. happy-dom cannot
+    // navigate a `blob:` frame (it rejects the scheme and fires `error`), so stand it in with a
+    // same-origin path — same property the production code relies on: the frame is no longer the
+    // remote cross-origin URL, so its window can be driven with print().
+    const objectUrl = '/print-blob-1084.pdf';
+    g.URL.createObjectURL = () => objectUrl;
+    g.URL.revokeObjectURL = (): void => {};
     const printed: string[] = [];
     const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
       get() {
         const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
-        return { focus: () => { }, print: () => printed.push(src) };
+        return { focus: () => {}, print: () => printed.push(src) };
       },
     });
     try {
@@ -1220,11 +1225,11 @@ describe('Zine.print', () => {
       const done = zine.print();
       await flush(); // the file is fetched into a blob before the frame is created
       const frame = document.querySelector('iframe')!;
-      expect(frame.getAttribute('src')).toBe('blob:mock-object-url'); // not the remote URL
+      expect(frame.getAttribute('src')).toBe(objectUrl); // the local copy, not the remote URL
       frame.dispatchEvent(new Event('load'));
-      // expect(await done).toBe(true);
+      expect(await done).toBe(true);
       expect(fetched).toBe('https://cdn.example.com/issues/1084.pdf');
-      expect(printed).toEqual(['blob:mock-object-url']);
+      expect(printed).toEqual([objectUrl]);
       frame.remove();
     } finally {
       if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
