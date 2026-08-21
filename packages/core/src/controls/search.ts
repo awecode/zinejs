@@ -1,5 +1,5 @@
 import { Sidebar, type PanelOptions } from './sidebar';
-import type { Zine } from '../zine';
+import type { SearchHit, Zine } from '../zine';
 
 /** Rail width in px. Matches the outline: both hold text, not pictures. */
 const RAIL_WIDTH = 208;
@@ -7,6 +7,19 @@ const RAIL_WIDTH = 208;
 const DEBOUNCE_MS = 180;
 /** Shorter queries match too much to be useful. */
 const MIN_QUERY = 2;
+
+/** The query and its results, so a closed panel can be reopened where the reader left it rather
+ *  than blank. Held by the toolbar (which outlives the panel) and handed back on reopen. */
+export interface SearchState {
+  query: string;
+  results: SearchHit[];
+}
+
+/** Panel options plus the optional state to reopen with. */
+export interface SearchOptions extends PanelOptions {
+  /** Query and results from a previous open, put back so the reader continues where they left off. */
+  state?: SearchState;
+}
 
 /**
  * Full-text search beside the book: a query field over its results.
@@ -27,8 +40,10 @@ export class Search {
   #run = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #onDismiss?: () => void;
+  /** The last query and results, kept so the toolbar can restore them on reopen. */
+  #results: SearchHit[] = [];
 
-  constructor(zine: Zine, container: HTMLElement, options: PanelOptions = {}) {
+  constructor(zine: Zine, container: HTMLElement, options: SearchOptions = {}) {
     this.#zine = zine;
     const doc = container.ownerDocument!;
     this.#doc = doc;
@@ -64,7 +79,22 @@ export class Search {
     this.#hits.className = 'zine-search-hits';
 
     this.#bar.root.append(this.#input, this.#hits);
+
+    // Reopened where the reader left off: put the query and its results straight back, without
+    // re-scanning the document. A later keystroke supersedes them the usual way.
+    const initial = options.state;
+    if (initial && initial.query) {
+      this.#input.value = initial.query;
+      this.#run++; // any restored render belongs to this run, not a stale one
+      this.#renderResults(initial.query, initial.results);
+    }
+
     this.#input.focus();
+  }
+
+  /** The query and results as they stand, for the toolbar to stash across a close. */
+  getState(): SearchState {
+    return { query: this.#input.value, results: this.#results };
   }
 
   #note(text: string): void {
@@ -78,12 +108,20 @@ export class Search {
     const query = this.#input.value.trim();
     const mine = ++this.#run;
     if (query.length < MIN_QUERY) {
+      this.#results = [];
       this.#hits.replaceChildren();
       return;
     }
     this.#note('Searching…');
     const results = await this.#zine.search(query);
     if (mine !== this.#run || !this.#bar.root.isConnected) return; // superseded, or closed
+    this.#renderResults(query, results);
+  }
+
+  /** Paint a completed search: a note when empty, one clickable row per hit otherwise. Shared by
+   *  a live search and the restore of a reopened panel, so both render identically. */
+  #renderResults(query: string, results: SearchHit[]): void {
+    this.#results = results;
     if (results.length === 0) {
       this.#note(`No matches for “${query}”`);
       return;

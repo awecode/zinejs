@@ -1090,6 +1090,31 @@ describe('controls outline panel', () => {
     expect(scope(el).querySelector('.zine-search')).toBeNull();
   });
 
+  it('restores the query and results when the search rail is reopened', async () => {
+    const { el } = await mount({
+      source: new TextSource(['nothing here', 'nor here', 'the invoice is due']),
+    });
+    // The label flips to 'Hide search' once open, so hold the element rather than re-find it.
+    const button = byLabel(el, 'Search')!;
+    button.click();
+    await flush();
+    const input = scope(el).querySelector<HTMLInputElement>('.zine-search-input')!;
+    input.value = 'invoice';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 220)); // outlast the debounce and resolve the search
+    expect(scope(el).querySelectorAll('.zine-search-hit')).toHaveLength(1);
+
+    // Close and reopen: the field and its results come back without a fresh search.
+    button.click(); // close
+    await flush();
+    expect(scope(el).querySelector('.zine-search')).toBeNull();
+    button.click(); // reopen
+    await flush();
+    const reopened = scope(el).querySelector<HTMLInputElement>('.zine-search-input')!;
+    expect(reopened.value).toBe('invoice');
+    expect(scope(el).querySelectorAll('.zine-search-hit')).toHaveLength(1);
+  });
+
   it('hides search on a book whose source has no text', async () => {
     const { el } = await mount();
     expect(byLabel(el, 'Search')?.style.display).toBe('none');

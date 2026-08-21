@@ -4,7 +4,7 @@ import { registerBuiltins } from './builtins';
 import { applyColorScheme, ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
 import { Outline } from './outline';
-import { Search } from './search';
+import { Search, type SearchState } from './search';
 import { Arrows } from './arrows';
 
 /** The side panels, all of which share the one rail beside the book. */
@@ -50,6 +50,9 @@ export class Toolbar {
   /** The side panel currently in the rail. Only one at a time — they share the space. */
   #panel: Panel | null = null;
   #panelKind: PanelKind | null = null;
+  /** The last search's query and results, so reopening the search rail restores them rather than
+   *  starting blank. Panels are rebuilt on every open, so this outlives the panel that holds it. */
+  #searchState: SearchState | null = null;
   /** Whether the document turned out to have any outline entries. Null until known: the answer
    *  is async, and the outline control stays hidden rather than flash in and out. */
   #hasOutline: boolean | null = null;
@@ -506,6 +509,10 @@ export class Toolbar {
    */
   togglePanel(kind: PanelKind): void {
     const wasOpen = this.#panelKind;
+    // Remember the query and results before tearing the search rail down, so its next open picks
+    // up where the reader left it instead of blank. Only search carries state worth keeping;
+    // thumbnails and the outline are rebuilt from the document each time by design.
+    if (this.#panel instanceof Search) this.#searchState = this.#panel.getState();
     this.#panel?.destroy();
     this.#panel = null;
     this.#panelKind = null;
@@ -514,6 +521,7 @@ export class Toolbar {
       // scrim and Escape can dismiss the narrow-screen drawer without any new close machinery.
       this.#panel = new PANELS[kind](this.#zine, this.#container, {
         onDismiss: () => this.togglePanel(kind),
+        ...(kind === 'search' && this.#searchState ? { state: this.#searchState } : {}),
       });
       applyColorScheme(this.#panel.root, this.#colorScheme);
       this.#panelKind = kind;
