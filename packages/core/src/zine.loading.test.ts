@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import { Zine } from './zine';
+import { CSS as LOADING_CSS } from './loading/loading';
 import type { LoadProgress, Source } from './source/types';
 import type { LayoutMetrics, PageContent, Renderer } from './renderer/types';
 
@@ -129,5 +130,13 @@ describe('Zine — built-in loading indicator', () => {
     source.failOpen(new Error('bad url'));
     await expect(zine.ready).rejects.toThrow(/bad url/);
     expect(el.querySelector('.zine-loading')).toBeNull();
+  });
+
+  // Regression guard for a container sized by width alone: during download the book is not yet
+  // measured, so the container has no aspect-ratio (and thus no height). Without a floor the
+  // absolutely-positioned overlay collapses to a strip and the spinner overflows. happy-dom does
+  // not lay out, so assert the rule the fix relies on rather than a rendered height.
+  it('floors the overlay height so a not-yet-measured container cannot crush it', () => {
+    expect(LOADING_CSS).toMatch(/\.zine-loading\s*\{[^}]*min-height:/);
   });
 });

@@ -32,6 +32,11 @@ export const CSS = `
   align-items: center;
   justify-content: center;
   gap: 14px;
+  /* The overlay shows during download, before the book is measured and the container gets its
+     aspect-ratio (and thus its height). A consumer who sizes the container by width alone leaves it
+     near-zero-height meanwhile, which would crush the overlay to a strip and clip the spinner.
+     A floor keeps it tall enough to lay out; the box snaps to the book's ratio once it paints. */
+  min-height: 160px;
   padding: 24px;
   box-sizing: border-box;
   text-align: center;
