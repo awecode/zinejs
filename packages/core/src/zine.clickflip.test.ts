@@ -397,12 +397,14 @@ describe('Zine — cursor hints', () => {
     expect(el.style.cursor).toBe('zoom-in'); // updated in place, no new hover
   });
 
-  it('keeps the zoom-in hint everywhere when zoomed (click-to-flip is off, a drag pans)', async () => {
+  it('shows grab everywhere when zoomed (click-to-flip is off, a drag pans)', async () => {
+    // Zoomed the page is one pannable region, so a single steady grab covers it — no flicker as the
+    // reader moves, and no stale zoom-in when a double-click would zoom back out.
     const { zine, el } = await makeZine(2, { source: new FakeSource(6) });
     expect(hover(el, 790, 300)).toBe('pointer'); // right edge turns the page at scale 1
     zine.setZoom(2);
-    expect(el.style.cursor).toBe('zoom-in'); // re-derived on zoom; the edge no longer flips
-    expect(hover(el, 400, 300)).toBe('zoom-in'); // centre too
+    expect(el.style.cursor).toBe('grab'); // re-derived on zoom; the edge no longer flips
+    expect(hover(el, 400, 300)).toBe('grab'); // centre too
   });
 
   it('shows grabbing while a peel is dragged', async () => {

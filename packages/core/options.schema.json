@@ -92,7 +92,7 @@
     "cursorHints": {
       "type": "boolean",
       "default": true,
-      "description": "On a mouse, change the cursor over the book to hint what a press would do: pointer where a click turns the page, zoom-in where a double-click zooms (including the edge peel band and, once zoomed, the whole page). Only those two resting hints, so the cursor stays calm as the reader hovers; while a peel or pan is in flight it is grabbing. No effect on touch."
+      "description": "On a mouse, change the cursor over the book to hint what a press would do: pointer where a click turns the page, zoom-in where a double-click zooms (including the edge peel band, so a sweep stays calm), grab over the whole page once zoomed (a drag pans), and grabbing while a peel or pan is in flight. No effect on touch."
     },
     "clickFlipDelay": {
       "type": "number",

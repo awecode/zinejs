@@ -178,11 +178,10 @@ export interface ZineOptions {
   clickZoneSize?: number;
   /**
    * On a mouse, change the cursor over the book to hint what a press would do: `pointer` where a
-   * click turns the page, `zoom-in` where a double-click zooms (including the edge peel band and,
-   * once zoomed, the whole page a drag pans). Only those two resting hints, so the cursor stays calm
-   * as the reader sweeps across the book; while a peel or pan is actually in flight it is `grabbing`.
-   * Default true. Set false when a changing cursor would be noise in the embedding design. No effect
-   * on touch.
+   * click turns the page, `zoom-in` where a double-click zooms (including the edge peel band, so a
+   * sweep stays calm), `grab` over the whole page once zoomed (a drag pans), and `grabbing` while a
+   * peel or pan is actually in flight. Default true. Set false when a changing cursor would be noise
+   * in the embedding design. No effect on touch.
    */
   cursorHints?: boolean;
   /**
@@ -1368,23 +1367,23 @@ export class Zine {
    * the same zone classifiers the gestures use. Returns '' (the default arrow) off the drawn page
    * or where a press does nothing.
    *
-   * Two hints only, so the cursor stays calm as the reader sweeps across the book rather than
-   * flickering through a third state: 'pointer' over a live click-to-flip zone, and 'zoom-in'
-   * everywhere else a double-click would zoom — the edge peel band and, once zoomed, the whole page
-   * (where a drag pans). A drag peels or pans regardless; it just is not called out with its own
-   * cursor.
+   * Zoomed in, the whole page pans, so one steady 'grab' covers it — no flicker as the reader moves,
+   * and it never lies about a double-click that would zoom back out (grab, not a stale zoom-in). At
+   * rest there are two hints: 'pointer' over a live click-to-flip zone, and 'zoom-in' everywhere else
+   * a double-click would zoom (including the edge peel band, so a sweep across the page stays calm).
+   * A drag peels regardless; it just is not called out with its own resting cursor.
    */
   #cursorFor(clientX: number, clientY: number): string {
     if (!this.#renderer) return '';
     const b = this.#contentRect();
     const p = this.#toBookPoint(clientX, clientY);
     if (p.x < 0 || p.y < 0 || p.x > b.width || p.y > b.height) return ''; // a letterbox bar
-    // A click turns the page only at rest: click-to-flip is off while zoomed, where a press pans.
-    if (this.#scale <= 1) {
-      const flipDir = this.#clickFlipDirection(p);
-      if (flipDir && this.#canFlip(flipDir)) return 'pointer';
-    }
-    // Anywhere else the affordance is the double-click zoom, when it is enabled.
+    // Zoomed in the page pans everywhere: a drag is the standing gesture, so hint it with grab.
+    if (this.#scale > 1) return 'grab';
+    // At rest a click turns the page in the flip zones...
+    const flipDir = this.#clickFlipDirection(p);
+    if (flipDir && this.#canFlip(flipDir)) return 'pointer';
+    // ...and elsewhere a double-click zooms in (from rest the next configured level is always up).
     if (this.#zoomEnabled && this.#doubleClickLevels !== null) return 'zoom-in';
     return '';
   }
