@@ -21,11 +21,10 @@ export const ICONS = {
   first: '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
   /** chevrons-right */
   last: '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
-  /** zoom-in */
-  zoomIn:
-    '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/>',
-  /** zoom-out */
-  zoomOut: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/>',
+  /** circle-plus: zoom in. A plus, not a magnifier, so it never reads as a third "search". */
+  zoomIn: '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  /** circle-minus: zoom out, paired with zoomIn. */
+  zoomOut: '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
   /** search */
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   /** share-2 */
