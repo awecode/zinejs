@@ -94,6 +94,21 @@
       "default": true,
       "description": "On a mouse, change the cursor over the book to hint what a press would do: pointer where a click turns the page, zoom-in where a double-click zooms (including the edge peel band, so a sweep stays calm), grab over the whole page once zoomed (a drag pans), and grabbing while a peel or pan is in flight. No effect on touch."
     },
+    "hints": {
+      "default": true,
+      "description": "Subtle one-shot discoverability hints on the book itself (reaching touch readers, unlike cursorHints): the leading corner peeks on first open, nudges again once if the reader sits idle without turning a page, and a 'drag to move' caption appears on first zoom. Each stops for good once the reader performs the gesture it teaches. Honors prefers-reduced-motion. true (default) enables them in-memory; { persist: true } records what the reader learned in localStorage so a returning reader is not re-taught.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true, "description": "Whether the hints are shown." },
+            "persist": { "type": "boolean", "default": false, "description": "Remember learned gestures across visits via localStorage, instead of per page load." }
+          }
+        }
+      ]
+    },
     "clickFlipDelay": {
       "type": "number",
       "minimum": 0,

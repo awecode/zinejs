@@ -93,6 +93,31 @@ const PAGE_LEAD = 0.85;
  *  threshold announces sooner in that tail, matching when the fade already looks complete. */
 const PAGE_LEAD_LONE = 0.72;
 
+/** How far the corner peek hint lifts the leading page (fold progress 0..1) before settling back —
+ *  enough to read as a liftable page, well short of committing a turn. */
+const PEEK_PROGRESS = 0.12;
+
+/** Duration of each leg (out, then back) of the corner peek, in ms. */
+const PEEK_LEG_MS = 360;
+
+/** How long the reader may sit on the opening spread without turning a page before the peek replays
+ *  once as a nudge. Long enough not to interrupt someone who is simply reading the first page. */
+const IDLE_NUDGE_MS = 7000;
+
+/** How long the first-zoom "drag to move" caption stays up before fading on its own. */
+const CAPTION_MS = 2200;
+
+/** localStorage key for learned gestures under `hints.persist`. Shared across books on a site so a
+ *  gesture learned on one is not re-taught on the next. */
+const HINTS_STORAGE_KEY = 'zine:hints-learned';
+
+/** Which gestures the reader has demonstrated, so the matching discoverability hint stays quiet. */
+interface Learned {
+  turn: boolean;
+  zoom: boolean;
+  pan: boolean;
+}
+
 /** One page that matched a {@link Zine.search} query. */
 export interface SearchHit {
   /** Zero-based page index; pass straight to `flipTo`. */
@@ -185,6 +210,16 @@ export interface ZineOptions {
    */
   cursorHints?: boolean;
   /**
+   * Subtle, one-shot discoverability hints shown on the book itself (so they reach touch readers,
+   * unlike {@link cursorHints}): the leading page corner peeks and settles on first open, nudges
+   * once more if the reader sits idle without turning a page, and a small "drag to move" caption
+   * appears the first time they zoom in. Each hint stops for good the moment the reader performs the
+   * gesture it teaches. Honors `prefers-reduced-motion` (the motion cues are skipped). Default true.
+   * Pass an object to keep what the reader has learned across visits: `{ persist: true }` records it
+   * in localStorage so a returning reader is not re-taught (default is in-memory, per page load).
+   */
+  hints?: boolean | { enabled?: boolean; persist?: boolean };
+  /**
    * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
    * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
    */
@@ -260,6 +295,19 @@ export class Zine {
    *  page turn, zoom, or resize changes what a press there would do — without the pointer moving. */
   #pointerClient: { x: number; y: number } | null = null;
   #unbindCursor: (() => void) | null = null;
+  #hintsEnabled: boolean;
+  #hintsPersist: boolean;
+  /** What the reader has demonstrated they already know, so a hint teaching it stays quiet. Set by
+   *  the gesture itself (a turn, a zoom, a pan); persisted to localStorage when `hints.persist`. */
+  #learned: Learned = { turn: false, zoom: false, pan: false };
+  /** The one-shot idle nudge timer (armed on ready, cleared by any real gesture). */
+  #idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Tags the peek's own rAF loop so a real flip (or teardown) can cancel a peek mid-play without
+   *  the stale frame repainting a half-folded page. Distinct from #activeAnim, which is flip-only. */
+  #peekAnim: object | null = null;
+  /** The lazily-built "drag to move" caption element (null until the first zoom shows it). */
+  #captionEl: HTMLElement | null = null;
+  #captionTimer: ReturnType<typeof setTimeout> | null = null;
   #honorDoubleClickInFlipZone: boolean;
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
@@ -369,6 +417,10 @@ export class Zine {
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#cursorHints = options.cursorHints ?? true;
+    const hints = options.hints ?? true;
+    this.#hintsEnabled = hints === true || (hints !== false && (hints.enabled ?? true));
+    this.#hintsPersist = hints !== true && hints !== false && (hints.persist ?? false);
+    if (this.#hintsPersist) this.#loadLearned();
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
@@ -844,6 +896,7 @@ export class Zine {
   /** Zoom to `scale` (clamped to [1, zoom.max]), keeping `center` (container-local) fixed. */
   setZoom(scale: number, center?: { x: number; y: number }): void {
     if (!this.#renderer || !this.#zoomEnabled) return;
+    this.#cancelPeek(); // a zoom takes over the view; don't leave a peek folding under it
     const s2 = clamp(scale, 1, this.#maxZoom);
     const m = this.#renderer.measure();
     // Default to the middle of the pages, not of the container: on a lone page those differ, and
@@ -866,6 +919,11 @@ export class Zine {
     if ((s1 > 1) !== (s2 > 1)) this.#applyTouchAction();
     this.#refreshZoomTiles();
     this.#updateCursor(); // crossing in/out of zoom swaps the flip hint for the zoom hint
+    // First zoom in: teach panning, since a zoomed page has no visual cue that it can be dragged.
+    if (s1 <= 1 && s2 > 1) {
+      this.#markLearned('zoom');
+      this.#showPanCaption();
+    }
     this.#emitter.emit('zoomChanged', { scale: s2 });
   }
 
@@ -925,6 +983,9 @@ export class Zine {
     this.#activeAnim = null;
     this.#queuedFlip = null;
     this.#clearPendingClickFlip();
+    this.#clearIdleNudge();
+    this.#cancelPeek();
+    this.#hidePanCaption();
     this.#resizeObserver?.disconnect();
     this.#deepLink?.stop();
     this.#deepLink = null;
@@ -950,6 +1011,7 @@ export class Zine {
     if (targetIndex < 0 || targetIndex >= this.#spreads.length || targetIndex === this.#current) {
       return;
     }
+    this.#cancelPeek(); // a real turn is starting; drop any peek folding the same leaf
     // `flip` is legal only from idle; otherwise a flip/drag is already in flight.
     if (this.#machine.send('flip') === null) return;
 
@@ -1071,6 +1133,7 @@ export class Zine {
     // No-op if the animation already led the number; otherwise (reduced motion, a canceled lead,
     // or an interrupt landing before the threshold) this is where it lands.
     this.#announcePage(toPage);
+    this.#markLearned('turn'); // a page has turned — the peek/idle-nudge have taught their lesson
     this.#updateCursor(); // the new spread may have reached an end, killing a flip zone under the pointer
     this.#emitter.emit('flipEnd', { page: toPage });
     this.#drainQueuedFlip();
@@ -1188,6 +1251,8 @@ export class Zine {
       this.#ty = ty;
       this.#renderer.setViewTransform(this.#scale, tx, ty);
       this.#refreshZoomTiles();
+      this.#markLearned('pan'); // the reader is panning — the caption has served its purpose
+      this.#hidePanCaption();
       return;
     }
     // An armed corner press becomes a real flip once it moves past the threshold.
@@ -1388,6 +1453,174 @@ export class Zine {
     return '';
   }
 
+  // --- Discoverability hints (corner peek, idle nudge, first-zoom caption) ---
+
+  /** Read the learned flags from localStorage (persist mode). Storage can throw in private mode or a
+   *  sandboxed iframe, and a corrupt value is not worth crashing over — either way, learn nothing. */
+  #loadLearned(): void {
+    try {
+      const raw = localStorage.getItem(HINTS_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<Learned>;
+      this.#learned = {
+        turn: saved.turn === true,
+        zoom: saved.zoom === true,
+        pan: saved.pan === true,
+      };
+    } catch {
+      // No stored history; the reader is simply taught fresh.
+    }
+  }
+
+  /** Record that the reader has performed a gesture, so the hint teaching it stays quiet from now on
+   *  (and across visits under persist). Idempotent; tears down whatever that signal silences. */
+  #markLearned(signal: 'turn' | 'zoom' | 'pan'): void {
+    if (this.#learned[signal]) return;
+    this.#learned[signal] = true;
+    if (signal === 'turn') this.#clearIdleNudge(); // no more peeks once a page has been turned
+    if (this.#hintsPersist) {
+      try {
+        localStorage.setItem(HINTS_STORAGE_KEY, JSON.stringify(this.#learned));
+      } catch {
+        // Persisting is best-effort; the in-memory flag still silences the hint this session.
+      }
+    }
+  }
+
+  /** Arm the one-shot idle nudge: if the reader turns no page within IDLE_NUDGE_MS, replay the peek
+   *  once. Any real turn clears the timer first (see #markLearned('turn')). */
+  #armIdleNudge(): void {
+    if (!this.#hintsEnabled || this.#reducedMotion || this.#learned.turn) return;
+    this.#clearIdleNudge();
+    this.#idleTimer = setTimeout(() => {
+      this.#idleTimer = null;
+      this.#playPeek();
+    }, IDLE_NUDGE_MS);
+  }
+
+  #clearIdleNudge(): void {
+    if (this.#idleTimer !== null) {
+      clearTimeout(this.#idleTimer);
+      this.#idleTimer = null;
+    }
+  }
+
+  /**
+   * The corner peek: lift the leading page's outer edge to PEEK_PROGRESS and settle it back, once,
+   * without committing a turn. A wordless "this page turns" cue that reaches touch and mouse alike.
+   *
+   * Its own rAF loop, not #animateProgress — that one is wired to #commit and the flip generation.
+   * Tagged by #peekAnim so a real flip (or destroy) cancels a peek in flight; the leaf is repainted
+   * flat at the end so nothing is left half-folded.
+   */
+  async #playPeek(): Promise<void> {
+    if (
+      !this.#hintsEnabled ||
+      this.#reducedMotion ||
+      this.#learned.turn ||
+      !this.#renderer ||
+      typeof requestAnimationFrame !== 'function' || // no way to animate; skip the cosmetic cue
+      this.#machine.state !== 'idle' // a real flip/drag/pan owns the leaf; don't fight it
+    ) {
+      return;
+    }
+    const targetIndex = this.#current + 1;
+    const toSpread = this.#spreads[targetIndex];
+    if (!toSpread) return; // nothing ahead to peek toward (single spread, or already at the end)
+    const toContent = await this.#resolveContent(toSpread);
+    // Guard the async gap: a turn, a zoom, a teardown, or a second peek may have intervened.
+    if (this.#destroyed || this.#learned.turn || this.#machine.state !== 'idle' || this.#peekAnim) {
+      return;
+    }
+    // Anchor the fold at the bottom-outer corner, the natural place a thumb lifts a page.
+    this.#anchorY = 1;
+    this.#renderer.beginFlip(this.#currentContent, toContent, 'forward', {
+      fill: this.#singlePage,
+      curl: this.#effectiveCurl(),
+      anchor: { y: this.#anchorY },
+    });
+    const token = {};
+    this.#peekAnim = token;
+    const start = performance.now();
+    const total = PEEK_LEG_MS * 2;
+    // Read the clock from performance.now(), not the rAF timestamp arg: it is what drives the two
+    // legs, and it keeps the loop working under a rAF stub that omits the timestamp.
+    const step = (): void => {
+      if (this.#peekAnim !== token) return; // superseded/cancelled → this frame is void
+      const raw = Math.min(1, (performance.now() - start) / total);
+      // Out to PEEK_PROGRESS by the midpoint, back to 0 by the end; a soft sine so it eases at both
+      // the lift and the settle rather than snapping.
+      const t = PEEK_PROGRESS * Math.sin(raw * Math.PI);
+      this.#renderer?.setFlipProgress(Math.max(0, t), 'forward');
+      if (raw < 1) {
+        this.#raf = requestAnimationFrame(step);
+      } else {
+        this.#raf = null;
+        this.#peekAnim = null;
+        this.#repaintRestingSpread(); // clear the turning leaf, back to a flat spread
+      }
+    };
+    this.#raf = requestAnimationFrame(step);
+  }
+
+  /** Stop a peek mid-play (a real gesture is taking over) and leave the spread flat. */
+  #cancelPeek(): void {
+    if (!this.#peekAnim) return;
+    this.#peekAnim = null;
+    if (this.#raf !== null) {
+      cancelAnimationFrame(this.#raf);
+      this.#raf = null;
+    }
+    this.#repaintRestingSpread();
+  }
+
+  /** Repaint the current spread flat (no turning leaf), used to land a finished/cancelled peek. */
+  #repaintRestingSpread(): void {
+    const spread = this.#spreads[this.#current];
+    if (spread && this.#machine.state === 'idle') this.#paintSpread(spread, this.#currentContent);
+  }
+
+  /** Show the one-time "drag to move" caption over the book on the first zoom. Self-contained inline
+   *  styles: the controls stylesheet is absent when `controls: false`, and this hint must still work.
+   *  A dark toast pill with light text reads on any page background and either theme. */
+  #showPanCaption(): void {
+    if (!this.#hintsEnabled || this.#learned.pan || this.#captionEl) return;
+    const doc = this.#container.ownerDocument;
+    if (!doc || typeof this.#container.appendChild !== 'function') return;
+    const el = doc.createElement('div');
+    el.className = 'zine-hint-caption';
+    el.setAttribute('aria-hidden', 'true'); // decorative; screen readers get panning via a11y text
+    el.textContent = 'Drag to move';
+    el.style.cssText =
+      'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:3;' +
+      'pointer-events:none;padding:6px 12px;border-radius:999px;font:500 13px/1.2 system-ui,sans-serif;' +
+      'color:#fff;background:rgba(24,24,27,0.82);box-shadow:0 1px 4px rgba(0,0,0,0.35);' +
+      'white-space:nowrap;opacity:0;';
+    const canAnimate = !this.#reducedMotion && typeof requestAnimationFrame === 'function';
+    if (canAnimate) el.style.transition = 'opacity 200ms ease';
+    this.#container.appendChild(el);
+    this.#captionEl = el;
+    if (canAnimate) {
+      // Next frame so the initial opacity:0 is committed before the transition to 1.
+      requestAnimationFrame(() => {
+        if (this.#captionEl === el) el.style.opacity = '1';
+      });
+    } else {
+      el.style.opacity = '1'; // no fade available — just show it
+    }
+    this.#captionTimer = setTimeout(() => this.#hidePanCaption(), CAPTION_MS);
+  }
+
+  /** Remove the pan caption (on the first pan, its timeout, or teardown). */
+  #hidePanCaption(): void {
+    if (this.#captionTimer !== null) {
+      clearTimeout(this.#captionTimer);
+      this.#captionTimer = null;
+    }
+    this.#captionEl?.remove();
+    this.#captionEl = null;
+  }
+
   #clearPendingClickFlip(): void {
     if (this.#pendingClickTimer !== null) {
       clearTimeout(this.#pendingClickTimer);
@@ -1575,6 +1808,9 @@ export class Zine {
     this.#bindDeepLink();
     await this.#mountControls();
     this.#emitter.emit('ready');
+    // The book is live: peek the leading corner once, then watch for an idle reader.
+    void this.#playPeek();
+    this.#armIdleNudge();
   }
 
   /** Forward a download-progress tick to the public event and the built-in loader. */

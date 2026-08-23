@@ -70,7 +70,7 @@ async function makeZine(): Promise<{ zine: Zine; renderer: MockRenderer; el: HTM
   const el = document.createElement('div');
   document.body.append(el);
   const renderer = new MockRenderer();
-  const zine = new Zine(el, { source: new FakeSource(4), renderer, zoom: { max: 4 } });
+  const zine = new Zine(el, { source: new FakeSource(4), renderer, zoom: { max: 4 }, hints: false });
   await zine.ready;
   return { zine, renderer, el };
 }

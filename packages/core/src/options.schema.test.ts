@@ -21,6 +21,7 @@ describe('options.schema.json', () => {
         'clickToFlip',
         'clickZoneSize',
         'cursorHints',
+        'hints',
         'clickFlipDelay',
         'zoom',
         'renderer',

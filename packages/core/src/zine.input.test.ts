@@ -112,7 +112,7 @@ async function makeZine(
   const el = document.createElement('div');
   document.body.append(el);
   const renderer = new MockRenderer();
-  const zine = new Zine(el, { source: new FakeSource(pageCount), renderer, startPage, flipDuration: 500, spreadMode: 'double' });
+  const zine = new Zine(el, { source: new FakeSource(pageCount), renderer, startPage, flipDuration: 500, spreadMode: 'double', hints: false });
   await zine.ready;
   return { zine, renderer, el };
 }
