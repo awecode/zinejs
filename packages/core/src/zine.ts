@@ -177,6 +177,13 @@ export interface ZineOptions {
   /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
   clickZoneSize?: number;
   /**
+   * On a mouse, change the cursor over the book to hint what a press would do: `grab` where an
+   * edge peels (or the page pans when zoomed), `pointer` where a click turns the page, `zoom-in`
+   * where a double-click zooms. Default true. Set false when a changing cursor would be noise in
+   * the embedding design. No effect on touch.
+   */
+  cursorHints?: boolean;
+  /**
    * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
    * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
    */
@@ -247,6 +254,11 @@ export class Zine {
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
   #clickZoneSize: number;
+  #cursorHints: boolean;
+  /** Last mouse position over the container in client px, so the cursor can be re-derived after a
+   *  page turn, zoom, or resize changes what a press there would do — without the pointer moving. */
+  #pointerClient: { x: number; y: number } | null = null;
+  #unbindCursor: (() => void) | null = null;
   #honorDoubleClickInFlipZone: boolean;
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
@@ -355,6 +367,7 @@ export class Zine {
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
+    this.#cursorHints = options.cursorHints ?? true;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
@@ -851,6 +864,7 @@ export class Zine {
     // Crossing in/out of zoom flips who owns vertical panning: browser scroll at rest, us when zoomed.
     if ((s1 > 1) !== (s2 > 1)) this.#applyTouchAction();
     this.#refreshZoomTiles();
+    this.#updateCursor(); // crossing in/out of zoom flips grab-to-pan vs the flip hints
     this.#emitter.emit('zoomChanged', { scale: s2 });
   }
 
@@ -921,6 +935,7 @@ export class Zine {
     this.#unbindWheel?.();
     this.#unbindDblClick?.();
     this.#unbindContextMenu?.();
+    this.#unbindCursor?.();
     this.#unbindInput?.();
     if (this.#tileTimer !== null) clearTimeout(this.#tileTimer);
     this.#tileGeneration++; // strand any raster still resolving
@@ -1055,6 +1070,7 @@ export class Zine {
     // No-op if the animation already led the number; otherwise (reduced motion, a canceled lead,
     // or an interrupt landing before the threshold) this is where it lands.
     this.#announcePage(toPage);
+    this.#updateCursor(); // the new spread may have reached an end, killing a flip zone under the pointer
     this.#emitter.emit('flipEnd', { page: toPage });
     this.#drainQueuedFlip();
   }
@@ -1189,6 +1205,7 @@ export class Zine {
     if (this.#pan) {
       this.#pan = null;
       this.#machine.send('panEnd');
+      this.#updateCursor(); // pan over → back to grab from grabbing (no move fires on release)
       return;
     }
     const drag = this.#drag;
@@ -1310,6 +1327,68 @@ export class Zine {
     return target >= 0 && target < this.#spreads.length;
   }
 
+  /** Watch the pointer at rest and hint what a press there would do through the cursor (mouse only;
+   *  touch never fires these). A separate listener from the gesture recognizer so it can be removed
+   *  on its own; both read the same `pointermove` stream. */
+  #bindCursorHints(): void {
+    const move = (e: Event): void => {
+      const p = e as PointerEvent;
+      this.#pointerClient = { x: p.clientX, y: p.clientY };
+      this.#updateCursor();
+    };
+    const leave = (): void => {
+      this.#pointerClient = null;
+      this.#updateCursor();
+    };
+    this.#container.addEventListener('pointermove', move);
+    this.#container.addEventListener('pointerleave', leave);
+    this.#unbindCursor = (): void => {
+      this.#container.removeEventListener('pointermove', move);
+      this.#container.removeEventListener('pointerleave', leave);
+    };
+  }
+
+  /** Re-derive the cursor from the last pointer position. Called both on movement and after a page
+   *  turn, zoom, or resize changes what a press at the same spot would do without the mouse moving. */
+  #updateCursor(): void {
+    if (!this.#cursorHints || !this.#renderer) return;
+    let cursor = '';
+    if (this.#drag || this.#pan) {
+      cursor = 'grabbing'; // a peel or pan is in flight
+    } else if (this.#pointerClient) {
+      cursor = this.#cursorFor(this.#pointerClient.x, this.#pointerClient.y);
+    }
+    this.#container.style.cursor = cursor;
+  }
+
+  /**
+   * The cursor for a resting pointer at client (x, y): a hint for what a press would do, read from
+   * the same zone classifiers the gestures use. Returns '' (the default arrow) off the drawn page
+   * or where a press does nothing.
+   *
+   * Precedence is by the clearest affordance: a click that turns the page ('pointer') wins where a
+   * click zone and the peel band overlap, then a drag that peels an edge ('grab'), then a
+   * double-click that zooms ('zoom-in'). Zoomed in, a drag pans anywhere, so the whole page is
+   * 'grab' (there is no spot where a plain zoom-out is the only thing a press does).
+   */
+  #cursorFor(clientX: number, clientY: number): string {
+    if (!this.#renderer) return '';
+    const b = this.#contentRect();
+    const p = this.#toBookPoint(clientX, clientY);
+    if (p.x < 0 || p.y < 0 || p.x > b.width || p.y > b.height) return ''; // a letterbox bar
+    if (this.#scale > 1) return 'grab';
+    const flipDir = this.#clickFlipDirection(p);
+    if (flipDir && this.#canFlip(flipDir)) return 'pointer';
+    const edgeBand = Math.min(b.width, b.height) * CORNER_FRACTION;
+    if (p.x <= edgeBand || p.x >= b.width - edgeBand) {
+      const rightSide = p.x > b.width / 2;
+      const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
+      if (this.#canFlip(forward ? 'forward' : 'backward')) return 'grab';
+    }
+    if (this.#zoomEnabled && this.#doubleClickLevels !== null) return 'zoom-in';
+    return '';
+  }
+
   #clearPendingClickFlip(): void {
     if (this.#pendingClickTimer !== null) {
       clearTimeout(this.#pendingClickTimer);
@@ -1321,6 +1400,7 @@ export class Zine {
     const spread = this.#spreads[this.#current];
     if (spread) this.#paintSpread(spread, this.#currentContent);
     this.#machine.send('settle');
+    this.#updateCursor(); // a peel that snapped back leaves grabbing set until the pointer moves
     this.#emitter.emit('flipEnd', { page: this.#currentPage });
     this.#drainQueuedFlip();
   }
@@ -1484,6 +1564,7 @@ export class Zine {
     this.#bindWheelZoom();
     this.#bindDoubleClickZoom();
     this.#bindContextMenu();
+    this.#bindCursorHints();
     this.#setupReducedMotion();
     this.#a11yCleanup = this.#setupA11y();
 
@@ -1700,6 +1781,7 @@ export class Zine {
     if (!this.#renderer || this.#machine.state !== 'idle') return;
     this.#applySinglePage(this.#renderer.measure().containerWidth);
     void this.#renderCurrent();
+    this.#updateCursor(); // the drawn box (and its zones) may have moved under a resting pointer
   }
 
   /** The layout to actually use: the responsive narrow fallback forces 'single'. */

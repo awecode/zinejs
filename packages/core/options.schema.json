@@ -89,6 +89,11 @@
       "default": 64,
       "description": "Edge-zone size in px per side, used when clickToFlip is 'edge'."
     },
+    "cursorHints": {
+      "type": "boolean",
+      "default": true,
+      "description": "On a mouse, change the cursor over the book to hint what a press would do: grab where an edge peels (or pans when zoomed), pointer where a click turns the page, zoom-in where a double-click zooms. No effect on touch."
+    },
     "clickFlipDelay": {
       "type": "number",
       "minimum": 0,

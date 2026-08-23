@@ -343,6 +343,86 @@ describe('Zine — click to flip (half mode: delayed, double-click zoom on)', ()
   });
 });
 
+describe('Zine — cursor hints', () => {
+  /** Move the mouse to a point over the container and read back the cursor it set. */
+  function hover(el: HTMLElement, x: number, y: number): string {
+    el.dispatchEvent(
+      Object.assign(new Event('pointermove', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }),
+    );
+    return el.style.cursor;
+  }
+  /** Press, move past the drag threshold, without releasing — promotes an edge grab to a live peel. */
+  function pressAndMove(el: HTMLElement, fromX: number, toX: number, y: number): void {
+    el.dispatchEvent(
+      Object.assign(new Event('pointerdown', { bubbles: true }), { pointerId: 1, clientX: fromX, clientY: y }),
+    );
+    el.dispatchEvent(
+      Object.assign(new Event('pointermove', { bubbles: true }), { pointerId: 1, clientX: toX, clientY: y }),
+    );
+  }
+
+  it('shows a pointer over a live click-to-flip zone', async () => {
+    // 6 pages, middle spread → both edges can turn.
+    const { el } = await makeZine(2, { source: new FakeSource(6) });
+    expect(hover(el, 790, 300)).toBe('pointer'); // right edge, forward
+    expect(hover(el, 10, 300)).toBe('pointer'); // left edge, backward
+  });
+
+  it('shows zoom-in over the centre dead zone', async () => {
+    const { el } = await makeZine(2, { source: new FakeSource(6) });
+    expect(hover(el, 400, 300)).toBe('zoom-in');
+  });
+
+  it('shows grab on the peel band outside the click zone', async () => {
+    // x=100 is past the 64px click zone but inside the 150px peel band (min(800,600)*0.25).
+    const { el } = await makeZine(2, { source: new FakeSource(6) });
+    expect(hover(el, 100, 300)).toBe('grab');
+  });
+
+  it('does not offer a flip cursor where the turn is dead at the ends', async () => {
+    // First spread: the back (left) zone cannot turn, so it falls through to zoom-in, not pointer/grab.
+    const { el } = await makeZine(0);
+    expect(hover(el, 10, 300)).toBe('zoom-in');
+  });
+
+  it('re-derives the cursor when a page turn kills the zone under a resting pointer', async () => {
+    // 4 pages → spreads [0,1] [2,3]. Rest on the forward edge, then turn to the last spread: the
+    // forward zone goes dead, so the cursor must drop from pointer without the mouse moving.
+    const { zine, el } = await makeZine(0);
+    expect(hover(el, 790, 300)).toBe('pointer');
+    tap(el, 790, 300);
+    await settleInstant();
+    expect(zine.getPage()).toBe(2); // last spread; forward zone now dead
+    expect(el.style.cursor).toBe('zoom-in'); // updated in place, no new hover
+  });
+
+  it('shows grab everywhere when zoomed (a drag pans)', async () => {
+    const { zine, el } = await makeZine(2, { source: new FakeSource(6) });
+    expect(hover(el, 400, 300)).toBe('zoom-in'); // centre at rest, scale 1
+    zine.setZoom(2);
+    expect(el.style.cursor).toBe('grab'); // re-derived on zoom, pointer still at that centre point
+    expect(hover(el, 790, 300)).toBe('grab'); // even the edge, which would be pointer at scale 1
+  });
+
+  it('shows grabbing while a peel is dragged', async () => {
+    const { el } = await makeZine(2, { source: new FakeSource(6) });
+    pressAndMove(el, 790, 700, 300); // grab the right edge and drag inward
+    expect(el.style.cursor).toBe('grabbing');
+  });
+
+  it('shows the default cursor over a letterbox bar', async () => {
+    const { el } = await makeZine(2, { renderer: new LetterboxedRenderer(), source: new FakeSource(6) });
+    expect(hover(el, 50, 300)).toBe(''); // left of the book's 100px inset
+  });
+
+  it('never sets a cursor when cursorHints is false', async () => {
+    const { zine, el } = await makeZine(2, { source: new FakeSource(6), cursorHints: false });
+    expect(hover(el, 790, 300)).toBe('');
+    zine.setZoom(2);
+    expect(el.style.cursor).toBe('');
+  });
+});
+
 describe('Zine — click to flip (config overrides)', () => {
   it('edge + doubleClickInFlipZone: click waits and a double-click cancels + zooms', async () => {
     const { zine, el } = await makeZine(0, { zoom: { doubleClickInFlipZone: true } });
