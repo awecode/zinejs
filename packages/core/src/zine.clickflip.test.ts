@@ -373,14 +373,15 @@ describe('Zine — cursor hints', () => {
     expect(hover(el, 400, 300)).toBe('zoom-in');
   });
 
-  it('shows grab on the peel band outside the click zone', async () => {
-    // x=100 is past the 64px click zone but inside the 150px peel band (min(800,600)*0.25).
+  it('shows zoom-in on the peel band outside the click zone (a drag still peels)', async () => {
+    // x=100 is past the 64px click zone; the edge peel band no longer gets its own cursor, so it
+    // falls through to the zoom-in hint like the rest of the page.
     const { el } = await makeZine(2, { source: new FakeSource(6) });
-    expect(hover(el, 100, 300)).toBe('grab');
+    expect(hover(el, 100, 300)).toBe('zoom-in');
   });
 
   it('does not offer a flip cursor where the turn is dead at the ends', async () => {
-    // First spread: the back (left) zone cannot turn, so it falls through to zoom-in, not pointer/grab.
+    // First spread: the back (left) zone cannot turn, so it falls through to zoom-in, not pointer.
     const { el } = await makeZine(0);
     expect(hover(el, 10, 300)).toBe('zoom-in');
   });
@@ -396,15 +397,16 @@ describe('Zine — cursor hints', () => {
     expect(el.style.cursor).toBe('zoom-in'); // updated in place, no new hover
   });
 
-  it('shows grab everywhere when zoomed (a drag pans)', async () => {
+  it('keeps the zoom-in hint everywhere when zoomed (click-to-flip is off, a drag pans)', async () => {
     const { zine, el } = await makeZine(2, { source: new FakeSource(6) });
-    expect(hover(el, 400, 300)).toBe('zoom-in'); // centre at rest, scale 1
+    expect(hover(el, 790, 300)).toBe('pointer'); // right edge turns the page at scale 1
     zine.setZoom(2);
-    expect(el.style.cursor).toBe('grab'); // re-derived on zoom, pointer still at that centre point
-    expect(hover(el, 790, 300)).toBe('grab'); // even the edge, which would be pointer at scale 1
+    expect(el.style.cursor).toBe('zoom-in'); // re-derived on zoom; the edge no longer flips
+    expect(hover(el, 400, 300)).toBe('zoom-in'); // centre too
   });
 
   it('shows grabbing while a peel is dragged', async () => {
+    // Hovering stays calm, but once the hand actually has hold of the page the drag is called out.
     const { el } = await makeZine(2, { source: new FakeSource(6) });
     pressAndMove(el, 790, 700, 300); // grab the right edge and drag inward
     expect(el.style.cursor).toBe('grabbing');

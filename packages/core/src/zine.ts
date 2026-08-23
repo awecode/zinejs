@@ -177,10 +177,12 @@ export interface ZineOptions {
   /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
   clickZoneSize?: number;
   /**
-   * On a mouse, change the cursor over the book to hint what a press would do: `grab` where an
-   * edge peels (or the page pans when zoomed), `pointer` where a click turns the page, `zoom-in`
-   * where a double-click zooms. Default true. Set false when a changing cursor would be noise in
-   * the embedding design. No effect on touch.
+   * On a mouse, change the cursor over the book to hint what a press would do: `pointer` where a
+   * click turns the page, `zoom-in` where a double-click zooms (including the edge peel band and,
+   * once zoomed, the whole page a drag pans). Only those two resting hints, so the cursor stays calm
+   * as the reader sweeps across the book; while a peel or pan is actually in flight it is `grabbing`.
+   * Default true. Set false when a changing cursor would be noise in the embedding design. No effect
+   * on touch.
    */
   cursorHints?: boolean;
   /**
@@ -864,7 +866,7 @@ export class Zine {
     // Crossing in/out of zoom flips who owns vertical panning: browser scroll at rest, us when zoomed.
     if ((s1 > 1) !== (s2 > 1)) this.#applyTouchAction();
     this.#refreshZoomTiles();
-    this.#updateCursor(); // crossing in/out of zoom flips grab-to-pan vs the flip hints
+    this.#updateCursor(); // crossing in/out of zoom swaps the flip hint for the zoom hint
     this.#emitter.emit('zoomChanged', { scale: s2 });
   }
 
@@ -1205,7 +1207,7 @@ export class Zine {
     if (this.#pan) {
       this.#pan = null;
       this.#machine.send('panEnd');
-      this.#updateCursor(); // pan over → back to grab from grabbing (no move fires on release)
+      this.#updateCursor(); // pan over → re-derive the resting hint (no move fires on release)
       return;
     }
     const drag = this.#drag;
@@ -1354,7 +1356,7 @@ export class Zine {
     if (!this.#cursorHints || !this.#renderer) return;
     let cursor = '';
     if (this.#drag || this.#pan) {
-      cursor = 'grabbing'; // a peel or pan is in flight
+      cursor = 'grabbing'; // a peel or pan is in flight — the hand has hold of the page
     } else if (this.#pointerClient) {
       cursor = this.#cursorFor(this.#pointerClient.x, this.#pointerClient.y);
     }
@@ -1366,25 +1368,23 @@ export class Zine {
    * the same zone classifiers the gestures use. Returns '' (the default arrow) off the drawn page
    * or where a press does nothing.
    *
-   * Precedence is by the clearest affordance: a click that turns the page ('pointer') wins where a
-   * click zone and the peel band overlap, then a drag that peels an edge ('grab'), then a
-   * double-click that zooms ('zoom-in'). Zoomed in, a drag pans anywhere, so the whole page is
-   * 'grab' (there is no spot where a plain zoom-out is the only thing a press does).
+   * Two hints only, so the cursor stays calm as the reader sweeps across the book rather than
+   * flickering through a third state: 'pointer' over a live click-to-flip zone, and 'zoom-in'
+   * everywhere else a double-click would zoom — the edge peel band and, once zoomed, the whole page
+   * (where a drag pans). A drag peels or pans regardless; it just is not called out with its own
+   * cursor.
    */
   #cursorFor(clientX: number, clientY: number): string {
     if (!this.#renderer) return '';
     const b = this.#contentRect();
     const p = this.#toBookPoint(clientX, clientY);
     if (p.x < 0 || p.y < 0 || p.x > b.width || p.y > b.height) return ''; // a letterbox bar
-    if (this.#scale > 1) return 'grab';
-    const flipDir = this.#clickFlipDirection(p);
-    if (flipDir && this.#canFlip(flipDir)) return 'pointer';
-    const edgeBand = Math.min(b.width, b.height) * CORNER_FRACTION;
-    if (p.x <= edgeBand || p.x >= b.width - edgeBand) {
-      const rightSide = p.x > b.width / 2;
-      const forward = this.#direction === 'rtl' ? !rightSide : rightSide;
-      if (this.#canFlip(forward ? 'forward' : 'backward')) return 'grab';
+    // A click turns the page only at rest: click-to-flip is off while zoomed, where a press pans.
+    if (this.#scale <= 1) {
+      const flipDir = this.#clickFlipDirection(p);
+      if (flipDir && this.#canFlip(flipDir)) return 'pointer';
     }
+    // Anywhere else the affordance is the double-click zoom, when it is enabled.
     if (this.#zoomEnabled && this.#doubleClickLevels !== null) return 'zoom-in';
     return '';
   }
@@ -1400,7 +1400,7 @@ export class Zine {
     const spread = this.#spreads[this.#current];
     if (spread) this.#paintSpread(spread, this.#currentContent);
     this.#machine.send('settle');
-    this.#updateCursor(); // a peel that snapped back leaves grabbing set until the pointer moves
+    this.#updateCursor(); // the snapped-back spread may have changed the hint under a resting pointer
     this.#emitter.emit('flipEnd', { page: this.#currentPage });
     this.#drainQueuedFlip();
   }
