@@ -100,6 +100,13 @@ const PEEK_PROGRESS = 0.12;
 /** Duration of each leg (out, then back) of the corner peek, in ms. */
 const PEEK_LEG_MS = 360;
 
+/** How far the whole spread slides toward the edge on a dead boundary tap, in px, before it springs
+ *  back — enough to read as "nothing past here", well short of looking like a turn. */
+const EDGE_NUDGE_PX = 28;
+
+/** Duration of the boundary rubber-band nudge (out and back together), in ms. */
+const EDGE_NUDGE_MS = 260;
+
 /** How long the reader may sit on the opening spread without turning a page before the peek replays
  *  once as a nudge. Long enough not to interrupt someone who is simply reading the first page. */
 const IDLE_NUDGE_MS = 7000;
@@ -335,6 +342,9 @@ export class Zine {
   /** Tags the peek's own rAF loop so a real flip (or teardown) can cancel a peek mid-play without
    *  the stale frame repainting a half-folded page. Distinct from #activeAnim, which is flip-only. */
   #peekAnim: object | null = null;
+  /** Tags the boundary rubber-band's rAF loop, so a real flip/drag/zoom (or teardown) cancels a nudge
+   *  in flight without a stale frame leaving the spread shifted off-center. Shares #raf, like #peekAnim. */
+  #nudgeAnim: object | null = null;
   /** The lazily-built hint caption element (null until a caption shows it). */
   #captionEl: HTMLElement | null = null;
   #captionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -945,6 +955,7 @@ export class Zine {
   setZoom(scale: number, center?: { x: number; y: number }): void {
     if (!this.#renderer || !this.#zoomEnabled) return;
     this.#cancelPeek(); // a zoom takes over the view; don't leave a peek folding under it
+    this.#cancelNudge(); // and don't let a boundary rubber-band fight the zoom's own transform
     const s2 = clamp(scale, 1, this.#maxZoom);
     const m = this.#renderer.measure();
     // Default to the middle of the pages, not of the container: on a lone page those differ, and
@@ -1033,6 +1044,7 @@ export class Zine {
     this.#clearPendingClickFlip();
     this.#clearIdleNudge();
     this.#cancelPeek();
+    this.#cancelNudge();
     this.#clearZoomHint();
     this.#hideCaption();
     this.#resizeObserver?.disconnect();
@@ -1062,6 +1074,7 @@ export class Zine {
       return;
     }
     this.#cancelPeek(); // a real turn is starting; drop any peek folding the same leaf
+    this.#cancelNudge(); // and any boundary rubber-band still springing
     // `flip` is legal only from idle; otherwise a flip/drag is already in flight.
     if (this.#machine.send('flip') === null) return;
 
@@ -1198,6 +1211,7 @@ export class Zine {
 
   #onDragStart(clientX: number, clientY: number): void {
     if (this.#pinching || !this.#renderer) return;
+    this.#cancelNudge(); // a new press reclaims the view from a boundary rubber-band still springing
     this.#clearPendingClickFlip(); // a new press cancels a click-flip still waiting out its window
     // Zoomed in → a drag pans; at scale 1 → a corner drag flips (§9 mode switch).
     if (this.#scale > 1) {
@@ -1367,7 +1381,10 @@ export class Zine {
     // In LTR a leftward flick (dx < 0) turns forward; RTL and the reading direction mirror it.
     const forward = this.#direction === 'rtl' ? gesture.dx > 0 : gesture.dx < 0;
     const direction: FlipDirection = forward ? 'forward' : 'backward';
-    if (!this.#canFlip(direction)) return false;
+    if (!this.#canFlip(direction)) {
+      this.#playEdgeNudge(direction); // swiped past the end: rubber-band toward the edge
+      return false;
+    }
     const step = forward ? 1 : -1;
     this.#requestFlip(() => this.#startFlip(this.#current + step));
     return true;
@@ -1378,7 +1395,11 @@ export class Zine {
     // A tap barely moves; anything more was a drag we already ignored.
     if (Math.abs(gesture.dx) > DRAG_THRESHOLD || Math.abs(gesture.dy) > DRAG_THRESHOLD) return;
     const direction = this.#clickFlipDirection(this.#press);
-    if (!direction || !this.#canFlip(direction)) return;
+    if (!direction) return;
+    if (!this.#canFlip(direction)) {
+      this.#playEdgeNudge(direction); // nowhere to turn: rubber-band toward the edge instead
+      return;
+    }
     // Anchor the fold at the tapped height (cone/leaf/flick curl from where you tap).
     this.#anchorY = clamp(this.#press.y / this.#contentRect().height, 0, 1);
     // Read `#current` lazily: interrupting commits the running turn first, so this steps on
@@ -1629,6 +1650,61 @@ export class Zine {
   #repaintRestingSpread(): void {
     const spread = this.#spreads[this.#current];
     if (spread && this.#machine.state === 'idle') this.#paintSpread(spread, this.#currentContent);
+  }
+
+  /**
+   * The boundary rubber-band: on a tap/swipe that would turn the page but has nowhere to land (the
+   * last spread going forward, the first going back), slide the whole spread a little toward that
+   * edge and spring it back. A wordless "this is the end" that reads on touch and mouse alike.
+   *
+   * A view-transform animation (setViewTransform), not a fold — there is no next page to curl toward
+   * at a boundary. Its own rAF loop, tagged by #nudgeAnim so a real gesture cancels it mid-spring.
+   */
+  #playEdgeNudge(direction: FlipDirection): void {
+    if (
+      !this.#renderer ||
+      typeof requestAnimationFrame !== 'function' || // no way to animate; skip the cosmetic cue
+      this.#reducedMotion ||
+      this.#machine.state !== 'idle' || // a flip/drag owns the view; don't fight it
+      this.#scale > 1 || // zoomed: the transform is the reader's pan, not ours to move
+      this.#nudgeAnim // one nudge at a time
+    ) {
+      return;
+    }
+    // Slide toward the edge the reader tried to reach: forward turns off the right in LTR, so the
+    // spread travels left (negative x); RTL and backward mirror it.
+    const forward = direction === 'forward';
+    const toRightEdge = this.#direction === 'rtl' ? !forward : forward;
+    const sign = toRightEdge ? -1 : 1;
+    const token = {};
+    this.#nudgeAnim = token;
+    const start = performance.now();
+    const step = (): void => {
+      if (this.#nudgeAnim !== token) return; // superseded/cancelled → this frame is void
+      const raw = Math.min(1, (performance.now() - start) / EDGE_NUDGE_MS);
+      // Out to EDGE_NUDGE_PX at the midpoint, back to 0 by the end — a soft sine springs at both ends.
+      const offset = EDGE_NUDGE_PX * Math.sin(raw * Math.PI);
+      this.#renderer?.setViewTransform(1, sign * offset, 0);
+      if (raw < 1) {
+        this.#raf = requestAnimationFrame(step);
+      } else {
+        this.#raf = null;
+        this.#nudgeAnim = null;
+        this.#renderer?.setViewTransform(1, 0, 0); // land exactly on center
+      }
+    };
+    this.#raf = requestAnimationFrame(step);
+  }
+
+  /** Stop a boundary nudge mid-spring (a real gesture is taking over) and reset the view to center. */
+  #cancelNudge(): void {
+    if (!this.#nudgeAnim) return;
+    this.#nudgeAnim = null;
+    if (this.#raf !== null) {
+      cancelAnimationFrame(this.#raf);
+      this.#raf = null;
+    }
+    this.#renderer?.setViewTransform(1, 0, 0);
   }
 
   /** Show the one-time "drag to move" caption over the book on the first zoom. Self-contained inline

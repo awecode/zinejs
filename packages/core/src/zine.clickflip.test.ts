@@ -449,3 +449,92 @@ describe('Zine — click to flip (config overrides)', () => {
     expect(zine.getZoom()).toBe(1);
   });
 });
+
+describe('Zine — boundary rubber-band', () => {
+  /** Records setViewTransform calls, so the nudge's rubber-band offset is observable. */
+  class ViewRenderer extends MockRenderer {
+    readonly views: Array<[number, number, number]> = [];
+    override setViewTransform(scale = 1, x = 0, y = 0): void {
+      this.views.push([scale, x, y]);
+    }
+  }
+
+  async function makeZine(startPage: number, opts: Partial<ZineOptions> = {}): Promise<{
+    zine: Zine;
+    el: HTMLElement;
+    renderer: ViewRenderer;
+  }> {
+    const el = document.createElement('div');
+    document.body.append(el);
+    const renderer = new ViewRenderer();
+    const zine = new Zine(el, {
+      source: new FakeSource(4),
+      renderer,
+      startPage,
+      spreadMode: 'double',
+      ...opts,
+    });
+    await zine.ready;
+    return { zine, el, renderer };
+  }
+
+  /** Drive a nudge's own rAF loop to completion. */
+  function settleNudge(): void {
+    tick(EDGE_NUDGE_MS); // reach raw = 1
+    tick(0); // fire the frame that lands on identity
+  }
+
+  const EDGE_NUDGE_MS = 260; // mirrors the constant in zine.ts
+
+  it('rubber-bands the spread on a forward tap at the last spread, then springs back to center', async () => {
+    const { zine, el, renderer } = await makeZine(2); // 4 pages → spreads [0,1] [2,3]; start on the last
+    expect(zine.canFlipNext()).toBe(false);
+
+    tap(el, 790, 300); // forward edge, nowhere to turn
+    settleNudge();
+
+    // It moved the view (a non-zero x offset) at some point, and landed back on center.
+    expect(renderer.views.some(([, x]) => x !== 0)).toBe(true);
+    expect(renderer.views.at(-1)).toEqual([1, 0, 0]);
+    expect(zine.getPage()).toBe(2); // no turn happened
+  });
+
+  it('slides the spread left (negative x) for a forward boundary in LTR', async () => {
+    const { el, renderer } = await makeZine(2);
+    tap(el, 790, 300);
+    tick(EDGE_NUDGE_MS / 2); // near the peak of the sine
+    // Forward off the right edge → content travels left.
+    expect(renderer.views.some(([, x]) => x < 0)).toBe(true);
+    expect(renderer.views.some(([, x]) => x > 0)).toBe(false);
+  });
+
+  it('mirrors the direction under rtl (forward boundary slides right)', async () => {
+    const { el, renderer } = await makeZine(2, { direction: 'rtl' });
+    // In RTL the forward flip zone is the left edge; tap there at the last spread.
+    tap(el, 10, 300);
+    tick(EDGE_NUDGE_MS / 2);
+    expect(renderer.views.some(([, x]) => x > 0)).toBe(true);
+    expect(renderer.views.some(([, x]) => x < 0)).toBe(false);
+  });
+
+  it('does not nudge when the tap has a real page to turn to', async () => {
+    const { zine, el, renderer } = await makeZine(0); // first spread: forward is a live turn
+    tap(el, 790, 300);
+    await settleInstant();
+    expect(zine.getPage()).toBe(2); // it turned
+    expect(renderer.views).toEqual([]); // and never touched the view transform
+  });
+
+  it('suppresses the nudge under reduced motion', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: /reduce/.test(q),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    const { el, renderer } = await makeZine(2); // must construct after the stub: reduced motion is read once
+    tap(el, 790, 300);
+    settleNudge();
+    expect(renderer.views).toEqual([]); // a pure motion cue, dropped when motion is reduced
+  });
+});
