@@ -56,9 +56,9 @@ const DOUBLE_CLICK_MOVE = 24;
 const FLIP_STREAK_MS = 2 * DOUBLE_CLICK_MS;
 
 /** A lone page fills the container, so it sweeps the full width where a spread leaf only covers
- *  its half — and it dissolves instead of landing on a facing page. Stretch duration so the
- *  peel and fade read at a comparable pace to a spread turn rather than whipping away. */
-const LONE_PAGE_FLIP_SCALE = 1.55;
+ *  its half. `flipDuration` is the spread timing; lone pages stretch it slightly so twice the
+ *  travel still reads at a comparable speed instead of whipping across. */
+const LONE_PAGE_FLIP_SCALE = 1.2;
 
 /** Characters of surrounding text shown on either side of a search match. */
 const EXCERPT_PAD = 32;
@@ -88,10 +88,9 @@ const REDUCED_MOTION_DURATION = 120;
  *  is a pure timing lead for the number: it does not touch the animation clock or the end pose. */
 const PAGE_LEAD = 0.85;
 
-/** The single-page turn ends in a dissolve, not a fold landing on a facing half, so its tail is
- *  longer and flatter and read as landed earlier — the number lagged most here. A lower pose
- *  threshold announces sooner in that tail, matching when the fade already looks complete. */
-const PAGE_LEAD_LONE = 0.72;
+/** Lone-page turns dissolve rather than land on a facing half; announce a touch earlier than
+ *  a spread so the number updates as the under-page takes over, not after the fade tail. */
+const PAGE_LEAD_LONE = 0.82;
 
 /** How far the corner peek hint lifts the leading page (fold progress 0..1) before settling back —
  *  enough to read as a liftable page, well short of committing a turn. */
@@ -1144,10 +1143,11 @@ export class Zine {
     const step = (now: number): void => {
       if (this.#activeAnim !== anim) return; // superseded/interrupted → this frame is void
       // Easing lives here; flipProgressToPose stays linear so seeks are deterministic.
-      // Lone pages ease out harder — no facing half to land on, only a dissolve.
+      // Same ease for lone and spread so single-page turns feel like the same flipbook, not a
+      // stretched dissolve. Curl geometry holds the landed pose through the decelerating tail.
       const raw = Math.min(1, (now - start) / duration);
-      const eased = this.#singlePage ? easeInOutLone(raw) : easeInOutQuad(raw);
-      // Both eases decelerate hard into the end, so once the pose crosses the lead threshold the
+      const eased = easeInOutQuad(raw);
+      // The ease decelerates hard into the end, so once the pose crosses the lead threshold the
       // fold already reads as landed. Announce the page number there — once — while the fold plays
       // on to its full duration: the number leads the near-still tail without shortening the flip.
       if (onLead && !ledPage) {
@@ -2558,14 +2558,6 @@ function axisPanRange(pos: number, size: number, viewport: number): [min: number
  *  double the peak speed, which reads as a lurch rather than a sheet of paper being turned. */
 function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
-
-/** Lone-page turn: same gentle start as the spread ease, then a longer decelerating finish.
- *  Without a facing half the landing is a dissolve — front-loading a bit of progress and
- *  stretching the tail keeps that fade from reading as a whip. */
-function easeInOutLone(t: number): number {
-  const x = easeInOutQuad(t);
-  return 1 - Math.pow(1 - x, 1.3);
 }
 
 function typeName(v: unknown): string {

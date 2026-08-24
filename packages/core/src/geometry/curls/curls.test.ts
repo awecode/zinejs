@@ -117,16 +117,18 @@ describe('cone curl', () => {
     expect(xTop).toBeLessThan(xBottom);
   });
 
-  it('keeps more of the sheet over the page mid-turn on a full-width fill leaf', () => {
-    // Fill delays the spine flop, so at mid-turn the free edge has advanced less than
-    // the spread (non-fill) cone — the peel develops over the page before swinging off.
+  it('matches spread cone geometry on a fill leaf (same concurrent flop)', () => {
+    // Lone pages used to soften θ and delay ρ, which read as a peel-fade. Fill and
+    // spread now share the deform; with the same W/H the free edge tracks together.
     const spread = createPageMesh(COLS, ROWS);
     const fill = createPageMesh(COLS, ROWS);
     CURLS.cone.deform(spread, W, H, 0.5, { y: 1 });
     CURLS.cone.deform(fill, W, H, 0.5, { y: 1, fill: true });
-    const [xSpread] = vertex(spread, COLS, ROWS);
-    const [xFill] = vertex(fill, COLS, ROWS);
-    expect(xFill).toBeGreaterThan(xSpread + 2);
+    const [xSpread, ySpread, zSpread] = vertex(spread, COLS, ROWS);
+    const [xFill, yFill, zFill] = vertex(fill, COLS, ROWS);
+    expect(xFill).toBeCloseTo(xSpread, 2);
+    expect(yFill).toBeCloseTo(ySpread, 2);
+    expect(zFill).toBeCloseTo(zSpread, 2);
   });
 
   it('lands flat on a fill leaf at t=1', () => {
@@ -151,6 +153,22 @@ describe('cone curl', () => {
     // Curl + spine finish before t=1 so the decelerating flip tail is motionless.
     const landed = deformed('cone', 1);
     const late = deformed('cone', 0.9);
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) {
+        const a = vertex(landed, i, j);
+        const b = vertex(late, i, j);
+        expect(b[0]).toBeCloseTo(a[0], 2);
+        expect(b[1]).toBeCloseTo(a[1], 2);
+        expect(b[2]).toBeCloseTo(a[2], 2);
+      }
+    }
+  });
+
+  it('holds the landed pose on a fill leaf through the ease tail', () => {
+    const landed = createPageMesh(COLS, ROWS);
+    const late = createPageMesh(COLS, ROWS);
+    CURLS.cone.deform(landed, W, H, 1, { y: 1, fill: true });
+    CURLS.cone.deform(late, W, H, 0.9, { y: 1, fill: true });
     for (let j = 0; j <= ROWS; j++) {
       for (let i = 0; i <= COLS; i++) {
         const a = vertex(landed, i, j);

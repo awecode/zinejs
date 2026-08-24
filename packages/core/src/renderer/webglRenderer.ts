@@ -126,10 +126,10 @@ const GRID_ROWS = 36;
 /** Progress at which a lone page starts dissolving. A full-width leaf has no facing half to
  *  flop onto, so instead of landing on empty space it fades into the page arriving beneath it
  *  over the rest of the turn. Roll is already flat by mid-turn; curling models stay bent
- *  longer, so they dissolve later. The fade itself eases so the leaf settles rather than
- *  vanishing while still swinging. */
+ *  longer, so they dissolve later. Timed so the fade covers the still landed pose (curl RHO_END)
+ *  rather than washing out a sheet that is still swinging. */
 const FILL_FADE_START_ROLL = 0.7;
-const FILL_FADE_START_CURL = 0.8;
+const FILL_FADE_START_CURL = 0.78;
 const RESTORE_TIMEOUT_MS = 4000;
 const MAX_TEXTURE_CACHE_BYTES = 256 * 1024 * 1024;
 

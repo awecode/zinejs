@@ -90,7 +90,7 @@ Options (only `source` is required):
 | `spreadMode` | `'double' \| 'single' \| 'cover' \| 'book'` | `'cover'` | How pages group into spreads. See [`spreadMode`](#spreadmode). |
 | `direction` | `'ltr' \| 'rtl'` | `'ltr'` | Reading direction. |
 | `startPage` | `number` | `0` | Zero-based page to open on. |
-| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this and eases out harder (no facing landing). Overridden under [reduced motion](#accessibility). |
+| `flipDuration` | `number` (ms) | `800` | Flip animation duration. Timed for a two-page spread; a lone page stretches this slightly (full-width travel). Overridden under [reduced motion](#accessibility). |
 | `width` | `number` (px) | — | Fixed container width; omit to let CSS size it. |
 | `height` | `number` (px) | — | Fixed container height; omit to let CSS size it. |
 | `frontCover` | `string` (URL) | — | Image prepended as a lone front cover (adds a page). See [Covers](#covers-and-page-replacement). |
@@ -510,7 +510,7 @@ bundled names are valid in JSON config. A JSON Schema is published at
 
 For anchored models (`cone`, `leaf`, `flick`, `silk`), the fold originates at the corner nearest where the reader taps/grabs.
 
-On a lone page (`single` mode, or a cover/back page), `roll` turns exactly as it does on a spread, but since there is no facing page to flop onto it dissolves into the arriving page as it lands. A lone page also sweeps the full container width rather than half of it, so it takes longer than `flipDuration` and eases out harder: there is no facing landing to watch, only the peel and fade. `cone` also softens and slightly delays its flop on full-width lone pages so the peel stays over the sheet; the other models are otherwise unchanged.
+On a lone page (`single` mode, or a cover/back page), curls turn with the same geometry as on a spread. There is no facing half to land on, so the leaf dissolves into the arriving page as it finishes. A lone page also sweeps the full container width rather than half of it, so it takes slightly longer than `flipDuration`.
 
 ### Custom curls
 
