@@ -99,6 +99,8 @@ Options (only `source` is required):
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
+| `cursorHints` | `boolean` | `true` | On a mouse, change the cursor over the book to hint what a press does. `false` to keep the default cursor. See [Discoverability hints](#discoverability-hints). |
+| `hints` | `boolean \| { enabled?, persist? }` | `true` | Subtle one-shot hints on the book itself (corner peek, idle nudge, zoom/pan captions). See [Discoverability hints](#discoverability-hints). |
 | `singlePageThreshold` | `number` (px) | `640` | Below this container width, show one page per spread. |
 | `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
 | `zoom` | `ZoomOptions` | [zoom options](#zoom-options) | Zoom behavior. |
@@ -153,6 +155,37 @@ It is a hint. The engine currently always requests the whole page (`region` of
 `{ x: 0, y: 0, width: 1, height: 1 }`). Ignore `opts` and return the whole page as usual, which is
 what a source backed by a fixed-resolution original should do. The engine notices a raster that is
 no sharper than what is already on screen and leaves it in place.
+
+## Discoverability hints
+
+A flipbook can look like a static image until the reader happens to try a gesture. Two option
+groups coach that, each fading out as soon as the reader shows they know the move.
+
+**`cursorHints`** (mouse only, on by default) changes the cursor over the book to say what a press
+would do: `pointer` where a click turns the page, `zoom-in` where a double-click zooms (including
+the edge peel band, so a sweep stays calm), `grab` over a zoomed page (a drag pans), and `grabbing`
+while a peel or pan is in flight. Set `cursorHints: false` when a changing cursor would be noise in
+the embedding design. No effect on touch.
+
+**`hints`** (on by default) are subtle, one-shot cues on the book itself, so they reach touch
+readers too:
+
+- the leading page corner peeks and settles on first open, and nudges once more if the reader sits
+  idle without turning a page;
+- a small "drag to move" caption the first time they zoom in;
+- on a mouse, a "double-click or Ctrl/⌘-scroll to zoom" caption if a lone click lands in a dead
+  zone where only a double-click would do anything.
+
+Each hint stops for good the moment the reader performs the gesture it teaches, and the motion cues
+honour `prefers-reduced-motion`. They are remembered in memory per page load by default; pass
+`hints: { persist: true }` to record what the reader has learned in localStorage so a returning
+reader is not re-taught. `hints: false` turns them all off.
+
+```js
+new Zine(el, { source, cursorHints: false })        // keep the default cursor
+new Zine(el, { source, hints: false })              // no on-book hints
+new Zine(el, { source, hints: { persist: true } })  // remember learned gestures across visits
+```
 
 ## Controls
 
