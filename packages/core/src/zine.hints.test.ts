@@ -69,6 +69,15 @@ function pressAndMove(el: EventTarget, fromX: number, toX: number, y: number): v
     Object.assign(new Event('pointermove', { bubbles: true }), { pointerId: 1, clientX: toX, clientY: y }),
   );
 }
+/** A single click at a point, carrying the pointerType the zoom hint gates on (default mouse). */
+function click(el: EventTarget, x: number, y: number, pointerType = 'mouse'): void {
+  el.dispatchEvent(
+    Object.assign(new Event('pointerdown', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y, pointerType }),
+  );
+  el.dispatchEvent(Object.assign(new Event('pointerup', { bubbles: true }), { pointerId: 1, clientX: x, clientY: y }));
+  el.dispatchEvent(Object.assign(new Event('click', { bubbles: true }), { clientX: x, clientY: y }));
+}
+const CAPTION = '.zine-hint-caption';
 
 /** happy-dom here ships no localStorage, so give persist tests a minimal in-memory one. */
 function makeLocalStorage(): Storage {
@@ -219,5 +228,80 @@ describe('Zine — discoverability hints', () => {
     await micro();
     ephemeral.setZoom(2);
     expect(localStorage.getItem('zine:hints-learned')).toBeNull(); // in-memory only
+  });
+});
+
+describe('Zine — zoom hint on a dead-zone lone click', () => {
+  it('shows a zoom caption after a lone mouse click in the dead centre where only a double-click acts', async () => {
+    const { el } = await makeZine();
+    await micro();
+    tick(720); // let the ready peek finish
+    click(el, 400, 300); // centre dead zone: a single click does nothing, a double-click would zoom
+    expect(el.querySelector(CAPTION)).toBeNull(); // nothing yet — waiting out the pairing window
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)?.textContent).toBe('Double-click or Ctrl-scroll to zoom');
+  });
+
+  it('does not show it for a real double-click (that zooms, which teaches zoom directly)', async () => {
+    const { zine, el } = await makeZine();
+    await micro();
+    tick(720);
+    click(el, 400, 300);
+    click(el, 400, 300); // pairs within the window → a double-click
+    await vi.advanceTimersByTimeAsync(250);
+    expect(zine.getZoom()).toBe(2); // it zoomed
+    // Zooming legitimately fires the first-zoom pan caption (hint C); the zoom *hint* never did.
+    expect(el.querySelector(CAPTION)?.textContent).toBe('Drag to move');
+  });
+
+  it('stays silent for touch (no double-click gesture there)', async () => {
+    const { el } = await makeZine();
+    await micro();
+    tick(720);
+    click(el, 400, 300, 'touch');
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)).toBeNull();
+  });
+
+  it('stays silent in a live flip zone (a click there does something)', async () => {
+    // 6 pages, middle spread → the right edge can turn, so it is not a dead zone.
+    const { el } = await makeZine({ startPage: 2 });
+    await micro();
+    tick(720);
+    click(el, 790, 300); // live forward flip zone
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)).toBeNull();
+  });
+
+  it('teaches at most once — a second dead-zone click does not re-show it', async () => {
+    const { el } = await makeZine();
+    await micro();
+    tick(720);
+    click(el, 400, 300);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(2200); // let the first caption time out
+    expect(el.querySelector(CAPTION)).toBeNull();
+    tick(400); // move the clock on so this click cannot pair with the stale first one
+    click(el, 400, 300); // try again
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)).toBeNull(); // already taught this session
+  });
+
+  it('does nothing when hints is false', async () => {
+    const { el } = await makeZine({ hints: false });
+    await micro();
+    click(el, 400, 300);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)).toBeNull();
+  });
+
+  it('names only double-click when wheel zoom is off', async () => {
+    const { el } = await makeZine({ zoom: { wheel: false } });
+    await micro();
+    tick(720);
+    click(el, 400, 300);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(el.querySelector(CAPTION)?.textContent).toBe('Double-click to zoom');
   });
 });

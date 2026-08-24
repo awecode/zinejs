@@ -96,7 +96,7 @@
     },
     "hints": {
       "default": true,
-      "description": "Subtle one-shot discoverability hints on the book itself (reaching touch readers, unlike cursorHints): the leading corner peeks on first open, nudges again once if the reader sits idle without turning a page, and a 'drag to move' caption appears on first zoom. Each stops for good once the reader performs the gesture it teaches. Honors prefers-reduced-motion. true (default) enables them in-memory; { persist: true } records what the reader learned in localStorage so a returning reader is not re-taught.",
+      "description": "Subtle one-shot discoverability hints on the book itself (reaching touch readers, unlike cursorHints): the leading corner peeks on first open, nudges again once if the reader sits idle without turning a page, a 'drag to move' caption appears on first zoom, and (on a mouse) a 'double-click or Ctrl/Cmd-scroll to zoom' caption appears if a lone click lands in a dead zone where only a double-click would do anything. Each stops for good once the reader performs the gesture it teaches. Honors prefers-reduced-motion. true (default) enables them in-memory; { persist: true } records what the reader learned in localStorage so a returning reader is not re-taught.",
       "oneOf": [
         { "type": "boolean" },
         {

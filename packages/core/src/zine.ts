@@ -212,11 +212,13 @@ export interface ZineOptions {
   /**
    * Subtle, one-shot discoverability hints shown on the book itself (so they reach touch readers,
    * unlike {@link cursorHints}): the leading page corner peeks and settles on first open, nudges
-   * once more if the reader sits idle without turning a page, and a small "drag to move" caption
-   * appears the first time they zoom in. Each hint stops for good the moment the reader performs the
-   * gesture it teaches. Honors `prefers-reduced-motion` (the motion cues are skipped). Default true.
-   * Pass an object to keep what the reader has learned across visits: `{ persist: true }` records it
-   * in localStorage so a returning reader is not re-taught (default is in-memory, per page load).
+   * once more if the reader sits idle without turning a page, a small "drag to move" caption appears
+   * the first time they zoom in, and (on a mouse) a "double-click or Ctrl/⌘-scroll to zoom" caption
+   * appears if a lone click lands in a dead zone where only a double-click would do anything. Each
+   * hint stops for good the moment the reader performs the gesture it teaches. Honors
+   * `prefers-reduced-motion` (the motion cues are skipped). Default true. Pass an object to keep what
+   * the reader has learned across visits: `{ persist: true }` records it in localStorage so a
+   * returning reader is not re-taught (default is in-memory, per page load).
    */
   hints?: boolean | { enabled?: boolean; persist?: boolean };
   /**
@@ -305,9 +307,18 @@ export class Zine {
   /** Tags the peek's own rAF loop so a real flip (or teardown) can cancel a peek mid-play without
    *  the stale frame repainting a half-folded page. Distinct from #activeAnim, which is flip-only. */
   #peekAnim: object | null = null;
-  /** The lazily-built "drag to move" caption element (null until the first zoom shows it). */
+  /** The lazily-built hint caption element (null until a caption shows it). */
   #captionEl: HTMLElement | null = null;
   #captionTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Delays the "double-click to zoom" caption past the pairing window, so a real double-click zooms
+   *  (which teaches zoom) instead of flashing the hint first. Cleared if the click pairs or zoom is learned. */
+  #zoomHintTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The zoom caption teaches at most once a session; a reader who ignores it is not nagged on every
+   *  dead click. (The peek and pan captions are one-shot for the same reason.) */
+  #zoomHintShown = false;
+  /** pointerType of the last press, so the zoom caption stays mouse-only: touch has no "double-click"
+   *  and double-tap/pinch are already well known (this mirrors why cursorHints is mouse-only). */
+  #lastPointerType = '';
   #honorDoubleClickInFlipZone: boolean;
   #clickFlipDelayValue: number;
   #singlePageThreshold: number;
@@ -985,7 +996,8 @@ export class Zine {
     this.#clearPendingClickFlip();
     this.#clearIdleNudge();
     this.#cancelPeek();
-    this.#hidePanCaption();
+    this.#clearZoomHint();
+    this.#hideCaption();
     this.#resizeObserver?.disconnect();
     this.#deepLink?.stop();
     this.#deepLink = null;
@@ -1252,7 +1264,7 @@ export class Zine {
       this.#renderer.setViewTransform(this.#scale, tx, ty);
       this.#refreshZoomTiles();
       this.#markLearned('pan'); // the reader is panning — the caption has served its purpose
-      this.#hidePanCaption();
+      this.#hideCaption();
       return;
     }
     // An armed corner press becomes a real flip once it moves past the threshold.
@@ -1478,6 +1490,7 @@ export class Zine {
     if (this.#learned[signal]) return;
     this.#learned[signal] = true;
     if (signal === 'turn') this.#clearIdleNudge(); // no more peeks once a page has been turned
+    if (signal === 'zoom') this.#clearZoomHint(); // reader zoomed; a pending zoom caption is moot
     if (this.#hintsPersist) {
       try {
         localStorage.setItem(HINTS_STORAGE_KEY, JSON.stringify(this.#learned));
@@ -1584,13 +1597,22 @@ export class Zine {
    *  styles: the controls stylesheet is absent when `controls: false`, and this hint must still work.
    *  A dark toast pill with light text reads on any page background and either theme. */
   #showPanCaption(): void {
-    if (!this.#hintsEnabled || this.#learned.pan || this.#captionEl) return;
+    if (this.#learned.pan) return;
+    this.#showCaption('Drag to move'); // panning has no visual analog, so this one hint uses words
+  }
+
+  /** Show a transient caption pill over the book, replacing any caption already up. Self-contained
+   *  inline styles: the controls stylesheet is absent when `controls: false`, and a hint must still
+   *  work. Guarded by #hintsEnabled so `hints: false` shows nothing. */
+  #showCaption(text: string): void {
+    if (!this.#hintsEnabled) return;
     const doc = this.#container.ownerDocument;
     if (!doc || typeof this.#container.appendChild !== 'function') return;
+    this.#hideCaption(); // one pill at a time; drop any caption (and its timer) already showing
     const el = doc.createElement('div');
     el.className = 'zine-hint-caption';
-    el.setAttribute('aria-hidden', 'true'); // decorative; screen readers get panning via a11y text
-    el.textContent = 'Drag to move';
+    el.setAttribute('aria-hidden', 'true'); // decorative; screen readers get the gesture via a11y text
+    el.textContent = text;
     el.style.cssText =
       'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:3;' +
       'pointer-events:none;padding:6px 12px;border-radius:999px;font:500 13px/1.2 system-ui,sans-serif;' +
@@ -1608,17 +1630,61 @@ export class Zine {
     } else {
       el.style.opacity = '1'; // no fade available — just show it
     }
-    this.#captionTimer = setTimeout(() => this.#hidePanCaption(), CAPTION_MS);
+    this.#captionTimer = setTimeout(() => this.#hideCaption(), CAPTION_MS);
   }
 
-  /** Remove the pan caption (on the first pan, its timeout, or teardown). */
-  #hidePanCaption(): void {
+  /** Remove the caption (on the gesture it taught, its timeout, or teardown). */
+  #hideCaption(): void {
     if (this.#captionTimer !== null) {
       clearTimeout(this.#captionTimer);
       this.#captionTimer = null;
     }
     this.#captionEl?.remove();
     this.#captionEl = null;
+  }
+
+  /** After a lone click lands where only a double-click would do anything (a dead zone at rest),
+   *  wait out the pairing window; if no second click pairs, the reader tried to act and nothing
+   *  happened — hint how to zoom. Mouse-only (touch has no double-click), once a session, and never
+   *  once zoom is learned. A real double-click clears this (it zooms, which teaches zoom directly). */
+  #maybeArmZoomHint(clientX: number, clientY: number): void {
+    if (!this.#hintsEnabled || this.#learned.zoom || this.#zoomHintShown) return;
+    if (this.#lastPointerType !== 'mouse') return;
+    // Only where a single click did nothing but a double-click would zoom (dead zone, scale 1, zoom
+    // on). #cursorFor already folds in letterbox, flip-zone, and scale arbitration.
+    if (this.#cursorFor(clientX, clientY) !== 'zoom-in') return;
+    // Not on the tail of a rapid flipping streak — those dead-zone clicks are turning, not zooming.
+    if (this.#machine.state === 'animating' || performance.now() - this.#lastFlipAt <= FLIP_STREAK_MS) {
+      return;
+    }
+    this.#clearZoomHint();
+    this.#zoomHintTimer = setTimeout(() => {
+      this.#zoomHintTimer = null;
+      if (this.#learned.zoom || this.#zoomHintShown) return; // a zoom landed while we waited
+      this.#zoomHintShown = true;
+      this.#showCaption(this.#zoomHintText());
+    }, DOUBLE_CLICK_MS);
+  }
+
+  /** The zoom caption's text, naming whichever zoom gestures are actually enabled. Double-click is
+   *  always one (this fires only where a double-click would zoom); Ctrl/⌘-scroll is added when wheel
+   *  zoom is on, with the platform's modifier. */
+  #zoomHintText(): string {
+    const parts: string[] = [];
+    if (this.#doubleClickLevels !== null) parts.push('Double-click');
+    if (this.#wheelZoom) {
+      const nav = this.#container.ownerDocument?.defaultView?.navigator;
+      const mac = /Mac|iPhone|iPad/.test(nav?.platform ?? '');
+      parts.push(`${mac ? '⌘' : 'Ctrl'}-scroll`);
+    }
+    return `${parts.join(' or ')} to zoom`;
+  }
+
+  #clearZoomHint(): void {
+    if (this.#zoomHintTimer !== null) {
+      clearTimeout(this.#zoomHintTimer);
+      this.#zoomHintTimer = null;
+    }
   }
 
   #clearPendingClickFlip(): void {
@@ -1698,6 +1764,11 @@ export class Zine {
     // `dblclick`, because the browser resets its click counter mid-streak (often when the first
     // zoom shifts the target under the pointer). Detecting pairs from raw `click` events makes
     // every second click of a streak zoom (or cycle), so continuous clicks keep toggling.
+    // Click carries no pointerType; capture it from the preceding pointerdown so the zoom hint can
+    // stay mouse-only (touch has no double-click).
+    const onDown = (event: PointerEvent): void => {
+      this.#lastPointerType = event.pointerType;
+    };
     const onClick = (event: MouseEvent): void => {
       const levels = this.#doubleClickLevels;
       if (!this.#zoomEnabled || levels === null || !this.#renderer) return;
@@ -1710,16 +1781,23 @@ export class Zine {
       if (!paired) {
         // First click of a potential pair: remember it and wait for a second.
         this.#lastClick = { t, x: event.clientX, y: event.clientY };
+        // A lone click in a dead zone is a reader who tried something and got nothing: hint how to
+        // zoom, unless the second click of a pair arrives first (a real zoom teaches it directly).
+        this.#maybeArmZoomHint(event.clientX, event.clientY);
         return;
       }
       // Second click within the window → a double-click. Consume it so the next click starts a
       // fresh pair rather than chaining a third click into another zoom.
       this.#lastClick = null;
+      this.#clearZoomHint(); // this pair is a real double-click; drop the pending lone-click hint
       this.#zoomAt(event.clientX, event.clientY, levels);
     };
+    this.#container.addEventListener('pointerdown', onDown as EventListener);
     this.#container.addEventListener('click', onClick as EventListener);
-    this.#unbindDblClick = () =>
+    this.#unbindDblClick = () => {
+      this.#container.removeEventListener('pointerdown', onDown as EventListener);
       this.#container.removeEventListener('click', onClick as EventListener);
+    };
   }
 
   /** Cycle to the next configured zoom level, keeping the clicked point fixed. Honors the
