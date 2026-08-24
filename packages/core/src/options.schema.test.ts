@@ -30,6 +30,7 @@ describe('options.schema.json', () => {
         'source',
         'startPage',
         'controls',
+        'contextMenu',
         'deepLink',
         'disableContextMenu',
         'responsiveSpread',
@@ -42,5 +43,6 @@ describe('options.schema.json', () => {
     expect(schema.properties.singlePageThreshold?.default).toBe(640);
     expect(schema.properties.direction?.default).toBe('ltr');
     expect(schema.properties.controls?.default).toBe(true);
+    expect(schema.properties.contextMenu?.default).toBe(true);
   });
 });

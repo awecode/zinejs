@@ -194,6 +194,30 @@
           }
         }
       ]
+    },
+    "contextMenu": {
+      "default": true,
+      "description": "A right-click menu of reading controls, opened at the cursor. On by default. true for the default set, false to keep the browser's own menu, or an object to configure it. Turned off when disableContextMenu is set; setting both explicitly throws.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "array",
+              "description": "Menu layout: control ids, '|' separators, or inline control definitions. Omit for the default set.",
+              "items": { "type": ["string", "object"] }
+            },
+            "colorScheme": {
+              "type": "string",
+              "enum": ["light", "dark", "auto"],
+              "default": "auto",
+              "description": "Which palette the menu uses; follows the toolbar's when mounted alongside one."
+            }
+          }
+        }
+      ]
     }
   }
 }

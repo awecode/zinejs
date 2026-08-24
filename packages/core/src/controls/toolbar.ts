@@ -1,6 +1,13 @@
-import { createIcon, ICONS } from './icons';
+import { ICONS } from './icons';
 import { DEFAULT_ITEMS, defineControl, resolveControl } from './registry';
 import { registerBuiltins } from './builtins';
+import {
+  activateControl,
+  applyControlItemState,
+  buildControlButton,
+  ControlMenu,
+  hasVisibleChildren,
+} from './menu';
 import { applyColorScheme, ensureStyles } from './styles';
 import { Thumbnails } from './thumbnails';
 import { Outline } from './outline';
@@ -30,7 +37,7 @@ import type { Zine } from '../zine';
 const SWALLOWED = ['pointerdown', 'pointerup', 'pointermove', 'click', 'dblclick', 'wheel', 'keydown'];
 
 interface Popover {
-  el: HTMLElement;
+  menu: ControlMenu;
   trigger: HTMLElement;
 }
 
@@ -108,7 +115,7 @@ export class Toolbar {
       const target = e.target as Node;
       // Leave a press on the trigger to its own click handler, which toggles the menu shut —
       // closing here first would let that click reopen it, so it would never close.
-      if (this.#popover.el.contains(target) || this.#popover.trigger.contains(target)) return;
+      if (this.#popover.menu.contains(target) || this.#popover.trigger.contains(target)) return;
       this.#closePopover();
     };
     doc.addEventListener('pointerdown', onDocPointer, true);
@@ -207,46 +214,15 @@ export class Toolbar {
       let el: HTMLElement;
       if (def.render) {
         el = def.render(this.#context());
-        // Registered like any button so its predicates are re-read on every change; #button
-        // does this for the controls it builds.
-        this.#buttons.push({ el, def });
       } else {
-        el = this.#button(def, 'zine-controls-btn');
+        el = buildControlButton(this.#doc, def, 'zine-controls-btn', this.#context(), (d, btn) =>
+          this.#activate(d, btn),
+        );
       }
+      // Registered so its predicates are re-read on every change, whichever way it draws itself.
+      this.#buttons.push({ el, def });
       this.#bar.appendChild(el);
     }
-  }
-
-  /** A control button. Bar buttons are icon-only with the title as tooltip; menu items and any
-   *  control without an icon also carry a visible label. */
-  /** A control's label, which may be a function of the current state. */
-  #titleOf(def: ControlDef): string {
-    return typeof def.title === 'function' ? def.title(this.#context()) : def.title;
-  }
-
-  /** A control's glyph, which may likewise depend on state (an RTL mirror, say). */
-  #iconOf(def: ControlDef): string | undefined {
-    return typeof def.icon === 'function' ? def.icon(this.#context()) : def.icon;
-  }
-
-  #button(def: ControlDef, className: string, withLabel = false): HTMLButtonElement {
-    const btn = this.#doc.createElement('button');
-    const title = this.#titleOf(def);
-    const icon = this.#iconOf(def);
-    btn.type = 'button';
-    btn.className = className;
-    btn.title = title;
-    btn.setAttribute('aria-label', title);
-    if (icon) btn.appendChild(createIcon(this.#doc, icon));
-    if (withLabel || !icon) {
-      const label = this.#doc.createElement('span');
-      label.className = 'zine-controls-label';
-      label.textContent = title;
-      btn.appendChild(label);
-    }
-    btn.addEventListener('click', () => this.#activate(def, btn));
-    this.#buttons.push({ el: btn, def });
-    return btn;
   }
 
   #activate(def: ControlDef, trigger: HTMLButtonElement): void {
@@ -257,60 +233,21 @@ export class Toolbar {
       else this.#openMenu(def, trigger);
       return;
     }
-    if (trigger.classList.contains('zine-controls-busy')) return; // a slow action already running
-    const result = def.action?.(this.#context());
-    // A synchronous action is done; a promise means slow work (fetching a cross-origin file to save
-    // or print). Mark the button busy and hold it there until the work settles. The action closes
-    // its own menu when ready, so the spinner stays visible on the still-open item meanwhile.
-    if (result && typeof result.then === 'function') {
-      this.#setBusy(trigger, true);
-      void result.finally(() => {
-        this.#setBusy(trigger, false);
-        this.#refresh();
-      });
-    }
-    this.#refresh();
-  }
-
-  /** Toggle the pending-action state on a button: a trailing spinner, disabled while it spins. */
-  #setBusy(btn: HTMLButtonElement, busy: boolean): void {
-    btn.classList.toggle('zine-controls-busy', busy);
-    btn.setAttribute('aria-busy', String(busy));
-    btn.disabled = busy;
+    activateControl(def, trigger, this.#context(), () => this.#refresh());
   }
 
   #openMenu(def: ControlDef, trigger: HTMLButtonElement): void {
     this.#closePopover();
-    const menu = this.#doc.createElement('div');
-    menu.className = 'zine-controls-menu';
-    menu.setAttribute('role', 'menu');
-    const ctx = this.#context();
-    for (const child of def.children ?? []) {
-      if (child === '|') continue;
-      const childDef = resolveControl(child);
-      if (childDef.isVisible && !childDef.isVisible(ctx)) continue;
-      let item: HTMLElement;
-      if (childDef.render) {
-        item = childDef.render(this.#context());
-        this.#buttons.push({ el: item, def: childDef });
-      } else {
-        item = this.#button(childDef, 'zine-controls-btn', true);
-      }
-      item.setAttribute('role', 'menuitem');
-      menu.appendChild(item);
-    }
-    this.#showPopover(menu, trigger);
+    const menu = new ControlMenu(this.#doc, () => this.#context(), () => this.#refresh());
+    menu.build(def.children ?? []);
+    this.#root.appendChild(menu.el);
+    this.#popover = { menu, trigger };
+    trigger.setAttribute('aria-expanded', 'true');
+    this.#placePopover(menu.el, trigger);
     // The entries were only just built, so nothing has evaluated their state yet: without this
     // a menu opens with every entry enabled until the next page turn happens to refresh it.
-    this.#refresh();
-    menu.querySelector('button')?.focus();
-  }
-
-  #showPopover(el: HTMLElement, trigger: HTMLElement): void {
-    this.#root.appendChild(el);
-    this.#popover = { el, trigger };
-    trigger.setAttribute('aria-expanded', 'true');
-    this.#placePopover(el, trigger);
+    menu.refresh();
+    menu.focusFirst();
   }
 
   /** Anchor a popover to its trigger, flipped to stay inside the book. */
@@ -332,13 +269,13 @@ export class Toolbar {
 
   #closePopover(): void {
     if (!this.#popover) return;
-    const { el, trigger } = this.#popover;
+    const { menu, trigger } = this.#popover;
     this.#popover = null;
     trigger.removeAttribute('aria-expanded');
-    // Drop buttons that belonged to the popover so #refresh stops touching detached nodes.
-    this.#buttons = this.#buttons.filter((b) => !el.contains(b.el));
-    el.remove();
-    if (this.#doc.activeElement && el.contains(this.#doc.activeElement)) trigger.focus();
+    const hadFocus = this.#doc.activeElement !== null && menu.contains(this.#doc.activeElement);
+    // The menu owns its own items, so tearing it down keeps #refresh off detached nodes.
+    menu.destroy();
+    if (hadFocus) trigger.focus();
   }
 
   /** Arrow keys move between controls; Escape dismisses an open popover. */
@@ -373,50 +310,16 @@ export class Toolbar {
   #refresh(): void {
     const ctx = this.#context();
     for (const { el, def } of this.#buttons) {
-      // Does not apply to this book at all: take the space back, it is not coming again.
-      const applies = def.children ? this.#hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
-      if (applies !== undefined) el.style.display = applies ? '' : 'none';
-
-      // A button running a slow action stays disabled until it settles, whatever its predicate says.
-      const busy = el.classList.contains('zine-controls-busy');
-      const disabled = (def.isDisabled?.(ctx) ?? false) || busy;
-      // A wrapper element cannot be disabled, so mark it and disable the fields inside.
-      for (const field of this.#formFields(el)) field.disabled = disabled;
-      if (!this.#formFields(el).length) el.setAttribute('aria-disabled', String(disabled));
-      el.classList.toggle('zine-controls-off', disabled);
-
-      if (def.isActive) el.setAttribute('aria-pressed', String(def.isActive(ctx)));
-      if (typeof def.title === 'function') {
-        const title = def.title(ctx);
-        el.title = title;
-        el.setAttribute('aria-label', title);
-        const label = el.querySelector('.zine-controls-label');
-        if (label) label.textContent = title;
-      }
-      if (typeof def.icon === 'function') {
-        el.querySelector('svg')?.replaceWith(createIcon(this.#doc, def.icon(ctx)));
-      }
+      // A submenu trigger shows only while something inside it does; every other control follows
+      // its own isVisible. Undefined leaves the element's display alone.
+      const visible = def.children ? hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
+      applyControlItemState(el, def, ctx, this.#doc, visible);
     }
+    // The open overflow menu owns its items, so refresh them through it.
+    this.#popover?.menu.refresh();
     if (this.#pageInput && this.#doc.activeElement !== this.#pageInput) {
       this.#pageInput.value = String(this.#zine.getPage() + 1);
     }
-  }
-
-  /** The element itself if it can be disabled, else any inputs/buttons it wraps. */
-  #formFields(el: HTMLElement): (HTMLButtonElement | HTMLInputElement)[] {
-    if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) return [el];
-    return [...el.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input')];
-  }
-
-  /** A submenu is only worth showing if something inside it is. Keeps the overflow button from
-   *  opening onto nothing when every entry has hidden itself. */
-  #hasVisibleChildren(def: ControlDef, ctx: ControlContext): boolean {
-    if (def.isVisible && !def.isVisible(ctx)) return false;
-    return (def.children ?? []).some((child) => {
-      if (child === '|') return false;
-      const childDef = resolveControl(child);
-      return childDef.isVisible ? childDef.isVisible(ctx) : true;
-    });
   }
 
   /** Registered lazily by {@link registerWidgets} so the widget can reach this instance. */

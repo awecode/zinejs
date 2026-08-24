@@ -401,11 +401,15 @@ describe('Zine — context menu', () => {
     return el;
   };
 
-  it('leaves the browser menu alone by default', async () => {
-    expect(rightClick(await mount({}))).toBe(false);
+  it('replaces the browser menu by default (the book menu takes over)', async () => {
+    expect(rightClick(await mount({}))).toBe(true);
   });
 
-  it('suppresses it when asked', async () => {
+  it('leaves the browser menu alone when the book menu is off', async () => {
+    expect(rightClick(await mount({ contextMenu: false }))).toBe(false);
+  });
+
+  it('suppresses it with nothing in its place when asked', async () => {
     expect(rightClick(await mount({ disableContextMenu: true }))).toBe(true);
   });
 

@@ -188,6 +188,20 @@ export const CSS = `
   justify-content: flex-start;
 }
 
+/* The right-click menu opens in a fixed, viewport-spanning layer so the menu's absolute left/top
+   are plain client coordinates — it lands under the cursor without the container having to be a
+   positioning context. The layer itself is click-through; only the menu inside it takes events. */
+.zine-context-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  font: 500 12px/1.2 system-ui, sans-serif;
+  color: var(--zine-controls-fg, light-dark(#18181b, #f4f4f5));
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Search shares the rail: a query field pinned at the top over a scrolling list of hits. */
 .zine-search { gap: 0; overflow: hidden; }
 .zine-search-input {

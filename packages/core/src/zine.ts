@@ -28,7 +28,7 @@ import { selectRenderer, type RendererOption } from './renderer/select';
 import type { FlipDirection, PageContent, Renderer, SpreadContent } from './renderer/types';
 import type { DownloadInfo, LoadProgress, OutlineItem, Source } from './source/types';
 import { composeSource } from './source/compose';
-import type { ControlsOptions } from './controls/types';
+import type { ContextMenuOptions, ControlsOptions } from './controls/types';
 import type { LoaderHandle } from './loading/loading';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
@@ -267,8 +267,26 @@ export interface ZineOptions {
    * A mild deterrent for published documents, not protection: the pages are still in the DOM and
    * reachable by anyone who wants them. It also takes away Inspect and "Open image in new tab"
    * for everyone, so it is off unless asked for.
+   *
+   * Mutually exclusive with {@link contextMenu}: one replaces the native menu, the other only
+   * removes it, so enabling both is a contradiction and throws.
    */
   disableContextMenu?: boolean;
+  /**
+   * A right-click menu of reading controls (zoom, page turns, fullscreen, print, download, share),
+   * opened at the cursor over the book. On by default. Over a canvas the native menu offers only
+   * the generic page actions (Back, Reload, View source), so replacing it with the book's own
+   * controls is the better trade; pass `false` to keep the browser's menu.
+   *
+   * Reuses the toolbar's icons and actions, so the same controls appear whether reached from the
+   * toolbar or a right-click, and it works even with `controls: false` — a bare book can still
+   * offer one. `true` uses the default set; an object with `items` replaces the layout. Mouse
+   * affordance only; touch never raises it.
+   *
+   * Turned off automatically when {@link disableContextMenu} is set (that option removes the native
+   * menu with nothing in its place); setting both explicitly throws.
+   */
+  contextMenu?: boolean | ContextMenuOptions;
 }
 
 /**
@@ -385,6 +403,8 @@ export class Zine {
   #pendingUpgrades = new Set<number>();
   #controlsOption: boolean | ControlsOptions;
   #controlsCleanup: (() => void) | null = null;
+  #contextMenuOption: boolean | ContextMenuOptions;
+  #contextMenuCleanup: (() => void) | null = null;
   #loadingOption: boolean;
   #loader: LoaderHandle | null = null;
   #lastProgress: LoadProgress | null = null;
@@ -435,6 +455,10 @@ export class Zine {
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
+    // On by default, but a book that asked to suppress the native menu with nothing in its place
+    // (disableContextMenu) means it: don't hand it our menu unasked. Setting both explicitly is a
+    // contradiction and throws in validateOptions.
+    this.#contextMenuOption = options.contextMenu ?? (options.disableContextMenu ? false : true);
     this.#loadingOption = options.loading ?? true;
     this.#startPageOption = options.startPage;
     // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
@@ -1004,6 +1028,7 @@ export class Zine {
     this.#unsubscribeDeepLink?.();
     if (this.#deepLinkEnabled) releaseHash(); // a later book may own it now
     this.#controlsCleanup?.();
+    this.#contextMenuCleanup?.();
     this.#dismissLoader();
     this.#a11yCleanup?.();
     this.#unbindWheel?.();
@@ -1978,24 +2003,33 @@ export class Zine {
   }
 
   /**
-   * Build the toolbar, if it is wanted and the container is real DOM.
+   * Build the toolbar and the right-click menu, whichever are wanted, if the container is real DOM.
    *
-   * The chunk is fetched lazily so a book with `controls: false` never downloads it. Failure is
-   * swallowed on purpose: a toolbar that cannot load should cost the reader a toolbar, not the
-   * whole flipbook — `#init` has no error handling of its own, so a throw here would reject
-   * `ready`.
+   * The chunk is fetched lazily so a book with neither feature never downloads it. Both share the
+   * one chunk, so a book with `controls: false` but `contextMenu` on still gets the right-click menu
+   * without a toolbar. Failure is swallowed on purpose: controls that cannot load should cost the
+   * reader the controls, not the whole flipbook — `#init` has no error handling of its own, so a
+   * throw here would reject `ready`.
    */
   async #mountControls(): Promise<void> {
-    if (this.#controlsOption === false || this.#destroyed) return;
+    const wantsToolbar = this.#controlsOption !== false;
+    const wantsContextMenu = this.#contextMenuOption !== false;
+    if ((!wantsToolbar && !wantsContextMenu) || this.#destroyed) return;
     const container = this.#container;
     if (!container.ownerDocument || typeof container.appendChild !== 'function') return;
     try {
-      const { mountControls } = await import('./controls/controls');
+      const { mountControls, mountContextMenu } = await import('./controls/controls');
       if (this.#destroyed) return; // destroyed while the chunk was in flight
-      const options = this.#controlsOption === true ? {} : this.#controlsOption;
-      this.#controlsCleanup = mountControls(this, container, options);
+      if (this.#controlsOption !== false) {
+        const options = this.#controlsOption === true ? {} : this.#controlsOption;
+        this.#controlsCleanup = mountControls(this, container, options);
+      }
+      if (this.#contextMenuOption !== false) {
+        const options = this.#contextMenuOption === true ? {} : this.#contextMenuOption;
+        this.#contextMenuCleanup = mountContextMenu(this, container, options);
+      }
     } catch {
-      // No toolbar; the book itself is unaffected.
+      // No controls; the book itself is unaffected.
     }
   }
 
@@ -2526,6 +2560,25 @@ function validateOptions(container: unknown, options: unknown): void {
   if (arrows !== undefined && typeof arrows !== 'boolean' && !['desktop', 'mobile'].includes(arrows as string)) {
     throw new Error(
       `Zine: controls.arrows must be a boolean, 'desktop', or 'mobile'; got ${JSON.stringify(arrows)}.`,
+    );
+  }
+
+  const contextMenu = o.contextMenu;
+  if (contextMenu !== undefined && typeof contextMenu !== 'boolean' && (typeof contextMenu !== 'object' || contextMenu === null)) {
+    throw new Error(
+      `Zine: contextMenu must be a boolean or an options object; got ${typeName(contextMenu)}.`,
+    );
+  }
+  const menuColorScheme = (contextMenu as { colorScheme?: unknown } | undefined)?.colorScheme;
+  if (menuColorScheme !== undefined && !['light', 'dark', 'auto'].includes(menuColorScheme as string)) {
+    throw new Error(
+      `Zine: contextMenu.colorScheme must be 'light', 'dark', or 'auto'; got ${JSON.stringify(menuColorScheme)}.`,
+    );
+  }
+  if (o.disableContextMenu === true && contextMenu !== undefined && contextMenu !== false) {
+    throw new Error(
+      "Zine: disableContextMenu and contextMenu are mutually exclusive — one removes the browser's " +
+      'right-click menu, the other replaces it. Enable only one.',
     );
   }
 

@@ -1,10 +1,12 @@
 import { registerWidgets, Toolbar } from './toolbar';
-import type { ControlsOptions } from './types';
+import { ContextMenu } from './contextMenu';
+import type { ContextMenuOptions, ControlsOptions } from './types';
 import type { Zine } from '../zine';
 
 export { defineControl, getControl, DEFAULT_ITEMS } from './registry';
 export { ICONS, createIcon } from './icons';
 export type {
+  ContextMenuOptions,
   ControlContext,
   ControlDef,
   ControlItem,
@@ -31,4 +33,19 @@ export function mountControls(
   registerWidgets(toolbar);
   toolbar.mount(options);
   return () => toolbar.destroy();
+}
+
+/**
+ * Attach the right-click menu to `container` and return its teardown.
+ *
+ * Shares this lazy chunk with {@link mountControls}, so a book that wants only the context menu
+ * (`controls: false`, `contextMenu: true`) still reuses the same icons and control definitions.
+ */
+export function mountContextMenu(
+  zine: Zine,
+  container: HTMLElement,
+  options: ContextMenuOptions = {},
+): () => void {
+  const menu = new ContextMenu(zine, container, options);
+  return () => menu.destroy();
 }

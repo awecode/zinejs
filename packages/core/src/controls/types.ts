@@ -69,6 +69,13 @@ export interface ControlDef {
  */
 export type ControlItem = string | ControlDef | (Partial<ControlDef> & { id: string });
 
+export interface ContextMenuOptions {
+  /** The menu layout. Omit for the default set; pass an array to replace it outright. */
+  items?: readonly ControlItem[];
+  /** Which palette the menu uses; follows the toolbar's when mounted alongside one. */
+  colorScheme?: ControlsColorScheme;
+}
+
 export interface ControlsOptions {
   /** Which edge of the book the toolbar sits on; default 'bottom'. */
   position?: ControlsPosition;
