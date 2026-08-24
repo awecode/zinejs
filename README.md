@@ -103,9 +103,11 @@ Options (only `source` is required):
 | `responsiveSpread` | `boolean` | `true` | Whether a narrow container may override `spreadMode`. `false` holds the configured mode at every width. |
 | `zoom` | `ZoomOptions` | [zoom options](#zoom-options) | Zoom behavior. |
 | `controls` | `boolean \| ControlsOptions` | `true` | Built-in toolbar. `false` renders none. See [Controls](#controls). |
+| `contextMenu` | `boolean \| ContextMenuOptions` | `true` | Right-click menu of reading controls, opened at the cursor. `false` keeps the browser's own menu. See [Context menu](#context-menu). |
+| `hideControls` | `string[]` | — | Control ids to hide from the toolbar and the context menu at once. See [Hiding controls](#hiding-controls). |
 | `loading` | `boolean` | `true` | Overlay while a URL PDF downloads and the first spread prepares. `false` renders none; drive your own from the [`progress`](#events) event and `ready`. |
 | `deepLink` | `boolean` | `true` | Keep the page in the URL hash. See [Deep links](#deep-links). |
-| `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. |
+| `disableContextMenu` | `boolean` | `false` | Suppress the browser's right-click menu over the book. A deterrent, not protection — the pages stay in the DOM — and it also removes Inspect and "Open image in new tab" for everyone. Mutually exclusive with `contextMenu`. |
 
 ### `spreadMode`
 
@@ -259,6 +261,45 @@ Controls hide themselves when they cannot work: `search` unless the source can p
 `thumbnails` / `outline` unless `isDocument()`, and `fullscreen` where the Fullscreen API is
 unavailable. A submenu whose entries have all hidden themselves hides too, rather than opening
 onto nothing. The `⋮` `menu` still shows on an image book (`first`, `last`, `spread` remain).
+
+### Context menu
+
+Right-clicking the book opens a menu of reading controls at the cursor (zoom, page turns,
+fullscreen, print, download, share), each hidden by the same rules as on the toolbar when it does
+not apply. It is on by default: over a canvas the browser's own menu offers only generic page
+actions (Back, Reload, View source), so the book's own controls are the better trade. It reuses
+the toolbar's icons and actions, and works with `controls: false` too, so a bare book with no
+toolbar can still offer one.
+
+```js
+new Zine(el, { source, contextMenu: false })                      // keep the browser's own menu
+new Zine(el, { source, contextMenu: { items: ['prev', 'next'] } }) // choose the entries
+```
+
+`contextMenu` options are `items` (the layout, replacing the default set outright) and `colorScheme`
+(`'light' | 'dark' | 'auto'`, following the toolbar's when mounted alongside one). The default
+layout is:
+
+```js
+['zoomIn', 'zoomOut', '|', 'prev', 'next', '|', 'fullscreen', '|', 'print', 'download', 'share']
+```
+
+It is mouse-only; touch never raises it. `disableContextMenu` and `contextMenu` are mutually
+exclusive: one removes the browser's menu with nothing in its place, the other replaces it. Setting
+`disableContextMenu` therefore turns the book menu off, and enabling both explicitly throws.
+
+### Hiding controls
+
+`hideControls` removes named controls from both the toolbar and the context menu at once, wherever
+they sit: on the bar, inside the `⋮` overflow, or in the right-click menu.
+
+```js
+new Zine(el, { source, hideControls: ['print', 'download'] }) // gone from every surface, in one line
+```
+
+It only removes. To rearrange or add controls, or to change one surface alone, set that surface's
+`items` instead. A submenu the filter leaves empty hides itself, and separators stranded on the bar
+are tidied away.
 
 ### Custom controls
 
