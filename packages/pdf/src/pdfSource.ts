@@ -223,7 +223,7 @@ export class PdfSource implements Source {
     // re-render at the magnification being viewed. Memoized per zoom level, not in the byte-capped
     // page cache: a zoomed page is many times the size of a normal one and would evict the whole
     // spread, and a reader who zooms out and back in should not pay to render it twice.
-    if (opts && opts.scale > 1) return this.#renderZoomed(index, opts.scale);
+    if (opts && opts.scale > 1) return this.#renderZoomed(index, opts.scale, opts.maxSize);
 
     const decoded = this.#renderPage(index);
     for (let d = 1; d <= this.#preload; d++) {
@@ -410,14 +410,14 @@ export class PdfSource implements Source {
    * a partial raster cannot be handed to it, and a crop would have to be re-rendered on every pan
    * anyway. Held apart from the byte-capped page cache, which is sized for fit-to-screen rasters.
    */
-  #renderZoomed(index: number, zoom: number): Promise<PageContent> {
+  #renderZoomed(index: number, zoom: number, maxSize?: number): Promise<PageContent> {
     const scale = Math.min(zoom, MAX_ZOOM_RENDER_SCALE);
     const key = `${index}@${scale}`;
     const cached = this.#zoomCache.get(key);
     if (cached) return cached;
 
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const promise = this.#rasterize(index, this.#renderScale * dpr * scale).catch(
+    const promise = this.#rasterize(index, this.#renderScale * dpr * scale, maxSize).catch(
       (error: unknown) => {
         this.#zoomCache.delete(key); // let a later zoom retry
         throw error;
@@ -434,9 +434,16 @@ export class PdfSource implements Source {
     return promise;
   }
 
-  async #rasterize(index: number, scale: number): Promise<PageContent> {
+  async #rasterize(index: number, scale: number, maxSize?: number): Promise<PageContent> {
     if (this.#doc === null) throw new Error('PdfSource: use after open() — the document is not loaded.');
     const page = await this.#doc.getPage(index + 1); // pdf.js pages are 1-indexed
+    // Cap the scale so neither axis exceeds the GPU's texture limit: past it the upload paints black
+    // (the renderer downscales as a backstop, but rendering to fit avoids the wasted memory spike).
+    if (maxSize !== undefined && maxSize > 0) {
+      const base = page.getViewport({ scale: 1 });
+      const fit = maxSize / Math.max(base.width, base.height);
+      scale = Math.min(scale, fit);
+    }
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);

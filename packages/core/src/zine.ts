@@ -2326,7 +2326,11 @@ export class Zine {
       [spread.left, spread.right].map(async (index) => {
         if (index === null) return null;
         try {
-          return await this.#source.get(index, { scale, region: whole });
+          return await this.#source.get(index, {
+            scale,
+            region: whole,
+            maxSize: this.#renderer?.maxTextureSize,
+          });
         } catch (error) {
           // An upgrade is an enhancement: the readable, softer page stays on screen.
           this.#emitter.emit('sourceError', { index, error });

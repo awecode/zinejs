@@ -68,6 +68,11 @@ export interface PageRequest {
   scale: number;
   /** The visible part of the page, as fractions of its width and height in [0,1]. */
   region: { x: number; y: number; width: number; height: number };
+  /**
+   * Upper bound (px) on either raster dimension the caller can upload; a source honouring it caps
+   * its render scale so the tile fits the GPU. A hint, like the rest of PageRequest.
+   */
+  maxSize?: number;
 }
 
 /** One entry in a document's table of contents. */

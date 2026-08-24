@@ -357,6 +357,30 @@ describe('PdfSource — zoomed pages', () => {
     expect(at100.width).toBe(at6.width);
   });
 
+  it('caps a zoom raster at maxSize, so the GPU never gets a tile it would paint black', async () => {
+    // The page is 120x160 at 1x. A cap of 200 on the longest (height) axis allows at most 1.25x,
+    // so a 4x zoom must come back downscaled to fit rather than at its full 480x640.
+    const { doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    const capped = (await src.get(0, { scale: 4, region: whole, maxSize: 200 })) as HTMLCanvasElement;
+    expect(Math.max(capped.width, capped.height)).toBeLessThanOrEqual(200);
+    expect(capped.width).toBe(150); // 120 * (200/160)
+    expect(capped.height).toBe(200);
+  });
+
+  it('leaves the zoom raster full size when it already fits maxSize', async () => {
+    const { doc } = zoomDoc();
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    // 2x is 240x320, well under a 1000 cap: no clamp, the full detail is kept.
+    const raster = (await src.get(0, { scale: 2, region: whole, maxSize: 1000 })) as HTMLCanvasElement;
+    expect(raster.width).toBe(240);
+    expect(raster.height).toBe(320);
+  });
+
   it('serves the ordinary cached page when the reader is not zoomed', async () => {
     const { getPage, doc } = zoomDoc();
     const src = new PdfSource(doc, { preload: 0 });

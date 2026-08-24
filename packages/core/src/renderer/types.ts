@@ -86,6 +86,13 @@ export interface Renderer {
   measure(): LayoutMetrics;
 
   /**
+   * Largest texture dimension (px) the renderer can accept, when it has a hard cap (WebGL2's
+   * MAX_TEXTURE_SIZE). Sources read it to avoid rasterizing a zoom tile the GPU would reject and
+   * paint black. Omit when unbounded (the CSS renderer).
+   */
+  readonly maxTextureSize?: number;
+
+  /**
    * Optional: register a handler the renderer calls when it hits an unrecoverable
    * state (e.g. a GPU context that cannot be restored), so the engine can swap to
    * the CSS fallback (§8.4). Renderers that cannot fail this way omit it.

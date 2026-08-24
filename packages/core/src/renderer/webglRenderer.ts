@@ -181,6 +181,9 @@ export class WebglRenderer implements Renderer {
   #texCache = new Map<TexImageSource, { tex: WebGLTexture; bytes: number }>();
   #cacheBytes = 0;
   #blankTex: WebGLTexture | null = null;
+  // The GPU's largest accepted texture dimension; a zoom tile past it would upload black (see
+  // uploadTexture). Read once at mount and exposed so the source can cap its rasters to fit.
+  #maxTextureSize = 0;
 
   #flatU: Record<string, WebGLUniformLocation | null> = {};
   #curlU: Record<string, WebGLUniformLocation | null> = {};
@@ -222,6 +225,7 @@ export class WebglRenderer implements Renderer {
     doc.addEventListener('visibilitychange', this.#onVisibilityChange);
 
     this.#gl = createGlContext(canvas); // throws if unavailable -> engine falls back (§8.4)
+    this.#maxTextureSize = this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
     this.#buildGlResources();
     return Promise.resolve();
   }
@@ -257,6 +261,10 @@ export class WebglRenderer implements Renderer {
 
   onFatal(handler: () => void): void {
     this.#fatalHandler = handler;
+  }
+
+  get maxTextureSize(): number | undefined {
+    return this.#maxTextureSize || undefined;
   }
 
   renderSpread(_spread: Spread, content: SpreadContent, options?: RenderOptions): void {
@@ -673,9 +681,9 @@ export class WebglRenderer implements Renderer {
       return existing.tex;
     }
     const tex = createTexture(gl);
-    uploadTexture(gl, tex, source);
-    const dims = source as unknown as { width: number; height: number };
-    const bytes = dims.width * dims.height * 4;
+    // uploadTexture may downscale a raster too large for the GPU; account for what it really uploaded.
+    const uploaded = uploadTexture(gl, tex, source);
+    const bytes = uploaded.width * uploaded.height * 4;
     this.#texCache.set(source, { tex, bytes });
     this.#cacheBytes += bytes;
     this.#evictTextures();
