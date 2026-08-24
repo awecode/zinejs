@@ -146,6 +146,21 @@ describe('cone curl', () => {
     const [xTop] = vertex(mesh, COLS, 0);
     expect(xBottom).toBeLessThan(xTop);
   });
+
+  it('holds the landed pose through the ease tail (no settle bounce)', () => {
+    // Curl + spine finish before t=1 so the decelerating flip tail is motionless.
+    const landed = deformed('cone', 1);
+    const late = deformed('cone', 0.9);
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) {
+        const a = vertex(landed, i, j);
+        const b = vertex(late, i, j);
+        expect(b[0]).toBeCloseTo(a[0], 2);
+        expect(b[1]).toBeCloseTo(a[1], 2);
+        expect(b[2]).toBeCloseTo(a[2], 2);
+      }
+    }
+  });
 });
 
 describe('leaf curl', () => {

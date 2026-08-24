@@ -36,6 +36,20 @@ const CORNER_PURE = 0.42;
 const FILL_RHO_POWER = 1.08;
 
 /**
+ * Curl envelope ends before t=1 so the last stretch is a flat spine settle.
+ * Holding sin(πt) curl into the 0.9s left a tall residual ridge that deflated
+ * while the free edge was already nearly home — that read as a rebound bounce.
+ */
+const CURL_END = 0.84;
+
+/**
+ * Spine rotation reaches ±π before t=1 and holds. Flip easing decelerates hard into
+ * the end (a near-still tail after PAGE_LEAD); finishing the flop early keeps that
+ * tail from slowly dropping the leaf into place (the settle/rebound feel).
+ */
+const RHO_END = 0.88;
+
+/**
  * Natural conical page curl — the Xerox PARC / iBooks model.
  *
  * The leaf wraps an imaginary right circular cone whose apex rides the spine and
@@ -55,10 +69,10 @@ export function deformCone(mesh: PageMesh, W: number, H: number, t: number, anch
   const pos = mesh.positions;
   const fill = !!anchor.fill;
 
-  // Curl envelope: 0 at the ends (flat), 1 at mid-turn. Soft power keeps the
-  // ridge full through the middle third — paper holds its bend rather than
-  // peaking and collapsing.
-  const curl = Math.pow(Math.sin(Math.PI * t), 0.85);
+  // Curl envelope: 0 at the ends (flat), 1 near mid-turn. Span ends at CURL_END
+  // so the ridge is gone before the spine holds the landed pose through the ease tail.
+  const curlT = t >= CURL_END ? 1 : t / CURL_END;
+  const curl = Math.sin(Math.PI * curlT);
 
   // θ: π/2 (identity) → THETA_MIN (pronounced curl) → π/2.
   const thetaMin = fill ? THETA_MIN_FILL : THETA_MIN;
@@ -89,7 +103,8 @@ export function deformCone(mesh: PageMesh, W: number, H: number, t: number, anch
   // Spine rotation: concurrent with the cone so the page flops while it curls.
   // Same x–z convention as `roll` (ρ: 0 → −π). On fill, delay the flop so the
   // peel develops over the page before the leaf swings past the edge hinge.
-  const rhoT = fill ? Math.pow(t, FILL_RHO_POWER) : t;
+  // On a spread, finish by RHO_END and hold — the ease-out tail stays still.
+  const rhoT = fill ? Math.pow(t, FILL_RHO_POWER) : Math.min(1, t / RHO_END);
   const rho = -Math.PI * rhoT;
   const cosR = Math.cos(rho);
   const sinR = Math.sin(rho);
