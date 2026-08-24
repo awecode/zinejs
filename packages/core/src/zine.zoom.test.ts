@@ -288,6 +288,118 @@ describe('Zine — zoom tiles', () => {
 
   const overlay = (el: HTMLElement): HTMLElement | null => el.querySelector('.zine-zoom-overlay');
 
+  /** Records the content of the last spread painted, so a blanked half is observable. */
+  class CapturingRenderer extends BoxRenderer {
+    last: SpreadContent | null = null;
+    override renderSpread(_spread?: Spread, content?: SpreadContent): void {
+      this.last = content ?? null;
+    }
+  }
+
+  it('keeps the prior raster on a side whose zoom upgrade failed, not a blank half', async () => {
+    // Regression: one page's zoom get() throwing (OOM, worker hiccup) wrote null into that half,
+    // blanking it, while the other side sharpened. The failed side must fall back to the readable
+    // fit raster already on screen — the upgrade is an enhancement, per the get() catch.
+    vi.useFakeTimers();
+    try {
+      const el = document.createElement('div');
+      document.body.append(el);
+      const fit = new Map<number, PageContent>();
+      const source: Source = {
+        pageCount: 4,
+        // Fit raster (400) is smaller than the 800px painted box, so a zoom genuinely upgrades.
+        async get(index: number, opts?: { scale: number }): Promise<PageContent> {
+          if (opts && opts.scale > 1) {
+            if (index === 1) throw new Error('boom: zoom raster for the right page');
+            return { width: 400 * opts.scale, height: 300 * opts.scale } as unknown as PageContent;
+          }
+          let page = fit.get(index);
+          if (!page) {
+            page = { width: 400, height: 300 } as unknown as PageContent;
+            fit.set(index, page);
+          }
+          return page; // stable identity, so an un-upgraded side is dropped as unchanged
+        },
+        prefetch(): void {},
+        destroy(): void {},
+      };
+      const renderer = new CapturingRenderer();
+      const errors: unknown[] = [];
+      const zine = new Zine(el, { source, renderer, spreadMode: 'double', zoom: { max: 4 }, hints: false });
+      zine.on('sourceError', (e) => errors.push(e));
+      await zine.ready;
+      const fitRight = renderer.last?.right;
+      const fitWidth = (renderer.last?.left as { width: number }).width;
+      expect(fitRight).toBeTruthy();
+
+      zine.setZoom(2);
+      await vi.advanceTimersByTimeAsync(200); // past the tile debounce
+
+      expect(errors.length).toBeGreaterThan(0); // the failure was reported
+      expect(renderer.last?.right).toBe(fitRight); // the right half kept its readable raster
+      expect((renderer.last?.left as { width: number }).width).toBeGreaterThan(fitWidth); // left sharpened
+      zine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes zoom tiles, not a fit repaint, when a page upgrades while zoomed', async () => {
+    // Regression: a progressive onPageUpdate while zoomed routed through #renderCurrent, which
+    // re-resolved fit rasters and reset #zoomedAt to 1 — flashing the page soft before the tiles
+    // rebuilt, plus a wasted fit decode. While a sharp tile is up, refresh the tiles instead.
+    vi.useFakeTimers();
+    try {
+      const el = document.createElement('div');
+      document.body.append(el);
+      let onUpdate: ((index: number) => void) | undefined;
+      const requests: Array<number | undefined> = [];
+      const cache = new Map<string, PageContent>();
+      const source: Source = {
+        pageCount: 4,
+        onPageUpdate(handler: (index: number) => void): void {
+          onUpdate = handler;
+        },
+        async get(index: number, opts?: { scale: number }): Promise<PageContent> {
+          requests.push(opts?.scale);
+          const scale = opts?.scale ?? 1;
+          const key = `${index}@${scale}`;
+          let page = cache.get(key);
+          if (!page) {
+            // Fit raster (400) is smaller than the 800px painted box, so a zoom genuinely upgrades.
+            page = { width: 400 * scale, height: 300 * scale } as unknown as PageContent;
+            cache.set(key, page);
+          }
+          return page;
+        },
+        prefetch(): void {},
+        destroy(): void {},
+      };
+      const renderer = new CapturingRenderer();
+      const zine = new Zine(el, { source, renderer, spreadMode: 'double', zoom: { max: 4 }, hints: false });
+      await zine.ready;
+      const fitWidth = (renderer.last?.left as { width: number }).width;
+
+      zine.setZoom(2);
+      await vi.advanceTimersByTimeAsync(200);
+      const sharpWidth = (renderer.last?.left as { width: number }).width;
+      expect(sharpWidth).toBeGreaterThan(fitWidth); // a sharp tile is on screen
+
+      requests.length = 0;
+      onUpdate!(0); // a progressive upgrade of an on-screen page lands while zoomed
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(zine.getZoom()).toBe(2);
+      // No fit-resolution get() was issued (that was the soft flash + wasted decode).
+      expect(requests.some((s) => s === undefined || s <= 1)).toBe(false);
+      // And the page on screen is no softer than before.
+      expect((renderer.last?.left as { width: number }).width).toBeGreaterThanOrEqual(sharpWidth);
+      zine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('paints no tiles for a source with nothing sharper to give', async () => {
     // Regression: the check compared aspect ratios, so a full page whose shape happened to match
     // the visible region passed as a tile. It was then drawn over the book and, once panned,

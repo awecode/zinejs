@@ -2211,9 +2211,15 @@ export class Zine {
       return;
     }
     const spread = this.#spreads[this.#current];
-    if (spread && (spread.left === index || spread.right === index)) {
-      void this.#renderCurrent();
+    if (!spread || !(spread.left === index || spread.right === index)) return;
+    // While a sharp zoom tile is on screen, the upgrade touched the fit raster underneath it, not
+    // what the reader sees. A fit #renderCurrent would flash the page soft before the tiles rebuilt;
+    // refresh the tiles instead (a no-op when they are already at the viewed scale).
+    if (this.#zoomedAt > 1) {
+      this.#refreshZoomTiles();
+      return;
     }
+    void this.#renderCurrent();
   }
 
   /**
@@ -2348,8 +2354,10 @@ export class Zine {
     ) {
       return;
     }
-    const left = pages[0] ?? null;
-    const right = pages[1] ?? null;
+    // A side whose upgrade threw comes back null; keep the readable fit raster already on screen
+    // rather than blanking that half (the upgrade is an enhancement, per the get() catch above).
+    const left = pages[0] ?? this.#currentContent.left;
+    const right = pages[1] ?? this.#currentContent.right;
     // Nothing sharper came back: a source with a fixed-resolution original hands over the raster
     // already on screen, and repainting it would be pure churn.
     if (left === this.#currentContent.left && right === this.#currentContent.right) return;
