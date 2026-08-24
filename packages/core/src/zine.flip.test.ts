@@ -243,6 +243,68 @@ describe('Zine — slice 2 (programmatic flips)', () => {
     expect(renderer.rendered.length).toBe(painted); // no needless repaint
   });
 
+  it('refreshes zoom tiles, not a fit repaint, when a mid-flip upgrade settles onto a zoomed spread', async () => {
+    // Regression: an onPageUpdate that lands during a flip is deferred into #pendingUpgrades.
+    // When the turn settles, #flushPendingUpgrades used to call #renderCurrent unconditionally,
+    // which re-resolved fit rasters even though the reader was still zoomed in. That caused a
+    // soft flash and a wasted fit decode before the sharp tiles rebuilt. Staging the flip fetches
+    // the destination at fit once (unavoidable); the bug added a *second* fit fetch of the same
+    // pages at settle. The fix routes the deferred upgrade through the zoom-tile refresh instead.
+    const requests: Array<number | undefined> = [];
+    let notify: ((index: number) => void) | undefined;
+    const cache = new Map<string, PageContent>();
+    const source: Source = {
+      pageCount: 8,
+      onPageUpdate(handler: (index: number) => void): void {
+        notify = handler;
+      },
+      async get(index: number, opts?: { scale: number }): Promise<PageContent> {
+        requests.push(opts?.scale);
+        const scale = opts?.scale ?? 1;
+        const key = `${index}@${scale}`;
+        let page = cache.get(key);
+        if (!page) {
+          // Fit raster (400) is smaller than the 800px painted box, so a zoom genuinely upgrades.
+          page = { width: 400 * scale, height: 300 * scale } as unknown as PageContent;
+          cache.set(key, page);
+        }
+        return page;
+      },
+      prefetch(): void {},
+      destroy(): void {},
+    };
+    const renderer = new MockRenderer();
+    const zine = new Zine(el, {
+      source,
+      renderer,
+      spreadMode: 'double',
+      flipDuration: 500,
+      zoom: { max: 4 },
+      hints: false,
+    });
+    await zine.ready;
+
+    zine.setZoom(2);
+    await new Promise((resolve) => setTimeout(resolve, 120)); // past the tile debounce
+
+    zine.flipTo(4); // spread 2 -> pages 4 and 5
+    await flush(); // stage the destination: one fit get() per page (pages 4 and 5), unavoidable
+    const fitAfterStaging = requests.filter((s) => s === undefined || s <= 1).length;
+    tick(100); // the turn is in progress: upgrades must defer into #pendingUpgrades
+    notify!(4); // the crisp page arrives while the flip is still running
+    tick(400); // land the turn → #commit → #drainQueuedFlip → #flushPendingUpgrades
+    await flush();
+    await new Promise((resolve) => setTimeout(resolve, 120)); // past the post-settle tile debounce
+    await flush();
+
+    expect(zine.getZoom()).toBe(2);
+    // The settle must not re-fetch the landed pages at fit: staging already did, and a fit repaint
+    // here is the soft flash. Only sharper (scale > 1) tile requests may follow.
+    const fitTotal = requests.filter((s) => s === undefined || s <= 1).length;
+    expect(fitTotal).toBe(fitAfterStaging); // no extra fit get() after the flip settled
+    expect(requests.some((s) => s !== undefined && s > 1)).toBe(true); // sharp tiles were requested
+  });
+
   it('debug.setFlipProgress seeks without animating or changing state', async () => {
     const { zine, renderer } = await makeZine(4);
     const events = vi.fn();

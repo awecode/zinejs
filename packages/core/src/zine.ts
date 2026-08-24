@@ -2212,10 +2212,10 @@ export class Zine {
     }
     const spread = this.#spreads[this.#current];
     if (!spread || !(spread.left === index || spread.right === index)) return;
-    // While a sharp zoom tile is on screen, the upgrade touched the fit raster underneath it, not
-    // what the reader sees. A fit #renderCurrent would flash the page soft before the tiles rebuilt;
-    // refresh the tiles instead (a no-op when they are already at the viewed scale).
-    if (this.#zoomedAt > 1) {
+    // While the reader is zoomed, the upgrade touched the fit raster underneath the sharp tile, not
+    // what they see. A fit #renderCurrent would flash the page soft before the tiles rebuilt; refresh
+    // the tiles instead (a no-op when they are already at the viewed scale).
+    if (this.#scale > 1) {
       this.#refreshZoomTiles();
       return;
     }
@@ -2375,7 +2375,12 @@ export class Zine {
       spread !== undefined &&
       [spread.left, spread.right].some((p) => p !== null && this.#pendingUpgrades.has(p));
     this.#pendingUpgrades.clear();
-    if (onScreen) void this.#renderCurrent();
+    if (!onScreen) return;
+    // Same rule as #onPageUpdate: while the reader is zoomed, a fit #renderCurrent would flash the
+    // page soft before the tiles rebuilt. Refresh the tiles instead. Gated on the live zoom scale,
+    // not #zoomedAt: the #commit that leads here just repainted at fit and reset #zoomedAt to 1.
+    if (this.#scale > 1) this.#refreshZoomTiles();
+    else void this.#renderCurrent();
   }
 
   #observeResize(): void {

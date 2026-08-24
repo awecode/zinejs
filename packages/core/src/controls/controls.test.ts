@@ -1170,6 +1170,43 @@ describe('Zine.search', () => {
   });
 });
 
+/**
+ * Make an offscreen print iframe behave deterministically under happy-dom, returning a restore fn.
+ *
+ * Two happy-dom quirks otherwise break these tests. Assigning `iframe.src` starts a real network
+ * fetch of the stand-in URL; it fails (nothing serves it) and fires a spurious `error` that settles
+ * print() false before any load. And happy-dom never hands back a scriptable window for a navigated
+ * frame. Neutralize both by overriding the prototype: the `src` getter returns '' so happy-dom
+ * navigates the frame to about:blank instead (a clean `load`, no fetch, no error) while
+ * getAttribute('src') still reports the real URL the code set; and contentWindow stands in a
+ * scriptable window whose print() records the src it was pointed at.
+ */
+function stubPrintFrame(printed: string[]): () => void {
+  const proto = HTMLIFrameElement.prototype;
+  const cw = Object.getOwnPropertyDescriptor(proto, 'contentWindow');
+  const src = Object.getOwnPropertyDescriptor(proto, 'src');
+  Object.defineProperty(proto, 'contentWindow', {
+    configurable: true,
+    get(): unknown {
+      const url = (this as HTMLIFrameElement).getAttribute('src') ?? '';
+      return { focus: () => {}, print: () => printed.push(url) };
+    },
+  });
+  Object.defineProperty(proto, 'src', {
+    configurable: true,
+    set(value: string) {
+      (this as HTMLIFrameElement).setAttribute('src', value);
+    },
+    get() {
+      return '';
+    },
+  });
+  return () => {
+    if (cw) Object.defineProperty(proto, 'contentWindow', cw);
+    if (src) Object.defineProperty(proto, 'src', src);
+  };
+}
+
 describe('Zine.print', () => {
   it('reports whether the book can be printed', async () => {
     expect((await mount()).zine.canPrint()).toBe(false);
@@ -1186,26 +1223,18 @@ describe('Zine.print', () => {
     // the PDF itself.
     const { zine } = await mount({ source: new DownloadableSource(8) });
     const printed: string[] = [];
-    // happy-dom does not navigate iframes, so stand in for the frame's own window.
-    const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
-    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-      configurable: true,
-      get() {
-        const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
-        return { focus: () => { }, print: () => printed.push(src) };
-      },
-    });
+    const restore = stubPrintFrame(printed);
     try {
       const done = zine.print();
       await flush(); // the source file is looked up before the frame is created
       const frame = document.querySelector('iframe')!;
       expect(frame.getAttribute('src')).toContain('/brochure.pdf');
-      frame.dispatchEvent(new Event('load'));
+      // The stubbed frame navigates to about:blank and fires its own load; awaiting resolves on it.
       expect(await done).toBe(true);
       expect(printed).toEqual(['/brochure.pdf']); // the document itself, not the host page
-      frame.remove(); // happy-dom would otherwise keep fetching the fake URL
+      frame.remove();
     } finally {
-      if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
+      restore();
     }
   });
 
@@ -1237,27 +1266,19 @@ describe('Zine.print', () => {
     g.URL.createObjectURL = () => objectUrl;
     g.URL.revokeObjectURL = (): void => {};
     const printed: string[] = [];
-    const define = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
-    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-      configurable: true,
-      get() {
-        const src = (this as HTMLIFrameElement).getAttribute('src') ?? '';
-        return { focus: () => {}, print: () => printed.push(src) };
-      },
-    });
+    const restore = stubPrintFrame(printed);
     try {
       const { zine } = await mount({ source: new RemoteSource(8) });
       const done = zine.print();
       await flush(); // the file is fetched into a blob before the frame is created
       const frame = document.querySelector('iframe')!;
       expect(frame.getAttribute('src')).toBe(objectUrl); // the local copy, not the remote URL
-      frame.dispatchEvent(new Event('load'));
       expect(await done).toBe(true);
       expect(fetched).toBe('https://cdn.example.com/issues/1084.pdf');
       expect(printed).toEqual([objectUrl]);
       frame.remove();
     } finally {
-      if (define) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', define);
+      restore();
       g.fetch = realFetch;
       g.URL.createObjectURL = realCreate;
       g.URL.revokeObjectURL = realRevoke;
