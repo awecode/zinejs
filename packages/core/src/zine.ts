@@ -287,6 +287,16 @@ export interface ZineOptions {
    * menu with nothing in its place); setting both explicitly throws.
    */
   contextMenu?: boolean | ContextMenuOptions;
+  /**
+   * Control ids to hide from both surfaces at once: off the toolbar (bar and overflow menu) and out
+   * of the right-click menu. `['print', 'download']` removes those two everywhere, wherever they are
+   * nested, without having to edit `controls.items` and `contextMenu.items` separately.
+   *
+   * A blunt cross-cutting filter: it only removes, and it applies to whatever layout each surface
+   * ends up with (default or custom). To rearrange or add controls, set the per-surface `items`
+   * instead.
+   */
+  hideControls?: readonly string[];
 }
 
 /**
@@ -405,6 +415,8 @@ export class Zine {
   #controlsCleanup: (() => void) | null = null;
   #contextMenuOption: boolean | ContextMenuOptions;
   #contextMenuCleanup: (() => void) | null = null;
+  /** Control ids hidden from every surface by {@link ZineOptions.hideControls}. Empty when unset. */
+  #hiddenControls: ReadonlySet<string>;
   #loadingOption: boolean;
   #loader: LoaderHandle | null = null;
   #lastProgress: LoadProgress | null = null;
@@ -459,6 +471,7 @@ export class Zine {
     // (disableContextMenu) means it: don't hand it our menu unasked. Setting both explicitly is a
     // contradiction and throws in validateOptions.
     this.#contextMenuOption = options.contextMenu ?? (options.disableContextMenu ? false : true);
+    this.#hiddenControls = new Set(options.hideControls ?? []);
     this.#loadingOption = options.loading ?? true;
     this.#startPageOption = options.startPage;
     // Sync sources (a known page count) build spreads now — so bad pageCount/startPage
@@ -2022,11 +2035,11 @@ export class Zine {
       if (this.#destroyed) return; // destroyed while the chunk was in flight
       if (this.#controlsOption !== false) {
         const options = this.#controlsOption === true ? {} : this.#controlsOption;
-        this.#controlsCleanup = mountControls(this, container, options);
+        this.#controlsCleanup = mountControls(this, container, options, this.#hiddenControls);
       }
       if (this.#contextMenuOption !== false) {
         const options = this.#contextMenuOption === true ? {} : this.#contextMenuOption;
-        this.#contextMenuCleanup = mountContextMenu(this, container, options);
+        this.#contextMenuCleanup = mountContextMenu(this, container, options, this.#hiddenControls);
       }
     } catch {
       // No controls; the book itself is unaffected.
@@ -2579,6 +2592,16 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(
       "Zine: disableContextMenu and contextMenu are mutually exclusive — one removes the browser's " +
       'right-click menu, the other replaces it. Enable only one.',
+    );
+  }
+
+  const hideControls = o.hideControls;
+  if (
+    hideControls !== undefined &&
+    (!Array.isArray(hideControls) || hideControls.some((id) => typeof id !== 'string'))
+  ) {
+    throw new Error(
+      `Zine: hideControls must be an array of control-id strings; got ${typeName(hideControls)}.`,
     );
   }
 

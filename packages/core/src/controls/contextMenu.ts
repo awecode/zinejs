@@ -45,12 +45,19 @@ export class ContextMenu {
   #doc: Document;
   #items: readonly ControlItem[];
   #colorScheme: ControlsColorScheme;
+  #hidden: ReadonlySet<string>;
   #menu: ControlMenu | null = null;
   #unbind: (() => void)[] = [];
 
-  constructor(zine: Zine, container: HTMLElement, options: ContextMenuOptions = {}) {
+  constructor(
+    zine: Zine,
+    container: HTMLElement,
+    options: ContextMenuOptions = {},
+    hidden: ReadonlySet<string> = new Set(),
+  ) {
     this.#zine = zine;
     this.#container = container;
+    this.#hidden = hidden;
     this.#doc = container.ownerDocument!;
     // The built-ins have to exist before the layout resolves ids; harmless if the toolbar has
     // already registered them (the registry replaces by id).
@@ -102,7 +109,12 @@ export class ContextMenu {
     // On action, re-read the menu's state (a zoom-out greys once at 1x). Closing is the action's
     // own call: terminal ones (fullscreen, print, share, page ends) call ctx.close(); incremental
     // ones (page turn, zoom step) leave the menu up to be repeated, as the overflow menu does.
-    const menu = new ControlMenu(this.#doc, () => this.#context(), () => this.#menu?.refresh());
+    const menu = new ControlMenu(
+      this.#doc,
+      () => this.#context(),
+      () => this.#menu?.refresh(),
+      this.#hidden,
+    );
     menu.build(this.#items);
     // Nothing applies to this book (an image book with zoom off, say): no menu rather than an empty
     // box. The native menu is already suppressed, but an empty popup would be worse than none.

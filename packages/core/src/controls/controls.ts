@@ -27,8 +27,9 @@ export function mountControls(
   zine: Zine,
   container: HTMLElement,
   options: ControlsOptions = {},
+  hidden: ReadonlySet<string> = new Set(),
 ): () => void {
-  const toolbar = new Toolbar(zine, container, options);
+  const toolbar = new Toolbar(zine, container, options, hidden);
   // Built-ins and the instance-bound widgets have to exist before the layout resolves ids.
   registerWidgets(toolbar);
   toolbar.mount(options);
@@ -45,7 +46,8 @@ export function mountContextMenu(
   zine: Zine,
   container: HTMLElement,
   options: ContextMenuOptions = {},
+  hidden: ReadonlySet<string> = new Set(),
 ): () => void {
-  const menu = new ContextMenu(zine, container, options);
+  const menu = new ContextMenu(zine, container, options, hidden);
   return () => menu.destroy();
 }

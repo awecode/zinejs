@@ -31,6 +31,7 @@ describe('options.schema.json', () => {
         'startPage',
         'controls',
         'contextMenu',
+        'hideControls',
         'deepLink',
         'disableContextMenu',
         'responsiveSpread',

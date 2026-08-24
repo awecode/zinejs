@@ -6,6 +6,7 @@ import {
   applyControlItemState,
   buildControlButton,
   ControlMenu,
+  filterHidden,
   hasVisibleChildren,
 } from './menu';
 import { applyColorScheme, ensureStyles } from './styles';
@@ -41,6 +42,21 @@ interface Popover {
   trigger: HTMLElement;
 }
 
+/**
+ * Tidy the separator runs a hide-list can leave behind on the bar: drop leading and trailing
+ * separators, and collapse consecutive ones to a single divider. The overflow menu drops all
+ * separators anyway, so this only matters for the bar itself.
+ */
+function collapseSeparators(items: readonly ControlItem[]): ControlItem[] {
+  const out: ControlItem[] = [];
+  for (const item of items) {
+    if (item === '|' && (out.length === 0 || out[out.length - 1] === '|')) continue;
+    out.push(item);
+  }
+  if (out[out.length - 1] === '|') out.pop();
+  return out;
+}
+
 export class Toolbar {
   #zine: Zine;
   #doc: Document;
@@ -69,10 +85,19 @@ export class Toolbar {
   #colorScheme: ControlsColorScheme;
   /** The edge the bar sits on, kept so a popover can open away from it. */
   #position: ControlsPosition;
+  /** Control ids hidden everywhere by the top-level `hideControls` option: off the bar, out of the
+   *  overflow menu. Empty when nothing is hidden. */
+  #hidden: ReadonlySet<string>;
 
-  constructor(zine: Zine, container: HTMLElement, options: ControlsOptions) {
+  constructor(
+    zine: Zine,
+    container: HTMLElement,
+    options: ControlsOptions,
+    hidden: ReadonlySet<string> = new Set(),
+  ) {
     this.#zine = zine;
     this.#container = container;
+    this.#hidden = hidden;
     const doc = container.ownerDocument!;
     this.#doc = doc;
     ensureStyles(doc);
@@ -203,7 +228,7 @@ export class Toolbar {
   }
 
   #build(items: readonly ControlItem[]): void {
-    for (const item of items) {
+    for (const item of collapseSeparators(filterHidden(items, this.#hidden))) {
       if (item === '|') {
         const sep = this.#doc.createElement('div');
         sep.className = 'zine-controls-sep';
@@ -238,7 +263,7 @@ export class Toolbar {
 
   #openMenu(def: ControlDef, trigger: HTMLButtonElement): void {
     this.#closePopover();
-    const menu = new ControlMenu(this.#doc, () => this.#context(), () => this.#refresh());
+    const menu = new ControlMenu(this.#doc, () => this.#context(), () => this.#refresh(), this.#hidden);
     menu.build(def.children ?? []);
     this.#root.appendChild(menu.el);
     this.#popover = { menu, trigger };
@@ -312,7 +337,7 @@ export class Toolbar {
     for (const { el, def } of this.#buttons) {
       // A submenu trigger shows only while something inside it does; every other control follows
       // its own isVisible. Undefined leaves the element's display alone.
-      const visible = def.children ? hasVisibleChildren(def, ctx) : def.isVisible?.(ctx);
+      const visible = def.children ? hasVisibleChildren(def, ctx, this.#hidden) : def.isVisible?.(ctx);
       applyControlItemState(el, def, ctx, this.#doc, visible);
     }
     // The open overflow menu owns its items, so refresh them through it.

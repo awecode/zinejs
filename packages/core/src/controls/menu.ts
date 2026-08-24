@@ -2,6 +2,32 @@ import { createIcon } from './icons';
 import { resolveControl } from './registry';
 import type { ControlContext, ControlDef, ControlItem } from './types';
 
+/** Shared empty set, so a menu built without a hide-list allocates nothing. */
+const NONE_HIDDEN: ReadonlySet<string> = new Set();
+
+/** The id a layout item resolves to, or null for a separator (which has none). */
+function itemId(item: ControlItem): string | null {
+  if (item === '|') return null;
+  return typeof item === 'string' ? item : item.id;
+}
+
+/**
+ * Drop every control whose id is in `hidden`, the one filter behind the top-level `hideControls`
+ * option. Applied at each build point so a named control disappears from the toolbar, its overflow
+ * menu and the right-click menu at once. Separators are left in place; menus drop them anyway and
+ * the toolbar tidies its own runs after filtering.
+ */
+export function filterHidden(
+  items: readonly ControlItem[],
+  hidden: ReadonlySet<string>,
+): readonly ControlItem[] {
+  if (!hidden.size) return items;
+  return items.filter((item) => {
+    const id = itemId(item);
+    return id === null || !hidden.has(id);
+  });
+}
+
 /**
  * The shared menu machinery.
  *
@@ -141,13 +167,20 @@ export class ControlMenu {
   #doc: Document;
   #context: () => ControlContext;
   #onAfterAction: () => void;
+  #hidden: ReadonlySet<string>;
   /** Every item on screen, buttons and `render` widgets alike, so {@link refresh} can reach them. */
   #items: { el: HTMLElement; def: ControlDef }[] = [];
 
-  constructor(doc: Document, context: () => ControlContext, onAfterAction: () => void) {
+  constructor(
+    doc: Document,
+    context: () => ControlContext,
+    onAfterAction: () => void,
+    hidden: ReadonlySet<string> = NONE_HIDDEN,
+  ) {
     this.#doc = doc;
     this.#context = context;
     this.#onAfterAction = onAfterAction;
+    this.#hidden = hidden;
     this.el = doc.createElement('div');
     this.el.className = 'zine-controls-menu';
     this.el.setAttribute('role', 'menu');
@@ -158,7 +191,7 @@ export class ControlMenu {
     this.el.replaceChildren();
     this.#items = [];
     const ctx = this.#context();
-    for (const child of children) {
+    for (const child of filterHidden(children, this.#hidden)) {
       if (child === '|') continue;
       const def = resolveControl(child);
       if (def.isVisible && !def.isVisible(ctx)) continue;
@@ -204,9 +237,13 @@ export class ControlMenu {
 
 /** A submenu is only worth showing if something inside it is. Keeps a menu trigger from opening
  *  onto nothing when every entry has hidden itself. */
-export function hasVisibleChildren(def: ControlDef, ctx: ControlContext): boolean {
+export function hasVisibleChildren(
+  def: ControlDef,
+  ctx: ControlContext,
+  hidden: ReadonlySet<string> = NONE_HIDDEN,
+): boolean {
   if (def.isVisible && !def.isVisible(ctx)) return false;
-  return (def.children ?? []).some((child) => {
+  return filterHidden(def.children ?? [], hidden).some((child) => {
     if (child === '|') return false;
     const childDef = resolveControl(child);
     return childDef.isVisible ? childDef.isVisible(ctx) : true;
