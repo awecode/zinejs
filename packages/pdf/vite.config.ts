@@ -8,15 +8,20 @@ import { defineConfig, type Plugin } from 'vite';
  * `pdfjs-dist`. Hide each expression behind a placeholder before Vite's asset pass, then
  * restore it in the ESM bundle:
  *
- * - `await import('pdfjs-dist/…/pdf.worker.min.mjs?url')` — Vite/Nuxt
+ * - `await import(/* webpackIgnore: true *\/ 'pdfjs-dist/…/pdf.worker.min.mjs?url')` — Vite/Nuxt
+ *   (`webpackIgnore` skips webpack's orphan chunk; Vite ignores the comment)
  * - `new URL('pdfjs-dist/…/pdf.worker.min.mjs', import.meta.url).href` — webpack 5 / rspack
  *
  * UMD still requires an explicit `workerSrc` (no import.meta / ?url there).
  */
 const WORKER_SPEC = 'pdfjs-dist/(?:legacy/)?build/pdf\\.worker\\.min\\.mjs';
 
+// Optional webpack magic comment between `import(` and the specifier string.
+const WEBPACK_IGNORE =
+  '(?:\\/\\*\\s*webpackIgnore\\s*:\\s*true\\s*\\*\\/\\s*)?';
+
 const WORKER_URL_IMPORT_RE = new RegExp(
-  `await import\\((['"\`])(${WORKER_SPEC}\\?url)\\1\\)`,
+  `await import\\(\\s*${WEBPACK_IGNORE}(['"\`])(${WORKER_SPEC}\\?url)\\1\\s*\\)`,
   'g',
 );
 const WORKER_NEW_URL_RE = new RegExp(
@@ -70,7 +75,7 @@ function preservePdfWorkerUrls(): Plugin {
         }
         chunk.code = chunk.code.replace(PLACEHOLDER_IMPORT_CALL_RE, (_m, _q, spec) =>
           isEsm
-            ? `await import('${spec}')`
+            ? `await import(/* webpackIgnore: true */ '${spec}')`
             : `await Promise.reject(new Error('PdfSource: pass workerSrc for UMD/CDN'))`,
         );
         chunk.code = chunk.code.replace(PLACEHOLDER_NEW_URL_RE, (_m, _q, spec) =>

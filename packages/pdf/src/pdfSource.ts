@@ -223,7 +223,8 @@ export class PdfSource implements Source {
    * Precedence: explicit `workerSrc` → already-configured global → auto default.
    *
    * Auto default tries, in order:
-   * 1. Vite `?url` import (Vite/Nuxt rewrite to a served asset).
+   * 1. Vite `?url` import (Vite/Nuxt rewrite to a served asset). Marked
+   *    `webpackIgnore` so webpack does not emit an orphan worker chunk for it.
    * 2. Static `new URL('pdfjs-dist/…', import.meta.url)` — webpack 5 / rspack rewrite this
    *    and emit a version-matched worker. Unrewritten (Vite runtime join against this
    *    package's `dist/`) yields `@zinejs/pdf/dist/pdfjs-dist/…` which 404s; we only keep
@@ -240,10 +241,16 @@ export class PdfSource implements Source {
       : 'build/pdf.worker.min.mjs';
 
     // Vite (and Nuxt) rewrite `?url` imports to a served asset when they process the dep.
+    // `webpackIgnore` keeps webpack/rspack from emitting an orphan worker chunk for this
+    // Vite-only specifier; they throw at runtime, we catch, and the static new URL branch wins.
     try {
       const mod = this.#legacy
-        ? await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
-        : await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+        ? await import(
+            /* webpackIgnore: true */ 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+          )
+        : await import(
+            /* webpackIgnore: true */ 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+          );
       const url = (mod as { default?: unknown }).default;
       if (typeof url === 'string' && url) return url;
     } catch {
