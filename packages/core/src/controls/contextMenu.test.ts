@@ -144,15 +144,15 @@ describe('context menu', () => {
     expect(byLabel(el, 'Zoom in')!.disabled).toBe(false);
   });
 
-  it('keeps the menu open for an incremental action and re-reads its state', async () => {
+  it('closes on an incremental action too, the way a native context menu does', async () => {
     const { zine, el } = await mount();
     await rightClick(el);
     byLabel(el, 'Zoom in')!.click();
     await flush();
-    expect(zine.getZoom()).toBeGreaterThan(1);
-    // The menu stays up so the reader can repeat the step; zoom out is now live.
-    expect(menu(el)).not.toBeNull();
-    expect(byLabel(el, 'Zoom out')!.disabled).toBe(false);
+    expect(zine.getZoom()).toBeGreaterThan(1); // the step still ran
+    // Unlike the toolbar overflow, the right-click menu closes on any selection.
+    expect(menu(el)).toBeNull();
+    expect(layer(el)).toBeNull();
   });
 
   it('closes the menu for a terminal action (share)', async () => {

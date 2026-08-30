@@ -106,13 +106,14 @@ export class ContextMenu {
 
   #open(clientX: number, clientY: number): void {
     this.#close();
-    // On action, re-read the menu's state (a zoom-out greys once at 1x). Closing is the action's
-    // own call: terminal ones (fullscreen, print, share, page ends) call ctx.close(); incremental
-    // ones (page turn, zoom step) leave the menu up to be repeated, as the overflow menu does.
+    // A right-click menu closes on any selection, the way a native context menu does — whether the
+    // action was terminal (print, share, fullscreen) or incremental (a zoom or page step). This is
+    // the one place it differs from the toolbar's overflow dropdown, which stays open so a step can
+    // be repeated. Terminal controls that call ctx.close() themselves just close a beat sooner.
     const menu = new ControlMenu(
       this.#doc,
       () => this.#context(),
-      () => this.#menu?.refresh(),
+      () => this.#close(),
       this.#hidden,
     );
     menu.build(this.#items);
