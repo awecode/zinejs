@@ -351,6 +351,9 @@ export class Zine {
   #soundOptions: { url?: string; volume?: number };
   #sound: FlipSound | null = null;
   #soundMuted = false;
+  /** Guards the one-time lazy import of the sound chunk. Deferred until sound is actually audible,
+   *  so a book that starts muted pays nothing until the reader unmutes. */
+  #soundLoadStarted = false;
   /** What the reader has demonstrated they already know, so a hint teaching it stays quiet. Set by
    *  the gesture itself (a turn, a zoom, a pan); persisted to localStorage when `hints.persist`. */
   #learned: Learned = { turn: false, zoom: false, pan: false };
@@ -1029,6 +1032,8 @@ export class Zine {
     if (!this.#soundEnabled) return;
     this.#soundMuted = muted;
     this.#sound?.setMuted(muted);
+    // Unmuting a book that started muted is the first time the clip is actually needed: load now.
+    if (!muted) void this.#loadSound();
   }
 
   /** Hand the browser the gestures we don't use, so a flipbook filling the viewport doesn't trap
@@ -2052,15 +2057,20 @@ export class Zine {
     this.#armIdleNudge();
   }
 
-  /** Lazily import and build the flip-sound controller, only when `sound` is enabled — so a silent
-   *  book never pulls in the audio code or the bundled clip. Best-effort: a failed import is ignored. */
+  /**
+   * Lazily import and build the flip-sound controller, once, when sound is enabled and audible — so
+   * a silent book (`sound: false`, or `{ muted: true }` never unmuted) never pulls in the audio code
+   * or the bundled clip. Called on ready for an audible book and again when the reader unmutes.
+   * Best-effort: a failed import is ignored.
+   */
   async #loadSound(): Promise<void> {
-    if (!this.#soundEnabled || this.#destroyed) return;
+    if (!this.#soundEnabled || this.#soundMuted || this.#soundLoadStarted || this.#destroyed) return;
+    this.#soundLoadStarted = true;
     try {
       const { FlipSound } = await import('./sound/flipSound');
       if (this.#destroyed) return; // torn down while the chunk loaded
       this.#sound = new FlipSound(this.#soundOptions);
-      this.#sound.setMuted(this.#soundMuted); // honor a mute chosen before the chunk arrived
+      this.#sound.setMuted(this.#soundMuted); // honor a mute toggled while the chunk arrived
     } catch {
       // No audio code available: the book just stays silent.
     }

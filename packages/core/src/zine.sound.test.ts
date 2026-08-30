@@ -4,6 +4,22 @@ import { Zine, type ZineOptions } from './zine';
 import type { Source } from './source/types';
 import type { FlipDirection, LayoutMetrics, PageContent, Renderer, SpreadContent } from './renderer/types';
 
+// Count FlipSound constructions to prove the chunk loads only when sound is actually audible.
+// The subclass keeps the real behavior (real decode/play against the stubbed AudioContext).
+const soundMock = vi.hoisted(() => ({ constructs: 0 }));
+vi.mock('./sound/flipSound', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('./sound/flipSound')>();
+  return {
+    ...orig,
+    FlipSound: class extends orig.FlipSound {
+      constructor(options?: import('./sound/flipSound').FlipSoundOptions) {
+        super(options);
+        soundMock.constructs++;
+      }
+    },
+  };
+});
+
 class FakeSource implements Source {
   readonly pageCount: number;
   constructor(pageCount: number) {
@@ -59,13 +75,24 @@ class FakeAudioContext {
 
 let now = 0;
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r));
-/** Settle the lazy sound-controller import (cold on first use), decode, and playback microtasks. */
+/** Settle decode + playback microtasks. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) {
     await Promise.resolve();
     await flush();
   }
 }
+/** Poll until a condition holds — deterministic where a fixed number of ticks is not enough (the
+ *  lazy sound-controller import resolves at an unpredictable tick under full-suite load). */
+async function waitFor(pred: () => boolean, tries = 100): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    if (pred()) return;
+    await Promise.resolve();
+    await flush();
+  }
+}
+/** The lazy sound controller has finished importing + constructing. */
+const soundLoaded = (): boolean => soundMock.constructs >= 1;
 /** Dispatch a pointer event carrying a timestamp, so the recognizer measures real velocity
  *  (happy-dom's Event.timeStamp is read-only 0 otherwise → a bogus infinite flick). */
 function fireAt(target: EventTarget, type: string, t: number, props: Record<string, number>): void {
@@ -82,6 +109,7 @@ beforeEach(() => {
   contexts = 0;
   resumes = 0;
   now = 0;
+  soundMock.constructs = 0;
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('fetch', vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(8) })));
   vi.stubGlobal('performance', { now: () => now });
@@ -115,6 +143,8 @@ describe('flip sound', () => {
   it('plays on a committed page turn when sound is enabled', async () => {
     const zine = await mount({ sound: { url: '/flip.mp3' } });
     expect(zine.isSoundEnabled()).toBe(true);
+    await waitFor(soundLoaded);
+    expect(soundMock.constructs).toBe(1); // audible → loaded eagerly on ready
     zine.flipNext();
     await settle();
     expect(plays).toBe(1);
@@ -140,6 +170,7 @@ describe('flip sound', () => {
 
   it('plays again once unmuted', async () => {
     const zine = await mount({ sound: { url: '/flip.mp3' } });
+    await waitFor(soundLoaded);
     zine.setSoundMuted(true);
     zine.flipNext();
     await settle();
@@ -152,6 +183,7 @@ describe('flip sound', () => {
 
   it('resumes a gesture-locked (suspended) context and never throws', async () => {
     const zine = await mount({ sound: { url: '/flip.mp3' } });
+    await waitFor(soundLoaded);
     expect(() => zine.flipNext()).not.toThrow();
     await settle();
     expect(resumes).toBeGreaterThan(0);
@@ -167,9 +199,23 @@ describe('flip sound', () => {
     expect(plays).toBe(0);
 
     zine.setSoundMuted(false); // the reader turns it on
+    await waitFor(soundLoaded); // unmuting lazily loads the chunk; wait for it to arrive
     zine.flipNext();
     await settle();
     expect(plays).toBe(1);
+  });
+
+  it('does not load the sound chunk while starting muted, only once unmuted', async () => {
+    const zine = await mount({ sound: { url: '/flip.mp3', muted: true } });
+    // Deferred: a book that starts muted pays nothing for audio until the reader turns it on.
+    expect(soundMock.constructs).toBe(0);
+    zine.flipNext();
+    await settle();
+    expect(soundMock.constructs).toBe(0); // flipping while muted still loads nothing
+
+    zine.setSoundMuted(false);
+    await waitFor(soundLoaded);
+    expect(soundMock.constructs).toBe(1); // unmuting is the first time the clip is needed
   });
 
   it('mute API is a no-op and reports false when sound is disabled', async () => {
