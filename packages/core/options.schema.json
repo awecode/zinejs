@@ -111,7 +111,7 @@
     },
     "sound": {
       "default": false,
-      "description": "Play a short sound on each page turn. Off by default (opt-in). true uses the bundled clip at default volume; an object overrides it. Playback is best-effort and never throws; a mute control appears in the toolbar and right-click menu whenever sound is enabled (audible or muted).",
+      "description": "Play a short sound on each page turn. Off by default (opt-in). true uses the bundled clip at default volume; an object overrides it (url, volume, muted to start silent, persist to remember the reader's mute choice). Playback is best-effort and never throws; a mute control appears in the toolbar and right-click menu whenever sound is enabled (audible or muted).",
       "oneOf": [
         { "type": "boolean" },
         {
@@ -120,7 +120,8 @@
           "properties": {
             "url": { "type": "string", "description": "A clip URL that overrides the bundled default (fetched at runtime)." },
             "volume": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Playback volume, 0..1." },
-            "muted": { "type": "boolean", "default": false, "description": "Offer the sound but start it silent, so the reader enables it via the mute control." }
+            "muted": { "type": "boolean", "default": false, "description": "Offer the sound but start it silent, so the reader enables it via the mute control." },
+            "persist": { "type": "boolean", "default": false, "description": "Remember the reader's mute choice across visits via localStorage, instead of resetting each load." }
           }
         }
       ]

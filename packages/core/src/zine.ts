@@ -118,6 +118,10 @@ const CAPTION_MS = 2200;
  *  gesture learned on one is not re-taught on the next. */
 const HINTS_STORAGE_KEY = 'zine:hints-learned';
 
+/** localStorage key for the reader's mute choice under `sound.persist`. Shared across books on a
+ *  site so a reader who silenced (or enabled) flip sound once is remembered everywhere. */
+const SOUND_MUTED_STORAGE_KEY = 'zine:sound-muted';
+
 /** Which gestures the reader has demonstrated, so the matching discoverability hint stays quiet. */
 interface Learned {
   turn: boolean;
@@ -232,12 +236,13 @@ export interface ZineOptions {
    * Play a short sound on each page turn. Off by default — web audio is unexpected, so it is
    * strictly opt-in. `true` uses the bundled clip at the default volume; an object overrides it:
    * `url` points at your own clip (fetched at runtime), `volume` is 0..1, and `muted: true` offers
-   * the sound but starts it silent so the reader turns it on themselves (via the `mute` control).
-   * Playback is best-effort and never throws: a browser that gates audio behind a gesture, lacks Web
-   * Audio, or cannot decode the clip just stays silent. Whenever sound is enabled — audible or
-   * muted — a `mute` control appears in the toolbar and right-click menu, so a reader can toggle it.
+   * the sound but starts it silent so the reader turns it on themselves (via the `mute` control),
+   * and `persist: true` remembers the reader's mute choice across visits in localStorage (otherwise
+   * it resets each load). Playback is best-effort and never throws: a browser that gates audio behind
+   * a gesture, lacks Web Audio, or cannot decode the clip just stays silent. Whenever sound is
+   * enabled — audible or muted — a `mute` control appears in the toolbar and right-click menu.
    */
-  sound?: boolean | { url?: string; volume?: number; muted?: boolean };
+  sound?: boolean | { url?: string; volume?: number; muted?: boolean; persist?: boolean };
   /**
    * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
    * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
@@ -351,6 +356,8 @@ export class Zine {
   #soundOptions: { url?: string; volume?: number };
   #sound: FlipSound | null = null;
   #soundMuted = false;
+  /** Remember the reader's mute choice across visits (localStorage) under `sound.persist`. */
+  #soundPersist = false;
   /** Guards the one-time lazy import of the sound chunk. Deferred until sound is actually audible,
    *  so a book that starts muted pays nothing until the reader unmutes. */
   #soundLoadStarted = false;
@@ -500,6 +507,9 @@ export class Zine {
     // `{ muted: true }` offers the sound but starts it silent: the controller loads, the mute
     // control shows, and the reader unmutes to turn it on.
     this.#soundMuted = typeof sound === 'object' && sound !== null ? (sound.muted ?? false) : false;
+    this.#soundPersist = typeof sound === 'object' && sound !== null ? (sound.persist ?? false) : false;
+    // A remembered choice from a previous visit overrides the configured default.
+    if (this.#soundEnabled && this.#soundPersist) this.#loadSoundMuted();
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
@@ -1032,8 +1042,28 @@ export class Zine {
     if (!this.#soundEnabled) return;
     this.#soundMuted = muted;
     this.#sound?.setMuted(muted);
+    if (this.#soundPersist) this.#saveSoundMuted(muted);
     // Unmuting a book that started muted is the first time the clip is actually needed: load now.
     if (!muted) void this.#loadSound();
+  }
+
+  /** Read the reader's remembered mute choice (persist mode), overriding the configured default.
+   *  Storage can throw in private mode or a sandboxed iframe — fall back to the default silently. */
+  #loadSoundMuted(): void {
+    try {
+      const raw = localStorage.getItem(SOUND_MUTED_STORAGE_KEY);
+      if (raw === 'true' || raw === 'false') this.#soundMuted = raw === 'true';
+    } catch {
+      // No stored choice; keep the configured default.
+    }
+  }
+
+  #saveSoundMuted(muted: boolean): void {
+    try {
+      localStorage.setItem(SOUND_MUTED_STORAGE_KEY, String(muted));
+    } catch {
+      // Persisting is best-effort; the in-memory state still holds this session.
+    }
   }
 
   /** Hand the browser the gestures we don't use, so a flipbook filling the viewport doesn't trap
@@ -2771,7 +2801,7 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(`Zine: sound must be a boolean or an options object; got ${typeName(sound)}.`);
   }
   if (typeof sound === 'object' && sound !== null) {
-    const s = sound as { url?: unknown; volume?: unknown; muted?: unknown };
+    const s = sound as { url?: unknown; volume?: unknown; muted?: unknown; persist?: unknown };
     if (s.url !== undefined && typeof s.url !== 'string') {
       throw new Error(`Zine: sound.url must be a string URL; got ${typeName(s.url)}.`);
     }
@@ -2780,6 +2810,9 @@ function validateOptions(container: unknown, options: unknown): void {
     }
     if (s.muted !== undefined && typeof s.muted !== 'boolean') {
       throw new Error(`Zine: sound.muted must be a boolean; got ${typeName(s.muted)}.`);
+    }
+    if (s.persist !== undefined && typeof s.persist !== 'boolean') {
+      throw new Error(`Zine: sound.persist must be a boolean; got ${typeName(s.persist)}.`);
     }
   }
 

@@ -102,6 +102,21 @@ function fireAt(target: EventTarget, type: string, t: number, props: Record<stri
   target.dispatchEvent(e);
 }
 
+/** happy-dom here ships no localStorage; give persist tests a minimal in-memory one. */
+function makeLocalStorage(): Storage {
+  const map = new Map<string, string>();
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size;
+    },
+  } as Storage;
+}
+
 const mounted: Zine[] = [];
 
 beforeEach(() => {
@@ -110,6 +125,7 @@ beforeEach(() => {
   resumes = 0;
   now = 0;
   soundMock.constructs = 0;
+  vi.stubGlobal('localStorage', makeLocalStorage());
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('fetch', vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(8) })));
   vi.stubGlobal('performance', { now: () => now });
@@ -247,5 +263,30 @@ describe('flip sound', () => {
     await settle();
     expect(plays).toBe(0);
     expect(zine.getPage()).toBe(0); // nothing turned
+  });
+
+  it('persist: remembers a reader who muted, so a fresh book starts muted', async () => {
+    const a = await mount({ sound: { url: '/flip.mp3', persist: true } });
+    await waitFor(soundLoaded);
+    a.setSoundMuted(true); // reader silences it
+    const b = await mount({ sound: { url: '/flip.mp3', persist: true } });
+    expect(b.isSoundMuted()).toBe(true); // remembered across the new instance
+  });
+
+  it('persist: remembers a reader who enabled a start-muted book', async () => {
+    const a = await mount({ sound: { url: '/flip.mp3', muted: true, persist: true } });
+    expect(a.isSoundMuted()).toBe(true); // configured default
+    a.setSoundMuted(false); // reader turns it on
+    const b = await mount({ sound: { url: '/flip.mp3', muted: true, persist: true } });
+    expect(b.isSoundMuted()).toBe(false); // the remembered choice overrides the muted default
+  });
+
+  it('does not persist without the flag: the choice resets on a fresh book', async () => {
+    const a = await mount({ sound: { url: '/flip.mp3' } }); // no persist
+    await waitFor(soundLoaded);
+    a.setSoundMuted(true);
+    expect(localStorage.getItem('zine:sound-muted')).toBeNull(); // nothing written
+    const b = await mount({ sound: { url: '/flip.mp3' } });
+    expect(b.isSoundMuted()).toBe(false); // back to the default
   });
 });
