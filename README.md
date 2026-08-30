@@ -630,7 +630,8 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `workerSrc` | `string` | auto | pdf.js worker URL. Auto-resolved from your `pdfjs-dist` install (or a version-matched CDN); pass it for CDN/UMD, CSP/offline, or if auto-resolve fails. |
+| `workerSrc` | `string` | auto | pdf.js worker URL. Auto-resolved from your bundler / `pdfjs-dist` install (or a version-matched CDN when `cdnFallback` is true); pass it for CDN/UMD, CSP/offline, or if auto-resolve fails. |
+| `cdnFallback` | `boolean` | `true` | When local worker resolution fails, load a version-matched worker from jsDelivr and warn once. Set `false` for CSP/offline (then pass `workerSrc`). |
 | `renderScale` | `number` | `1` | Base scale; pages rasterize at `renderScale × devicePixelRatio`. |
 | `preload` | `number` | `1` | Adjacent pages to prefetch. |
 | `maxCacheBytes` | `number` | ~256 MB | Soft cap on cached page bytes (LRU-evicted). |
@@ -640,12 +641,13 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 
 `pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. If your app already depends on `pdfjs-dist`, keep major versions compatible so the worker matches the library.
 
-The worker is resolved for you in this order: explicit `workerSrc`, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then an auto-default (Vite `?url`, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit when it resolves, the `pdfjs-dist` next to `@zinejs/pdf` in `node_modules`, or a jsDelivr URL pinned to the loaded pdf.js version). Pass `workerSrc` for CDN / UMD, offline / CSP, or if auto-resolve fails:
+The worker is resolved for you in this order: explicit `workerSrc`, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then an auto-default (Vite `?url`, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit when it resolves, the `pdfjs-dist` next to `@zinejs/pdf` in `node_modules`, or a jsDelivr URL pinned to the loaded pdf.js version when `cdnFallback` is true). The CDN last resort warns once. Pass `workerSrc` (and optionally `cdnFallback: false`) for CDN / UMD, offline / CSP, or if auto-resolve fails:
 
 ```js
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 new PdfSource('/doc.pdf', { workerSrc })
+new PdfSource('/doc.pdf', { workerSrc, cdnFallback: false })
 ```
 
 If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off.

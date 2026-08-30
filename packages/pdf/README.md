@@ -37,7 +37,9 @@ new PdfSource(await getDocument(url).promise)
 pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` finds the worker via Vite's
 `?url` import, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit, or the sibling
 `pdfjs-dist` install. If that cannot be resolved, it falls back to a jsDelivr URL pinned to the
-same `pdfjs-dist` version that loaded.
+same `pdfjs-dist` version that loaded, and warns once in the console. Set `cdnFallback: false`
+for CSP-restricted or offline apps (then pass `workerSrc`, or the open fails clearly instead of
+loading a network worker that CSP would block).
 
 Resolution order: `workerSrc` option, then `pdfjsLib.GlobalWorkerOptions.workerSrc`, then that
 auto-default. Pass `workerSrc` for CDN / UMD, offline / CSP setups, or if auto-resolve fails in
@@ -48,6 +50,8 @@ import { PdfSource } from '@zinejs/pdf'
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 new PdfSource('document.pdf', { workerSrc })
+// CSP / offline: also disable the CDN last resort
+new PdfSource('document.pdf', { workerSrc, cdnFallback: false })
 ```
 
 Keep the worker on the same build as the library (`legacy` vs modern). If you already set
@@ -62,6 +66,7 @@ first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
 ```js
 new PdfSource(src, {
   workerSrc,           // override the auto-resolved worker URL
+  cdnFallback: true,   // false: never load the worker from jsDelivr (CSP / offline)
   renderScale: 1,      // pages rasterize at renderScale × devicePixelRatio
   preload: 1,          // adjacent pages to prefetch (default 1)
   maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB)
