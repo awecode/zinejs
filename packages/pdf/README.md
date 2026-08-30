@@ -34,9 +34,10 @@ new PdfSource(await getDocument(url).promise)
 
 ## The pdf.js worker
 
-pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` finds the worker next to
-your installed `pdfjs-dist` (or via Vite's `?url` import). If that cannot be resolved, it falls
-back to a jsDelivr URL pinned to the same `pdfjs-dist` version that loaded.
+pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` finds the worker via Vite's
+`?url` import, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit, or the sibling
+`pdfjs-dist` install. If that cannot be resolved, it falls back to a jsDelivr URL pinned to the
+same `pdfjs-dist` version that loaded.
 
 Resolution order: `workerSrc` option, then `pdfjsLib.GlobalWorkerOptions.workerSrc`, then that
 auto-default. Pass `workerSrc` for CDN / UMD, offline / CSP setups, or if auto-resolve fails in

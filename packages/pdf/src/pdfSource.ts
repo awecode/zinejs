@@ -222,10 +222,14 @@ export class PdfSource implements Source {
   /**
    * Precedence: explicit `workerSrc` → already-configured global → auto default.
    *
-   * Auto default used to be `new URL('pdfjs-dist/…/pdf.worker.min.mjs', import.meta.url)`.
-   * That joins against *this* package's `dist/` URL, so Vite/Nuxt request
-   * `@zinejs/pdf/dist/pdfjs-dist/…` (404). The worker lives in the sibling `pdfjs-dist`
-   * install. Resolve it from there, or via a bundler `?url` import, or a version-matched CDN.
+   * Auto default tries, in order:
+   * 1. Vite `?url` import (Vite/Nuxt rewrite to a served asset).
+   * 2. Static `new URL('pdfjs-dist/…', import.meta.url)` — webpack 5 / rspack rewrite this
+   *    and emit a version-matched worker. Unrewritten (Vite runtime join against this
+   *    package's `dist/`) yields `@zinejs/pdf/dist/pdfjs-dist/…` which 404s; we only keep
+   *    the URL when it actually resolves.
+   * 3. Sibling `../../../pdfjs-dist/…` under node_modules (pnpm nested / npm hoisted @fs).
+   * 4. Version-matched CDN last resort.
    */
   async #resolveWorkerSrc(configured: string, pdfjsVersion: string | undefined): Promise<string> {
     if (this.#workerSrc) return this.#workerSrc;
@@ -243,7 +247,19 @@ export class PdfSource implements Source {
       const url = (mod as { default?: unknown }).default;
       if (typeof url === 'string' && url) return url;
     } catch {
-      // Bundler did not rewrite ?url, or we are off Vite — try the install path next.
+      // Bundler did not rewrite ?url, or we are off Vite — try webpack-style next.
+    }
+
+    // Webpack 5 / rspack: static package-specifier new URL is rewritten to an emitted asset.
+    // Specifiers must be string literals (not concatenated) for the bundler to see them.
+    // Vite leaves this as a runtime join against @zinejs/pdf/dist → 404; resourceExists skips it.
+    try {
+      const bundled = this.#legacy
+        ? new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+        : new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+      if (await resourceExists(bundled)) return bundled;
+    } catch {
+      // import.meta.url unavailable
     }
 
     // From `@zinejs/pdf/dist/index.js`, `../../../pdfjs-dist` is the package's node_modules

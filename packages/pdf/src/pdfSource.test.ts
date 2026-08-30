@@ -75,8 +75,10 @@ describe('PdfSource', () => {
   });
 
   it('points the worker at pdfjs-dist, not at @zinejs/pdf/dist', async () => {
-    // Regression: `new URL('pdfjs-dist/…', import.meta.url)` joined against this package's
-    // dist URL and 404'd under Vite/Nuxt (`…/@zinejs/pdf/dist/pdfjs-dist/…`).
+    // Regression: an unrewritten `new URL('pdfjs-dist/…', import.meta.url)` joins against
+    // this package's dist URL and 404s under Vite/Nuxt (`…/@zinejs/pdf/dist/pdfjs-dist/…`).
+    // Auto-resolve must not land on that path (webpack may rewrite the same expression to a
+    // real asset; this unit test only asserts we never keep the bogus join).
     const src = new PdfSource('doc.pdf');
     await src.open();
     const worker = (await pdfjsMock()).GlobalWorkerOptions.workerSrc;
