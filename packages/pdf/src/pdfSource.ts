@@ -221,8 +221,12 @@ async function trySiblingWorkerUrl(subpath: string): Promise<string | undefined>
   // From `@zinejs/pdf/dist/index.js`, `../../../pdfjs-dist` is the package's node_modules
   // sibling under both pnpm (nested) and npm/yarn (hoisted). Concatenate so Vite does not
   // treat this as an import.meta.url asset rewrite (those need a static relative literal).
+  // UMD rewrites `import.meta` to `{}`, so `.url` is undefined — skip rather than
+  // `new URL(..., undefined)` throwing into the catch.
+  const base = import.meta.url;
+  if (!base) return undefined;
   try {
-    const local = new URL('../../../pdfjs-dist/' + subpath, import.meta.url).href;
+    const local = new URL('../../../pdfjs-dist/' + subpath, base).href;
     return (await resourceExists(local)) ? local : undefined;
   } catch {
     return undefined;

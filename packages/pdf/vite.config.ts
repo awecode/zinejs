@@ -103,6 +103,13 @@ export default defineConfig({
     },
     sourcemap: true,
     rollupOptions: {
+      // Sibling worker probe still reads `import.meta.url` (concatenated path, not
+      // placeholderable). UMD rewrites that to `{}.url`; we guard at runtime. Suppress
+      // only this known-noise warning so a future real misuse still surfaces.
+      onwarn(warning, warn) {
+        if (warning.code === 'EMPTY_IMPORT_META') return;
+        warn(warning);
+      },
       external: (id) =>
         id === 'pdfjs-dist' ||
         id.startsWith('pdfjs-dist/') ||
