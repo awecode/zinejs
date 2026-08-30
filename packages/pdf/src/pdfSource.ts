@@ -141,7 +141,7 @@ async function resourceExists(url: string): Promise<boolean> {
   }
 }
 
-/** Version-matched jsDelivr URL for the pdf.js worker (CDN last resort). */
+/** @internal Version-matched jsDelivr URL for the pdf.js worker (CDN last resort). */
 export function cdnWorkerUrl(version: string, subpath: string): string {
   return `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/${subpath}`;
 }
@@ -214,8 +214,8 @@ async function trySiblingWorkerUrl(subpath: string): Promise<string | undefined>
   }
 }
 
-/** The local worker probes, in resolution order. Real functions in production; unit tests pass a
- *  substitute set to {@link resolveWorkerSrc} to drive the CDN / opt-out branches deterministically. */
+/** @internal The local worker probes, in resolution order. Real functions in production; unit tests
+ *  pass a substitute set to {@link resolveWorkerSrc} to drive the CDN / opt-out branches. */
 export type WorkerProbes = {
   vite: (legacy: boolean) => Promise<string | undefined>;
   bundled: (legacy: boolean) => Promise<string | undefined>;
@@ -229,6 +229,7 @@ const defaultWorkerProbes: WorkerProbes = {
 };
 
 /**
+ * @internal
  * Resolve pdf.js's worker URL: explicit `workerSrc` → already-configured global → local probes
  * (Vite `?url`, webpack `new URL`, sibling install) → version-matched CDN (when `cdnFallback`).
  * Exported (not from the package entry) so tests can inject probe results; production calls it via

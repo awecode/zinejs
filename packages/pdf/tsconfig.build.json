@@ -2,7 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "emitDeclarationOnly": true,
-    "noEmit": false
+    "noEmit": false,
+    // Drop `@internal`-tagged exports (worker-resolution test seams) from the published .d.ts.
+    // They stay exported in source so unit tests can import them; consumers never see them.
+    "stripInternal": true
   },
   "exclude": ["**/*.test.ts"]
 }
