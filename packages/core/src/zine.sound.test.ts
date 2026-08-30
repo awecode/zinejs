@@ -158,6 +158,20 @@ describe('flip sound', () => {
     expect(plays).toBe(1);
   });
 
+  it('sound: { muted: true } offers sound but starts silent until the reader unmutes', async () => {
+    const zine = await mount({ sound: { url: '/flip.mp3', muted: true } });
+    expect(zine.isSoundEnabled()).toBe(true); // the feature is available (control shows)
+    expect(zine.isSoundMuted()).toBe(true); // but starts silent
+    zine.flipNext();
+    await settle();
+    expect(plays).toBe(0);
+
+    zine.setSoundMuted(false); // the reader turns it on
+    zine.flipNext();
+    await settle();
+    expect(plays).toBe(1);
+  });
+
   it('mute API is a no-op and reports false when sound is disabled', async () => {
     const zine = await mount(); // sound off
     zine.setSoundMuted(true);

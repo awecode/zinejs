@@ -231,12 +231,13 @@ export interface ZineOptions {
   /**
    * Play a short sound on each page turn. Off by default — web audio is unexpected, so it is
    * strictly opt-in. `true` uses the bundled clip at the default volume; an object overrides it:
-   * `url` points at your own clip (fetched at runtime), `volume` is 0..1. Playback is best-effort
-   * and never throws: a browser that gates audio behind a gesture, lacks Web Audio, or cannot decode
-   * the clip just stays silent. A `mute` control appears in the toolbar and right-click menu while
-   * this is on, so readers can silence it.
+   * `url` points at your own clip (fetched at runtime), `volume` is 0..1, and `muted: true` offers
+   * the sound but starts it silent so the reader turns it on themselves (via the `mute` control).
+   * Playback is best-effort and never throws: a browser that gates audio behind a gesture, lacks Web
+   * Audio, or cannot decode the clip just stays silent. Whenever sound is enabled — audible or
+   * muted — a `mute` control appears in the toolbar and right-click menu, so a reader can toggle it.
    */
-  sound?: boolean | { url?: string; volume?: number };
+  sound?: boolean | { url?: string; volume?: number; muted?: boolean };
   /**
    * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
    * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
@@ -493,6 +494,9 @@ export class Zine {
     const sound = options.sound ?? false;
     this.#soundEnabled = sound !== false;
     this.#soundOptions = sound === true || sound === false ? {} : sound;
+    // `{ muted: true }` offers the sound but starts it silent: the controller loads, the mute
+    // control shows, and the reader unmutes to turn it on.
+    this.#soundMuted = typeof sound === 'object' && sound !== null ? (sound.muted ?? false) : false;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
@@ -2757,12 +2761,15 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(`Zine: sound must be a boolean or an options object; got ${typeName(sound)}.`);
   }
   if (typeof sound === 'object' && sound !== null) {
-    const s = sound as { url?: unknown; volume?: unknown };
+    const s = sound as { url?: unknown; volume?: unknown; muted?: unknown };
     if (s.url !== undefined && typeof s.url !== 'string') {
       throw new Error(`Zine: sound.url must be a string URL; got ${typeName(s.url)}.`);
     }
     if (s.volume !== undefined && (typeof s.volume !== 'number' || s.volume < 0 || s.volume > 1)) {
       throw new Error(`Zine: sound.volume must be a number between 0 and 1; got ${JSON.stringify(s.volume)}.`);
+    }
+    if (s.muted !== undefined && typeof s.muted !== 'boolean') {
+      throw new Error(`Zine: sound.muted must be a boolean; got ${typeName(s.muted)}.`);
     }
   }
 
