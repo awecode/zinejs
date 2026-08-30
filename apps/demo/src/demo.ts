@@ -38,6 +38,7 @@ const opt = {
   singlePageThreshold: num('spt', 640),
   controls: (q.get('controls') ?? 'bottom') as 'bottom' | 'top' | 'left' | 'right' | 'off',
   controlsDock: (q.get('dock') ?? 'docked') as 'docked' | 'floating',
+  sound: (q.get('sound') ?? 'off') as 'on' | 'off',
 };
 
 // Bundled names first, then the importable ones, so the dropdown reads in that order.
@@ -169,6 +170,7 @@ controlsEl.append(
   rangeControl('flipDuration', 'flipDuration', 0, 2000, 50, opt.flipDuration, 'ms'),
   rangeControl('zoom max', 'zoom', 1, 8, 0.5, opt.zoomMax, '×'),
   rangeControl('singlePageThreshold', 'spt', 0, 1200, 20, opt.singlePageThreshold, 'px'),
+  selectControl('sound', 'sound', ['off', 'on'] as const, opt.sound),
 );
 
 // Paging and zoom now come from the built-in toolbar over the book, so the demo only keeps the
@@ -198,6 +200,7 @@ const zine = new Zine(book, {
   clickToFlip: opt.clickToFlip,
   flipDuration: opt.flipDuration,
   singlePageThreshold: opt.singlePageThreshold,
+  sound: opt.sound === 'on',
   zoom: { max: opt.zoomMax },
   controls:
     opt.controls === 'off'
