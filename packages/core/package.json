@@ -34,6 +34,7 @@
   },
   "scripts": {
     "build": "vite build && UMD=1 vite build && tsc --emitDeclarationOnly -p tsconfig.build.json",
+    "embed-clip": "node scripts/embed-flip-clip.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm typecheck && vitest run",
     "size": "pnpm build && size-limit",

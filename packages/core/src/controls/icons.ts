@@ -56,6 +56,12 @@ export const ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   /** x */
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  /** volume-2: sound on */
+  soundOn:
+    '<path d="M11 4.7a.7.7 0 0 0-1.2-.5L6 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3l3.8 3.8a.7.7 0 0 0 1.2-.5z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.4 5.6a10 10 0 0 1 0 12.8"/>',
+  /** volume-x: muted */
+  soundOff:
+    '<path d="M11 4.7a.7.7 0 0 0-1.2-.5L6 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3l3.8 3.8a.7.7 0 0 0 1.2-.5z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>',
 } satisfies Record<string, string>;
 
 /** Build an `<svg>` for one of the {@link ICONS}, or null if the name is unknown. */

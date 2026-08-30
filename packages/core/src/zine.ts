@@ -30,6 +30,7 @@ import type { DownloadInfo, LoadProgress, OutlineItem, Source } from './source/t
 import { composeSource } from './source/compose';
 import type { ContextMenuOptions, ControlsOptions } from './controls/types';
 import type { LoaderHandle } from './loading/loading';
+import type { FlipSound } from './sound/flipSound';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
@@ -228,6 +229,15 @@ export interface ZineOptions {
    */
   hints?: boolean | { enabled?: boolean; persist?: boolean };
   /**
+   * Play a short sound on each page turn. Off by default — web audio is unexpected, so it is
+   * strictly opt-in. `true` uses the bundled clip at the default volume; an object overrides it:
+   * `url` points at your own clip (fetched at runtime), `volume` is 0..1. Playback is best-effort
+   * and never throws: a browser that gates audio behind a gesture, lacks Web Audio, or cannot decode
+   * the clip just stays silent. A `mute` control appears in the toolbar and right-click menu while
+   * this is on, so readers can silence it.
+   */
+  sound?: boolean | { url?: string; volume?: number };
+  /**
    * Delay (ms) a click waits before flipping, so a double-click can preempt it with a zoom.
    * Omit for auto: 0 when double-click zoom is inactive, 250 when it's active.
    */
@@ -333,6 +343,13 @@ export class Zine {
   #unbindCursor: (() => void) | null = null;
   #hintsEnabled: boolean;
   #hintsPersist: boolean;
+  /** Page-flip sound. Off unless `sound` is set; the controller and its clip load lazily (dynamic
+   *  import) only then, so a silent book pays no audio bytes. Muting is remembered even before the
+   *  controller finishes loading, via #soundMuted. */
+  #soundEnabled: boolean;
+  #soundOptions: { url?: string; volume?: number };
+  #sound: FlipSound | null = null;
+  #soundMuted = false;
   /** What the reader has demonstrated they already know, so a hint teaching it stays quiet. Set by
    *  the gesture itself (a turn, a zoom, a pan); persisted to localStorage when `hints.persist`. */
   #learned: Learned = { turn: false, zoom: false, pan: false };
@@ -473,6 +490,9 @@ export class Zine {
     this.#hintsEnabled = hints === true || (hints !== false && (hints.enabled ?? true));
     this.#hintsPersist = hints !== true && hints !== false && (hints.persist ?? false);
     if (this.#hintsPersist) this.#loadLearned();
+    const sound = options.sound ?? false;
+    this.#soundEnabled = sound !== false;
+    this.#soundOptions = sound === true || sound === false ? {} : sound;
     this.#singlePageThreshold = options.singlePageThreshold ?? 640;
     this.#responsiveSpread = options.responsiveSpread ?? true;
     this.#controlsOption = options.controls ?? true;
@@ -989,6 +1009,24 @@ export class Zine {
     this.setZoom(1);
   }
 
+  /** Whether page-flip sound is enabled for this book (the `sound` option was set). */
+  isSoundEnabled(): boolean {
+    return this.#soundEnabled;
+  }
+
+  /** Whether flip sound is currently muted. Always false when sound is not enabled. */
+  isSoundMuted(): boolean {
+    return this.#soundEnabled && this.#soundMuted;
+  }
+
+  /** Mute or unmute the flip sound. Remembered even if the sound controller is still loading, and
+   *  a no-op when `sound` was never enabled. */
+  setSoundMuted(muted: boolean): void {
+    if (!this.#soundEnabled) return;
+    this.#soundMuted = muted;
+    this.#sound?.setMuted(muted);
+  }
+
   /** Hand the browser the gestures we don't use, so a flipbook filling the viewport doesn't trap
    *  the page. At rest we only claim horizontal turns, so vertical panning (page scroll) stays the
    *  browser's — `pan-y`. Zoomed in, one finger pans the image in both axes, so we take it all. */
@@ -1046,6 +1084,8 @@ export class Zine {
     this.#cancelNudge();
     this.#clearZoomHint();
     this.#hideCaption();
+    this.#sound?.destroy();
+    this.#sound = null;
     this.#resizeObserver?.disconnect();
     this.#deepLink?.stop();
     this.#deepLink = null;
@@ -1082,6 +1122,7 @@ export class Zine {
     // State is already locked (send('flip') above), so re-entrant flips are rejected
     // even though staging the destination content below is async.
     this.#emitter.emit('flipStart', { from: this.#currentPage, to: toPage });
+    this.#playFlipSound(); // an animated turn (click/swipe/arrow/API) is committed once it starts
     // Claimed here, synchronously, so this flip owns the run before #runFlip's first await.
     // Bumping inside #runFlip instead let a superseded flip's continuation claim the newest
     // generation and cancel the flip that replaced it.
@@ -1359,6 +1400,7 @@ export class Zine {
     const flungOnward = horizFlick && onward;
     const flungBack = horizFlick && !onward;
     if (flungOnward || (drag.t >= 0.5 && !flungBack)) {
+      this.#playFlipSound(); // the drag committed to a turn (flung on, or released past halfway)
       this.#animateProgress(
         drag.t,
         1,
@@ -1999,10 +2041,30 @@ export class Zine {
     this.#announce();
     this.#bindDeepLink();
     await this.#mountControls();
+    void this.#loadSound();
     this.#emitter.emit('ready');
     // The book is live: peek the leading corner once, then watch for an idle reader.
     void this.#playPeek();
     this.#armIdleNudge();
+  }
+
+  /** Lazily import and build the flip-sound controller, only when `sound` is enabled — so a silent
+   *  book never pulls in the audio code or the bundled clip. Best-effort: a failed import is ignored. */
+  async #loadSound(): Promise<void> {
+    if (!this.#soundEnabled || this.#destroyed) return;
+    try {
+      const { FlipSound } = await import('./sound/flipSound');
+      if (this.#destroyed) return; // torn down while the chunk loaded
+      this.#sound = new FlipSound(this.#soundOptions);
+      this.#sound.setMuted(this.#soundMuted); // honor a mute chosen before the chunk arrived
+    } catch {
+      // No audio code available: the book just stays silent.
+    }
+  }
+
+  /** Play the flip sound, if enabled and ready. Called only where a turn is actually committed. */
+  #playFlipSound(): void {
+    this.#sound?.play();
   }
 
   /** Forward a download-progress tick to the public event and the built-in loader. */
@@ -2688,6 +2750,20 @@ function validateOptions(container: unknown, options: unknown): void {
     throw new Error(
       `Zine: hideControls must be an array of control-id strings; got ${typeName(hideControls)}.`,
     );
+  }
+
+  const sound = o.sound;
+  if (sound !== undefined && typeof sound !== 'boolean' && (typeof sound !== 'object' || sound === null)) {
+    throw new Error(`Zine: sound must be a boolean or an options object; got ${typeName(sound)}.`);
+  }
+  if (typeof sound === 'object' && sound !== null) {
+    const s = sound as { url?: unknown; volume?: unknown };
+    if (s.url !== undefined && typeof s.url !== 'string') {
+      throw new Error(`Zine: sound.url must be a string URL; got ${typeName(s.url)}.`);
+    }
+    if (s.volume !== undefined && (typeof s.volume !== 'number' || s.volume < 0 || s.volume > 1)) {
+      throw new Error(`Zine: sound.volume must be a number between 0 and 1; got ${JSON.stringify(s.volume)}.`);
+    }
   }
 
   const spreadMode = o.spreadMode;

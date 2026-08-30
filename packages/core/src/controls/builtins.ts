@@ -92,6 +92,16 @@ export function registerBuiltins(): void {
   });
 
   defineControl({
+    id: 'mute',
+    title: (ctx) => (ctx.zine.isSoundMuted() ? 'Unmute page sound' : 'Mute page sound'),
+    icon: (ctx) => (ctx.zine.isSoundMuted() ? ICONS.soundOff : ICONS.soundOn),
+    // Only meaningful when flip sound is on; hidden otherwise so existing layouts are unchanged.
+    isVisible: (ctx) => ctx.zine.isSoundEnabled(),
+    isActive: (ctx) => ctx.zine.isSoundMuted(),
+    action: (ctx) => ctx.zine.setSoundMuted(!ctx.zine.isSoundMuted()),
+  });
+
+  defineControl({
     id: 'share',
     title: 'Share',
     icon: ICONS.share,
@@ -156,6 +166,7 @@ export function registerBuiltins(): void {
     title: 'More',
     icon: ICONS.menu,
     // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
-    children: ['first', 'last', 'spread', 'thumbnails', 'outline', 'print', 'download'],
+    // `mute` only appears here when sound is enabled (its isVisible), so it costs nothing otherwise.
+    children: ['first', 'last', 'spread', 'thumbnails', 'outline', 'mute', 'print', 'download'],
   });
 }

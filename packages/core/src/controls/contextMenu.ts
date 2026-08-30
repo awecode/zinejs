@@ -20,6 +20,7 @@ const DEFAULT_ITEMS: readonly ControlItem[] = [
   'next',
   '|',
   'fullscreen',
+  'mute',
   '|',
   'print',
   'download',
