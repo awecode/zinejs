@@ -34,17 +34,27 @@ new PdfSource(await getDocument(url).promise)
 
 ## The pdf.js worker
 
-pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` points at the **legacy** worker (because `legacy` defaults to `true`):
+pdf.js parses and rasterizes in a Web Worker. By default `PdfSource` finds the worker next to
+your installed `pdfjs-dist` (or via Vite's `?url` import). If that cannot be resolved, it falls
+back to a jsDelivr URL pinned to the same `pdfjs-dist` version that loaded.
+
+Resolution order: `workerSrc` option, then `pdfjsLib.GlobalWorkerOptions.workerSrc`, then that
+auto-default. Pass `workerSrc` for CDN / UMD, offline / CSP setups, or if auto-resolve fails in
+your bundler:
 
 ```js
-new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+import { PdfSource } from '@zinejs/pdf'
+import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+
+new PdfSource('document.pdf', { workerSrc })
 ```
 
-Vite, webpack 5, and esbuild rewrite that literal and emit the asset. Resolution order: `workerSrc` option, then `pdfjsLib.GlobalWorkerOptions.workerSrc`, then the auto-default. Pass `workerSrc` only for CDN / UMD or a file you copied yourself, and keep it on the same build as the library (legacy vs modern).
+Keep the worker on the same build as the library (`legacy` vs modern). If you already set
+`GlobalWorkerOptions.workerSrc`, leave `workerSrc` off. A pre-created pdf.js document needs no
+worker from this package.
 
-If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off. A pre-created pdf.js document needs no worker from this package.
-
-CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
+CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core
+first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
 
 ## Options
 

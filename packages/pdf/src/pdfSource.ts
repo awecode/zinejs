@@ -46,13 +46,16 @@ interface PdfLoadingTask {
 interface PdfjsModule {
   GlobalWorkerOptions: { workerSrc: string };
   getDocument(src: DocParams): PdfLoadingTask;
+  /** Present on real pdf.js builds; used to pick a matching CDN worker as a last resort. */
+  version?: string;
 }
 
 /** A URL, raw bytes, or a pre-created pdf.js document. */
 export type PdfSrc = string | ArrayBuffer | Uint8Array | PdfDocumentLike;
 
 export interface PdfSourceOptions {
-  /** URL to pdf.js's worker. Optional: auto-resolved under bundlers; pass it for CDN / UMD / custom paths. */
+  /** URL to pdf.js's worker. Optional: auto-resolved from your `pdfjs-dist` install (or a
+   *  version-matched CDN). Pass it for CDN / UMD / CSP / offline, or if auto-resolve fails. */
   workerSrc?: string;
   /** Base render scale; each page is rasterized at `renderScale × devicePixelRatio`. Default 1. */
   renderScale?: number;
@@ -113,6 +116,22 @@ function filenameFromUrl(url: string): string {
     return last && /\.[a-z0-9]+$/i.test(last) ? decodeURIComponent(last) : 'document.pdf';
   } catch {
     return 'document.pdf';
+  }
+}
+
+/** True when `url` responds OK (HEAD, then GET). Used to pick a local worker path that exists. */
+async function resourceExists(url: string): Promise<boolean> {
+  try {
+    const head = await fetch(url, { method: 'HEAD' });
+    if (head.ok) return true;
+    // Some hosts reject HEAD; a tiny ranged GET still proves the file is there.
+    if (head.status === 405 || head.status === 501) {
+      const get = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' } });
+      return get.ok || get.status === 206;
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 
@@ -186,7 +205,10 @@ export class PdfSource implements Source {
       this.#doc = this.#src;
     } else {
       const pdfjs = await loadPdfjs(this.#legacy);
-      pdfjs.GlobalWorkerOptions.workerSrc = this.#resolveWorkerSrc(pdfjs.GlobalWorkerOptions.workerSrc);
+      pdfjs.GlobalWorkerOptions.workerSrc = await this.#resolveWorkerSrc(
+        pdfjs.GlobalWorkerOptions.workerSrc,
+        pdfjs.version,
+      );
       const params: DocParams =
         typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
       if (this.#disableAutoFetch) params.disableAutoFetch = true;
@@ -197,25 +219,53 @@ export class PdfSource implements Source {
     this.pageCount = this.#doc.numPages;
   }
 
-  /** Precedence: an explicit `workerSrc` → an already-configured global → an auto-resolved default. */
-  #resolveWorkerSrc(configured: string): string {
+  /**
+   * Precedence: explicit `workerSrc` → already-configured global → auto default.
+   *
+   * Auto default used to be `new URL('pdfjs-dist/…/pdf.worker.min.mjs', import.meta.url)`.
+   * That joins against *this* package's `dist/` URL, so Vite/Nuxt request
+   * `@zinejs/pdf/dist/pdfjs-dist/…` (404). The worker lives in the sibling `pdfjs-dist`
+   * install. Resolve it from there, or via a bundler `?url` import, or a version-matched CDN.
+   */
+  async #resolveWorkerSrc(configured: string, pdfjsVersion: string | undefined): Promise<string> {
     if (this.#workerSrc) return this.#workerSrc;
     if (configured) return configured;
+
+    const subpath = this.#legacy
+      ? 'legacy/build/pdf.worker.min.mjs'
+      : 'build/pdf.worker.min.mjs';
+
+    // Vite (and Nuxt) rewrite `?url` imports to a served asset when they process the dep.
     try {
-      // Bundlers (Vite / webpack 5 / esbuild) statically rewrite these and emit the worker,
-      // so the common case needs no `workerSrc`. Non-bundler / UMD hosts pass it explicitly. The
-      // worker must match the build loaded in loadPdfjs — a legacy main with a modern worker (or
-      // vice versa) mismatches — so the same #legacy flag chooses here too.
-      return this.#legacy
-        ? new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
-        : new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+      const mod = this.#legacy
+        ? await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
+        : await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+      const url = (mod as { default?: unknown }).default;
+      if (typeof url === 'string' && url) return url;
     } catch {
-      throw new Error(
-        "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +
-          '(see the @zinejs/pdf README, "The pdf.js worker"), set pdfjs ' +
-          'GlobalWorkerOptions.workerSrc yourself, or pass a pre-created pdf.js document.',
-      );
+      // Bundler did not rewrite ?url, or we are off Vite — try the install path next.
     }
+
+    // From `@zinejs/pdf/dist/index.js`, `../../../pdfjs-dist` is the package's node_modules
+    // sibling under both pnpm (nested) and npm/yarn (hoisted). Concatenate so Vite does not
+    // treat this as an import.meta.url asset rewrite (those need a static relative literal).
+    try {
+      const local = new URL('../../../pdfjs-dist/' + subpath, import.meta.url).href;
+      if (await resourceExists(local)) return local;
+    } catch {
+      // import.meta.url unavailable or odd layout
+    }
+
+    // Last resort: same version as the loaded library (avoids API/worker mismatch).
+    if (pdfjsVersion) {
+      return `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsVersion}/${subpath}`;
+    }
+
+    throw new Error(
+      "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +
+        '(see the @zinejs/pdf README, "The pdf.js worker"), set pdfjs ' +
+        'GlobalWorkerOptions.workerSrc yourself, or pass a pre-created pdf.js document.',
+    );
   }
 
   get(index: number, opts?: PageRequest): Promise<PageContent> {

@@ -630,7 +630,7 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `workerSrc` | `string` | auto | pdf.js worker URL. Auto-resolved under bundlers; pass it for CDN/UMD/custom paths. |
+| `workerSrc` | `string` | auto | pdf.js worker URL. Auto-resolved from your `pdfjs-dist` install (or a version-matched CDN); pass it for CDN/UMD, CSP/offline, or if auto-resolve fails. |
 | `renderScale` | `number` | `1` | Base scale; pages rasterize at `renderScale × devicePixelRatio`. |
 | `preload` | `number` | `1` | Adjacent pages to prefetch. |
 | `maxCacheBytes` | `number` | ~256 MB | Soft cap on cached page bytes (LRU-evicted). |
@@ -640,13 +640,15 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 
 `pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. If your app already depends on `pdfjs-dist`, keep major versions compatible so the worker matches the library.
 
-Under a bundler the worker is resolved for you:
+The worker is resolved for you in this order: explicit `workerSrc`, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then an auto-default (Vite `?url`, the `pdfjs-dist` next to `@zinejs/pdf` in `node_modules`, or a jsDelivr URL pinned to the loaded pdf.js version). Pass `workerSrc` for CDN / UMD, offline / CSP, or if auto-resolve fails:
 
 ```js
-new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+
+new PdfSource('/doc.pdf', { workerSrc })
 ```
 
-Vite, webpack 5, and esbuild rewrite that literal and emit the worker. Resolution order: an explicit `workerSrc` option, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then that auto-default. Pass `workerSrc` only for CDN / UMD or a file you copied yourself. If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off.
+If you already set `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off.
 
 CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
 

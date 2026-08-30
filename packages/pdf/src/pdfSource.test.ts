@@ -15,7 +15,7 @@ const mock = vi.hoisted(() => {
   // One shared namespace for both the modern and legacy specifiers: PdfSource defaults to the
   // legacy build, so open() imports the legacy path, yet the tests read GlobalWorkerOptions through
   // 'pdfjs-dist'. Sharing the object keeps that global observable whichever build is loaded.
-  const ns = { GlobalWorkerOptions: { workerSrc: '' }, getDocument };
+  const ns = { GlobalWorkerOptions: { workerSrc: '' }, getDocument, version: '4.10.38' };
   return { getDocument, ns };
 });
 
@@ -54,21 +54,34 @@ describe('PdfSource', () => {
   it('auto-resolves the worker when none is provided', async () => {
     const src = new PdfSource('doc.pdf');
     await src.open();
-    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/pdf\.worker\.min\.mjs$/);
+    // Local sibling path, Vite ?url asset, or version-matched CDN — any ends in the worker file.
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/pdf\.worker\.min\.mjs/);
     expect(src.pageCount).toBe(3);
   });
 
   it('auto-resolves the legacy worker by default, the modern one when legacy is off', async () => {
     const legacy = new PdfSource('doc.pdf'); // legacy defaults to true
     await legacy.open();
-    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(/legacy\/build\/pdf\.worker\.min\.mjs$/);
+    expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toMatch(
+      /legacy\/build\/pdf\.worker\.min\.mjs/,
+    );
 
     (await pdfjsMock()).GlobalWorkerOptions.workerSrc = ''; // clear the shared global before the next resolve
     const modern = new PdfSource('doc.pdf', { legacy: false });
     await modern.open();
     const src = (await pdfjsMock()).GlobalWorkerOptions.workerSrc;
-    expect(src).toMatch(/build\/pdf\.worker\.min\.mjs$/);
+    expect(src).toMatch(/build\/pdf\.worker\.min\.mjs/);
     expect(src).not.toMatch(/legacy\//);
+  });
+
+  it('points the worker at pdfjs-dist, not at @zinejs/pdf/dist', async () => {
+    // Regression: `new URL('pdfjs-dist/…', import.meta.url)` joined against this package's
+    // dist URL and 404'd under Vite/Nuxt (`…/@zinejs/pdf/dist/pdfjs-dist/…`).
+    const src = new PdfSource('doc.pdf');
+    await src.open();
+    const worker = (await pdfjsMock()).GlobalWorkerOptions.workerSrc;
+    expect(worker).toMatch(/pdfjs-dist/);
+    expect(worker).not.toMatch(/@zinejs\/pdf\/dist\/pdfjs-dist/);
   });
 
   it('prefers an explicit workerSrc over the default', async () => {
