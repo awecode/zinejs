@@ -160,25 +160,12 @@ function warnCdnOnce(cdn: string): void {
   );
 }
 
-/** Optional overrides for the local worker probes (unit tests). Not a public API. */
-export type WorkerLocalResolveHooks = {
-  tryViteUrl?: (legacy: boolean) => Promise<string | undefined>;
-  tryBundledUrl?: (legacy: boolean) => Promise<string | undefined>;
-  trySiblingUrl?: (subpath: string) => Promise<string | undefined>;
-};
-
-let workerLocalResolveHooks: WorkerLocalResolveHooks = {};
-
-/** @internal Reset the CDN warn-once flag and optional local-resolve hooks (unit tests). */
-export function __resetWorkerResolveForTests(hooks?: WorkerLocalResolveHooks | null): void {
+/** @internal Reset the CDN warn-once flag between unit tests. Tree-shaken from the bundle. */
+export function __resetCdnWarnedForTests(): void {
   cdnWarned = false;
-  workerLocalResolveHooks = hooks ?? {};
 }
 
 async function tryViteWorkerUrl(legacy: boolean): Promise<string | undefined> {
-  if (workerLocalResolveHooks.tryViteUrl) {
-    return workerLocalResolveHooks.tryViteUrl(legacy);
-  }
   // Vite (and Nuxt) rewrite `?url` imports to a served asset when they process the dep.
   // `webpackIgnore` keeps webpack/rspack from emitting an orphan worker chunk for this
   // Vite-only specifier; they throw at runtime, we catch, and the static new URL branch wins.
@@ -198,9 +185,6 @@ async function tryViteWorkerUrl(legacy: boolean): Promise<string | undefined> {
 }
 
 async function tryBundledWorkerUrl(legacy: boolean): Promise<string | undefined> {
-  if (workerLocalResolveHooks.tryBundledUrl) {
-    return workerLocalResolveHooks.tryBundledUrl(legacy);
-  }
   // Webpack 5 / rspack: static package-specifier new URL is rewritten to an emitted asset.
   // Specifiers must be string literals (not concatenated) for the bundler to see them.
   // Vite leaves this as a runtime join against @zinejs/pdf/dist → 404; resourceExists skips it.
@@ -215,9 +199,6 @@ async function tryBundledWorkerUrl(legacy: boolean): Promise<string | undefined>
 }
 
 async function trySiblingWorkerUrl(subpath: string): Promise<string | undefined> {
-  if (workerLocalResolveHooks.trySiblingUrl) {
-    return workerLocalResolveHooks.trySiblingUrl(subpath);
-  }
   // From `@zinejs/pdf/dist/index.js`, `../../../pdfjs-dist` is the package's node_modules
   // sibling under both pnpm (nested) and npm/yarn (hoisted). Concatenate so Vite does not
   // treat this as an import.meta.url asset rewrite (those need a static relative literal).
@@ -231,6 +212,63 @@ async function trySiblingWorkerUrl(subpath: string): Promise<string | undefined>
   } catch {
     return undefined;
   }
+}
+
+/** The local worker probes, in resolution order. Real functions in production; unit tests pass a
+ *  substitute set to {@link resolveWorkerSrc} to drive the CDN / opt-out branches deterministically. */
+export type WorkerProbes = {
+  vite: (legacy: boolean) => Promise<string | undefined>;
+  bundled: (legacy: boolean) => Promise<string | undefined>;
+  sibling: (subpath: string) => Promise<string | undefined>;
+};
+
+const defaultWorkerProbes: WorkerProbes = {
+  vite: tryViteWorkerUrl,
+  bundled: tryBundledWorkerUrl,
+  sibling: trySiblingWorkerUrl,
+};
+
+/**
+ * Resolve pdf.js's worker URL: explicit `workerSrc` → already-configured global → local probes
+ * (Vite `?url`, webpack `new URL`, sibling install) → version-matched CDN (when `cdnFallback`).
+ * Exported (not from the package entry) so tests can inject probe results; production calls it via
+ * {@link PdfSource} with {@link defaultWorkerProbes}, so no test-only code ships in the bundle.
+ */
+export async function resolveWorkerSrc(
+  args: {
+    workerSrc: string | undefined;
+    configured: string;
+    legacy: boolean;
+    cdnFallback: boolean;
+    pdfjsVersion: string | undefined;
+  },
+  probes: WorkerProbes = defaultWorkerProbes,
+): Promise<string> {
+  if (args.workerSrc) return args.workerSrc;
+  if (args.configured) return args.configured;
+
+  const subpath = args.legacy ? 'legacy/build/pdf.worker.min.mjs' : 'build/pdf.worker.min.mjs';
+
+  const vite = await probes.vite(args.legacy);
+  if (vite) return vite;
+  const bundled = await probes.bundled(args.legacy);
+  if (bundled) return bundled;
+  const sibling = await probes.sibling(subpath);
+  if (sibling) return sibling;
+
+  // Last resort: same version as the loaded library (avoids API/worker mismatch).
+  if (args.pdfjsVersion && args.cdnFallback) {
+    const cdn = cdnWorkerUrl(args.pdfjsVersion, subpath);
+    warnCdnOnce(cdn);
+    return cdn;
+  }
+
+  throw new Error(
+    "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +
+      '(see the @zinejs/pdf README, "The pdf.js worker"), set pdfjs ' +
+      'GlobalWorkerOptions.workerSrc yourself, enable `cdnFallback`, ' +
+      'or pass a pre-created pdf.js document.',
+  );
 }
 
 /**
@@ -320,48 +358,18 @@ export class PdfSource implements Source {
   }
 
   /**
-   * Precedence: explicit `workerSrc` → already-configured global → auto default.
-   *
-   * Auto default tries, in order:
-   * 1. Vite `?url` import (Vite/Nuxt rewrite to a served asset). Marked
-   *    `webpackIgnore` so webpack does not emit an orphan worker chunk for it.
-   * 2. Static `new URL('pdfjs-dist/…', import.meta.url)` — webpack 5 / rspack rewrite this
-   *    and emit a version-matched worker. Unrewritten (Vite runtime join against this
-   *    package's `dist/`) yields `@zinejs/pdf/dist/pdfjs-dist/…` which 404s; we only keep
-   *    the URL when it actually resolves.
-   * 3. Sibling `../../../pdfjs-dist/…` under node_modules (pnpm nested / npm hoisted @fs).
-   * 4. Version-matched CDN last resort when `cdnFallback` is true (warns once).
+   * Precedence: explicit `workerSrc` → already-configured global → auto default (Vite `?url`,
+   * webpack `new URL`, sibling install, then version-matched CDN when `cdnFallback`). The ordering
+   * and probes live in {@link resolveWorkerSrc}; this just forwards this source's settings.
    */
-  async #resolveWorkerSrc(configured: string, pdfjsVersion: string | undefined): Promise<string> {
-    if (this.#workerSrc) return this.#workerSrc;
-    if (configured) return configured;
-
-    const subpath = this.#legacy
-      ? 'legacy/build/pdf.worker.min.mjs'
-      : 'build/pdf.worker.min.mjs';
-
-    const vite = await tryViteWorkerUrl(this.#legacy);
-    if (vite) return vite;
-
-    const bundled = await tryBundledWorkerUrl(this.#legacy);
-    if (bundled) return bundled;
-
-    const sibling = await trySiblingWorkerUrl(subpath);
-    if (sibling) return sibling;
-
-    // Last resort: same version as the loaded library (avoids API/worker mismatch).
-    if (pdfjsVersion && this.#cdnFallback) {
-      const cdn = cdnWorkerUrl(pdfjsVersion, subpath);
-      warnCdnOnce(cdn);
-      return cdn;
-    }
-
-    throw new Error(
-      "PdfSource: couldn't auto-resolve pdf.js's worker. Pass a `workerSrc` URL " +
-        '(see the @zinejs/pdf README, "The pdf.js worker"), set pdfjs ' +
-        'GlobalWorkerOptions.workerSrc yourself, enable `cdnFallback`, ' +
-        'or pass a pre-created pdf.js document.',
-    );
+  #resolveWorkerSrc(configured: string, pdfjsVersion: string | undefined): Promise<string> {
+    return resolveWorkerSrc({
+      workerSrc: this.#workerSrc,
+      configured,
+      legacy: this.#legacy,
+      cdnFallback: this.#cdnFallback,
+      pdfjsVersion,
+    });
   }
 
   get(index: number, opts?: PageRequest): Promise<PageContent> {

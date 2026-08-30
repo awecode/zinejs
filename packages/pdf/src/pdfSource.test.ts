@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   PdfSource,
   cdnWorkerUrl,
-  __resetWorkerResolveForTests,
+  resolveWorkerSrc,
+  __resetCdnWarnedForTests,
   type PdfSrc,
+  type WorkerProbes,
 } from './pdfSource';
 
 type PdfjsGlobal = { GlobalWorkerOptions: { workerSrc: string } };
@@ -27,11 +29,22 @@ const mock = vi.hoisted(() => {
 vi.mock('pdfjs-dist', () => mock.ns);
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => mock.ns);
 
-const missLocal = {
-  tryViteUrl: async () => undefined,
-  tryBundledUrl: async () => undefined,
-  trySiblingUrl: async () => undefined,
+/** Worker probes that all miss, forcing resolveWorkerSrc down to the CDN / throw branch. */
+const missProbes: WorkerProbes = {
+  vite: async () => undefined,
+  bundled: async () => undefined,
+  sibling: async () => undefined,
 };
+
+/** Base args for resolveWorkerSrc: legacy build, CDN allowed, the mocked pdf.js version. */
+const resolveArgs = (over: Partial<Parameters<typeof resolveWorkerSrc>[0]> = {}) => ({
+  workerSrc: undefined,
+  configured: '',
+  legacy: true,
+  cdnFallback: true,
+  pdfjsVersion: '4.10.38',
+  ...over,
+});
 
 describe('PdfSource', () => {
   beforeEach(async () => {
@@ -39,11 +52,11 @@ describe('PdfSource', () => {
     mock.getDocument.mockClear();
     // CDN path prefers this global — keep it off unless a test sets it.
     delete (globalThis as { pdfjsLib?: unknown }).pdfjsLib;
-    __resetWorkerResolveForTests();
+    __resetCdnWarnedForTests();
   });
 
   afterEach(() => {
-    __resetWorkerResolveForTests();
+    __resetCdnWarnedForTests();
   });
 
   it('opens a URL PDF (with workerSrc) and reports its page count', async () => {
@@ -125,37 +138,30 @@ describe('PdfSource', () => {
   });
 
   it('warns once and uses the CDN when all local worker probes miss', async () => {
-    __resetWorkerResolveForTests(missLocal);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const first = new PdfSource('doc.pdf');
-      await first.open();
       const cdn = cdnWorkerUrl('4.10.38', 'legacy/build/pdf.worker.min.mjs');
-      expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe(cdn);
+      expect(await resolveWorkerSrc(resolveArgs(), missProbes)).toBe(cdn);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0]?.[0]).toMatch(/cdn\.jsdelivr\.net/);
       expect(warn.mock.calls[0]?.[0]).toMatch(/cdnFallback: false/);
 
-      (await pdfjsMock()).GlobalWorkerOptions.workerSrc = '';
-      const second = new PdfSource('doc.pdf');
-      await second.open();
-      expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe(cdn);
-      expect(warn).toHaveBeenCalledTimes(1); // once-guard across PdfSources
+      // A second resolve still lands on the CDN, but the warning is guarded to once per process.
+      expect(await resolveWorkerSrc(resolveArgs(), missProbes)).toBe(cdn);
+      expect(warn).toHaveBeenCalledTimes(1);
     } finally {
       warn.mockRestore();
     }
   });
 
   it('does not warn when a local probe resolves the worker', async () => {
-    __resetWorkerResolveForTests({
-      ...missLocal,
-      tryViteUrl: async () => '/local-vite-worker.mjs',
-    });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const src = new PdfSource('doc.pdf');
-      await src.open();
-      expect((await pdfjsMock()).GlobalWorkerOptions.workerSrc).toBe('/local-vite-worker.mjs');
+      const url = await resolveWorkerSrc(resolveArgs(), {
+        ...missProbes,
+        vite: async () => '/local-vite-worker.mjs',
+      });
+      expect(url).toBe('/local-vite-worker.mjs');
       expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
@@ -163,11 +169,11 @@ describe('PdfSource', () => {
   });
 
   it('throws without warning when cdnFallback is false and local probes miss', async () => {
-    __resetWorkerResolveForTests(missLocal);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const src = new PdfSource('doc.pdf', { cdnFallback: false });
-      await expect(src.open()).rejects.toThrow(/cdnFallback/);
+      await expect(
+        resolveWorkerSrc(resolveArgs({ cdnFallback: false }), missProbes),
+      ).rejects.toThrow(/cdnFallback/);
       expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
