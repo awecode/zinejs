@@ -59,7 +59,11 @@ Keep the worker on the same build as the library (`legacy` vs modern). If you al
 worker from this package.
 
 CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core
-first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn).
+first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn). A UMD host has no
+bundler to resolve the worker locally, so it uses your `workerSrc`, an already-set
+`GlobalWorkerOptions.workerSrc`, or the version-matched CDN fallback (matched to the global
+pdf.js's version; silent here, since a CSP/offline failure surfaces through the browser and pdf.js
+anyway). Set `cdnFallback: false` to require explicit configuration instead.
 
 ## Options
 

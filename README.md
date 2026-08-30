@@ -641,7 +641,7 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 
 `pdfjs-dist` ships as a dependency of `@zinejs/pdf` (no separate install). The plugin loads it lazily so it never lands in the core bundle. If your app already depends on `pdfjs-dist`, keep major versions compatible so the worker matches the library.
 
-The worker is resolved for you in this order: explicit `workerSrc`, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then an auto-default (Vite `?url`, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit when it resolves, the `pdfjs-dist` next to `@zinejs/pdf` in `node_modules`, or a jsDelivr URL pinned to the loaded pdf.js version when `cdnFallback` is true). The CDN last resort warns once. Pass `workerSrc` (and optionally `cdnFallback: false`) for CDN / UMD, offline / CSP, or if auto-resolve fails:
+The worker is resolved for you in this order: explicit `workerSrc`, then an already-set `pdfjsLib.GlobalWorkerOptions.workerSrc`, then an auto-default (Vite `?url`, webpack's `new URL('pdfjs-dist/…', import.meta.url)` emit when it resolves, the `pdfjs-dist` next to `@zinejs/pdf` in `node_modules`, or a jsDelivr URL pinned to the loaded pdf.js version when `cdnFallback` is true). The CDN last resort warns once under a bundler (ESM); a UMD `<script>` host has no bundler to resolve locally, so the CDN is its expected fallback and stays quiet. Pass `workerSrc` (and optionally `cdnFallback: false`) for CDN / UMD, offline / CSP, or if auto-resolve fails:
 
 ```js
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'

@@ -12,7 +12,10 @@ import { defineConfig, type Plugin } from 'vite';
  *   (`webpackIgnore` skips webpack's orphan chunk; Vite ignores the comment)
  * - `new URL('pdfjs-dist/…/pdf.worker.min.mjs', import.meta.url).href` — webpack 5 / rspack
  *
- * UMD still requires an explicit `workerSrc` (no import.meta / ?url there).
+ * In UMD both expressions are neutralized to caught throws (no import.meta / ?url in a classic
+ * script), so a UMD host resolves the worker via an explicit `workerSrc`, an already-set
+ * `pdfjsLib.GlobalWorkerOptions.workerSrc`, or the version-matched CDN fallback (from the global
+ * pdf.js's version) — unless `cdnFallback: false`.
  */
 const WORKER_SPEC = 'pdfjs-dist/(?:legacy/)?build/pdf\\.worker\\.min\\.mjs';
 

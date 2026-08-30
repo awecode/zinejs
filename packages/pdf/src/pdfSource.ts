@@ -151,6 +151,11 @@ let cdnWarned = false;
 function warnCdnOnce(cdn: string): void {
   if (cdnWarned) return;
   cdnWarned = true;
+  // Only notable in an ES module: a bundler was in play and could have resolved the worker, yet we
+  // still fell through to the CDN. In a classic <script> (UMD, no `import.meta.url`) there is no
+  // bundler and the CDN is the expected fallback, so stay quiet — a CSP/offline failure there
+  // announces itself through the browser and pdf.js anyway.
+  if (!import.meta.url) return;
   if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
   console.warn(
     `@zinejs/pdf: couldn't resolve the pdf.js worker from your bundler or install; ` +
