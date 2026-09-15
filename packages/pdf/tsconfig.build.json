@@ -3,6 +3,13 @@
   "compilerOptions": {
     "emitDeclarationOnly": true,
     "noEmit": false,
+    // Emit's output layout (kept out of tsconfig.json so typecheck can pull core's source
+    // without an outDir forcing rootDir inference that would reject it).
+    "outDir": "./dist",
+    "rootDir": "./src",
+    // Resolve @zinejs/core as a consumer does (its built package types), not from source,
+    // so the published .d.ts is generated against exactly what ships. Clears the typecheck mapping.
+    "paths": {},
     // Drop `@internal`-tagged exports (worker-resolution test seams) from the published .d.ts.
     // They stay exported in source so unit tests can import them; consumers never see them.
     "stripInternal": true

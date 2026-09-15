@@ -27,13 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # @zinejs/pdf typechecks against @zinejs/core's built declarations
-      # (dist/index.d.ts), so core must be built before the recursive test run.
-      - name: Build @zinejs/core
-        run: pnpm --filter @zinejs/core build
-
       # Each package's `test` script runs `tsc --noEmit` then `vitest run`,
       # so this covers typechecking and the unit suites for core and pdf.
+      # @zinejs/pdf typechecks @zinejs/core from source (tsconfig paths), so no build first.
       - name: Test
         run: pnpm -r test
 

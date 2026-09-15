@@ -1,8 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src"
+    // Resolve @zinejs/core from source for typechecking, so `tsc --noEmit` does not need
+    // core's built dist/index.d.ts. `outDir`/`rootDir` live only in tsconfig.build.json (the
+    // declaration emit): setting an outDir here would force rootDir inference and reject core's
+    // source as "outside rootDir". The build clears this mapping and resolves core as a consumer
+    // would; TS keeps the '@zinejs/core' specifier in emit regardless, so this never leaks out.
+    "paths": {
+      "@zinejs/core": ["../core/src/index.ts"]
+    }
   },
   "include": ["src"]
 }
