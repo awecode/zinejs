@@ -297,7 +297,7 @@ export class PinchRecognizer {
     const values = [...this.#points.values()];
     const a = values[0];
     const b = values[1];
-    if (!a || !b) throw new Error('pinch requires two active pointers');
+    if (!a || !b) throw new Error('Zine: pinch requires two active pointers.');
     return { a, b };
   }
 }
