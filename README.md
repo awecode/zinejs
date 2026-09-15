@@ -78,7 +78,7 @@ The rest of this page is the full options, methods, and events reference.
 
 ## `new Zine(container, options)`
 
-`container` is an `HTMLElement`. The book takes the container's CSS width (a block element is enough). After the first paint it sets `aspect-ratio` from the spread so height follows. Pass `width` / `height` for a fixed pixel size; if both are set, that box wins and the ratio is ignored.
+`container` is an `HTMLElement`. The book takes the container's CSS width (a block element is enough). After the first paint it sets `aspect-ratio` from the spread so height follows. This replaces any `aspect-ratio` you set on the container yourself, so size the book by its width (or with `width` / `height` below), not by CSS `aspect-ratio`. Pass `width` / `height` for a fixed pixel size; if both are set, that box wins and the ratio is ignored.
 
 Options (only `source` is required):
 
