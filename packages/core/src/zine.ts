@@ -392,7 +392,7 @@ export class Zine {
   #effectiveModeShown: SpreadMode | null = null;
   #narrow = false; // responsive: container currently below singlePageThreshold
   #responsiveSpread: boolean;
-  #lastAspect = ''; // last container aspect-ratio written (avoids redundant style writes)
+  #lastAspect: number | null = null; // last container aspect-ratio written (avoids redundant style writes)
   #startPageOption: number | undefined;
   #deepLinkEnabled: boolean;
   #disableContextMenu: boolean;
@@ -2373,10 +2373,14 @@ export class Zine {
   #applyContainerAspect(): void {
     const b = this.#renderer?.measure().book;
     if (!b || b.width <= 0 || b.height <= 0) return;
-    const ratio = (b.width / b.height).toFixed(4);
-    if (ratio === this.#lastAspect) return;
+    const ratio = b.width / b.height;
+    // Tolerance, not exact equality: writing `aspect-ratio` resizes the container, whose ResizeObserver
+    // re-measures a book box off by a sub-pixel and would rewrite a marginally different ratio, an
+    // endless resize/measure/write feedback loop (cheap for images, but re-rasterizes a PDF each turn,
+    // freezing the tab). Ignoring changes below ~0.5% lets it settle after the first write.
+    if (this.#lastAspect !== null && Math.abs(ratio - this.#lastAspect) < 0.005) return;
     this.#lastAspect = ratio;
-    this.#container.style.aspectRatio = ratio;
+    this.#container.style.aspectRatio = ratio.toFixed(4);
   }
 
   /**

@@ -119,6 +119,68 @@ describe('Zine — slice 5 (resize + single-page mode)', () => {
   });
 });
 
+describe('Zine — container aspect-ratio convergence', () => {
+  /** A renderer whose reported book box aspect jitters by a sub-pixel between measurements, the way a
+   *  real container does after `aspect-ratio` is written to it (rounding shifts the measured box). */
+  class JitterRenderer extends MockRenderer {
+    aspect = 1.3289; // book width / height; tests flip it by a sub-pixel amount
+    override measure(): LayoutMetrics {
+      const book = { x: 0, y: 0, width: this.aspect, height: 1 };
+      return {
+        containerWidth: 800, // wide → stays double, so mode never toggles
+        containerHeight: 600,
+        pageWidth: 400,
+        pageHeight: 600,
+        book,
+        content: book,
+      };
+    }
+  }
+
+  /** A container whose `style.aspectRatio` writes are recorded, so a rewrite storm is observable. */
+  function spyContainer(): { el: HTMLElement; writes: string[] } {
+    const writes: string[] = [];
+    const style = {} as { aspectRatio?: string; _v?: string };
+    Object.defineProperty(style, 'aspectRatio', {
+      configurable: true,
+      get() {
+        return this._v;
+      },
+      set(v: string) {
+        this._v = v;
+        writes.push(v);
+      },
+    });
+    const el = Object.assign(new EventTarget(), { appendChild() {}, style }) as unknown as HTMLElement;
+    return { el, writes };
+  }
+
+  it('stops rewriting aspect-ratio when the measured book box only jitters sub-pixel', async () => {
+    // Regression: `#applyContainerAspect` compared the ratio for exact equality and rewrote
+    // `style.aspectRatio` on any change. Writing it resizes the container, whose ResizeObserver
+    // re-measures a box off by a sub-pixel and rewrites again — an endless resize→measure→write loop
+    // that re-rasterizes a PDF each turn and freezes the tab. A tolerance must let it settle.
+    const { el, writes } = spyContainer();
+    const renderer = new JitterRenderer();
+    const zine = new Zine(el, { source: new FakeSource(4), renderer, spreadMode: 'double', hints: false });
+    await zine.ready;
+
+    const afterReady = writes.length; // however many writes the initial render made
+    // Jitter the measured aspect by ~0.001 (a sub-pixel on a real box) across many update cycles,
+    // exactly what the resize→measure feedback would feed in.
+    const jitter = [1.3289, 1.3276];
+    for (let i = 0; i < 8; i++) {
+      renderer.aspect = jitter[i % 2]!;
+      zine.update();
+      await flush();
+    }
+
+    // With the tolerance the sub-pixel jitter is ignored, so it never rewrites (the old exact
+    // comparison rewrote on every cycle, the loop). At most one settling write is acceptable.
+    expect(writes.length - afterReady).toBeLessThanOrEqual(1);
+  });
+});
+
 describe('Zine — responsiveSpread', () => {
   const narrow = async (options: Record<string, unknown> = {}) => {
     const renderer = new MockRenderer();
