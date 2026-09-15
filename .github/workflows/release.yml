@@ -4,9 +4,10 @@ name: Release
 # version tag (e.g. v1.0.0). Also runnable manually from the Actions tab.
 #
 # Auth is tokenless: npm Trusted Publishing (OIDC) is configured for this repo +
-# workflow on npmjs.com, so no NPM_TOKEN secret is needed. The npm CLI (not pnpm,
-# which lacks OIDC/provenance support at the pinned version) performs the publish;
-# `pnpm pack` first rewrites the `workspace:^` dep in @zinejs/pdf to a real version.
+# workflow on npmjs.com, so no NPM_TOKEN secret is needed. Trusted publishing only
+# activates for `npm publish` run from the package directory (not a tarball path),
+# so each package is published in place. @zinejs/pdf's `workspace:^` dep is rewritten
+# to the real version first (what pnpm would otherwise do at pack time).
 on:
   push:
     tags: ['v*.*.*']
@@ -34,24 +35,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Tarball publishes do not run the build lifecycle, so build explicitly (core first;
-      # pdf's declaration build resolves core from its dist).
+      # Build here and publish with --ignore-scripts, so the prepublishOnly build does not
+      # run twice. core builds first; pdf's declaration build resolves core from its dist.
       - name: Build
         run: |
           pnpm --filter @zinejs/core build
           pnpm --filter @zinejs/pdf build
 
-      # For each package: skip if that version is already on npm; otherwise pnpm-pack it
-      # (rewriting workspace:^ to the real version) and npm-publish the tarball with
-      # provenance. npm uses the repo's OIDC identity (no token).
+      # Publish from the package directory so npm performs the OIDC exchange (tokenless).
+      # Skip if the version is already on npm so re-runs are safe.
       - name: Publish @zinejs/core
         run: |
           V=$(node -p "require('./packages/core/package.json').version")
           if npm view "@zinejs/core@$V" version >/dev/null 2>&1; then
             echo "@zinejs/core@$V already on npm, skipping"; exit 0
           fi
-          TGZ=$(cd packages/core && pnpm pack | tail -1)
-          npm publish "packages/core/$TGZ" --provenance --access public
+          cd packages/core && npm publish --provenance --access public --ignore-scripts
 
       - name: Publish @zinejs/pdf
         run: |
@@ -59,5 +58,5 @@ jobs:
           if npm view "@zinejs/pdf@$V" version >/dev/null 2>&1; then
             echo "@zinejs/pdf@$V already on npm, skipping"; exit 0
           fi
-          TGZ=$(cd packages/pdf && pnpm pack | tail -1)
-          npm publish "packages/pdf/$TGZ" --provenance --access public
+          node -e "const fs=require('fs');const p='packages/pdf/package.json';const j=JSON.parse(fs.readFileSync(p));const cv=require('./packages/core/package.json').version;for(const s of ['dependencies','devDependencies','peerDependencies','optionalDependencies']){const d=j[s];if(d)for(const k in d)if(String(d[k]).startsWith('workspace:'))d[k]='^'+cv;}fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');console.log('rewrote workspace deps to ^'+cv);"
+          cd packages/pdf && npm publish --provenance --access public --ignore-scripts
