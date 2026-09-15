@@ -80,6 +80,43 @@ describe('PdfSource', () => {
     expect(src.get(0)).toBe(src.get(0)); // same cached promise
   });
 
+  it('serves a thumbnail for an evicted page, then upgrades to the full raster', async () => {
+    // happy-dom has no 2D context, so the thumbnail downscale (drawImage) needs a stub to run.
+    const ctx2d = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(
+        ((type: string) =>
+          type === '2d'
+            ? ({ drawImage() {} } as unknown as CanvasRenderingContext2D)
+            : null) as HTMLCanvasElement['getContext'],
+      );
+    try {
+      // The mock page is 120x160 → 76,800 B; a ~100 KB cap holds one page, so a second evicts the
+      // first. preload 0 keeps eviction deterministic (no neighbor prefetch spending the budget).
+      const src = new PdfSource('doc.pdf', {
+        workerSrc: '/pdf.worker.mjs',
+        maxCacheBytes: 100_000,
+        preload: 0,
+      });
+      await src.open();
+      const updated: number[] = [];
+      src.onPageUpdate((i) => updated.push(i));
+
+      expect(((await src.get(0)) as HTMLCanvasElement).width).toBe(120); // full page
+      await src.get(1); // evicts page 0, keeping a thumbnail
+
+      const thumb = (await src.get(0)) as HTMLCanvasElement; // revisit: instant thumbnail
+      expect(thumb.width).toBeLessThan(120);
+      expect(Math.max(thumb.width, thumb.height)).toBeLessThanOrEqual(96); // THUMB_MAX_PX
+
+      // The background re-render signals an upgrade; the next get() yields the full page again.
+      await vi.waitFor(() => expect(updated).toContain(0));
+      expect(((await src.get(0)) as HTMLCanvasElement).width).toBe(120);
+    } finally {
+      ctx2d.mockRestore();
+    }
+  });
+
   it('auto-resolves the worker when none is provided', async () => {
     const src = new PdfSource('doc.pdf');
     await src.open();

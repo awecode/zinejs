@@ -89,6 +89,12 @@ const PROGRESSIVE_LOW_RATIO = 0.35;
 // Ceiling on zoom-tile magnification. Past roughly this point a screen pixel already holds more
 // detail than the reader can resolve, and rasterizing further only costs memory and time.
 const MAX_ZOOM_RENDER_SCALE = 6;
+// Largest dimension (px) of the thumbnail kept when a full page is evicted from the byte cap, so
+// flipping back to an out-of-budget page paints a blurry placeholder at once instead of a blank
+// while it re-rasterizes. A few KB each.
+const THUMB_MAX_PX = 96;
+// Bound on retained thumbnails (LRU), so a very large document does not accumulate them without end.
+const MAX_THUMBS = 200;
 
 /** Free a canvas's backing store. Safari in particular holds the memory until the surface is
  *  resized away, and a zoomed page is large enough for that to matter. */
@@ -102,6 +108,7 @@ function releaseCanvas(content: PageContent): void {
 interface CacheEntry {
   promise: Promise<PageContent>;
   bytes: number; // 0 until the render resolves and its size is known
+  content?: PageContent; // the resolved raster, kept so eviction can downscale it to a thumbnail
 }
 
 function isPdfDocument(src: PdfSrc): src is PdfDocumentLike {
@@ -318,6 +325,10 @@ export class PdfSource implements Source {
    *  and would evict the whole spread from a byte cap sized for fit-to-screen. */
   #zoomCache = new Map<string, Promise<PageContent>>();
 
+  /** Tiny downscaled stand-ins for pages evicted from #cache, so a revisit paints immediately and
+   *  then upgrades. Kept out of the byte cap (a few KB each, bounded by MAX_THUMBS). */
+  #thumbs = new Map<number, PageContent>();
+
   /** Extracted page text, kept apart from #cache: text is scale-independent and negligible next
    *  to a raster, so it has no place in the byte budget that evicts bitmaps. */
   #textCache = new Map<number, Promise<string>>();
@@ -384,6 +395,18 @@ export class PdfSource implements Source {
     // page cache: a zoomed page is many times the size of a normal one and would evict the whole
     // spread, and a reader who zooms out and back in should not pay to render it twice.
     if (opts && opts.scale > 1) return this.#renderZoomed(index, opts.scale, opts.maxSize);
+
+    // Revisiting a page that was evicted under memory pressure: paint its thumbnail now, re-render
+    // the full raster in the background, and signal an upgrade so the engine swaps it in when ready.
+    const thumb = this.#cache.has(index) ? undefined : this.#thumbs.get(index);
+    if (thumb) {
+      this.#thumbs.delete(index); // re-created if this page is evicted again
+      void this.#renderPage(index)
+        .then(() => this.#onUpdate?.(index))
+        .catch(() => {});
+      for (let d = 1; d <= this.#preload; d++) this.prefetch([index - d, index + d]);
+      return Promise.resolve(thumb);
+    }
 
     const decoded = this.#renderPage(index);
     for (let d = 1; d <= this.#preload; d++) {
@@ -502,6 +525,8 @@ export class PdfSource implements Source {
       void pending.then(releaseCanvas).catch(() => {});
     }
     this.#zoomCache.clear();
+    for (const thumb of this.#thumbs.values()) releaseCanvas(thumb);
+    this.#thumbs.clear();
     this.#textCache.clear();
     this.#cachedBytes = 0;
     this.#doc = null;
@@ -524,6 +549,7 @@ export class PdfSource implements Source {
     entry.promise = this.#rasterize(index, firstScale).then(
       (content) => {
         entry.bytes = content.width * content.height * 4; // RGBA
+        entry.content = content; // retained so eviction can downscale it to a thumbnail
         this.#cachedBytes += entry.bytes;
         this.#evictToFit(index);
         if (this.#progressive) this.#upgrade(index, entry, full);
@@ -545,6 +571,7 @@ export class PdfSource implements Source {
         if (this.#cache.get(index) !== entry) return; // evicted or replaced meanwhile
         this.#cachedBytes -= entry.bytes;
         entry.promise = Promise.resolve(hi);
+        entry.content = hi;
         entry.bytes = hi.width * hi.height * 4;
         this.#cachedBytes += entry.bytes;
         this.#evictToFit(index);
@@ -553,14 +580,45 @@ export class PdfSource implements Source {
       .catch(() => {}); // keep the low-res if the upgrade fails
   }
 
-  /** Drop least-recently-used pages (front of the Map) until under the byte cap. */
+  /** Drop least-recently-used pages (front of the Map) until under the byte cap, keeping a small
+   *  thumbnail of each so a later revisit paints at once instead of blank while it re-renders. */
   #evictToFit(keepIndex: number): void {
     for (const [index, entry] of this.#cache) {
       if (this.#cachedBytes <= this.#maxCacheBytes) break;
       if (index === keepIndex || entry.bytes === 0) continue; // keep the newest; skip in-flight renders
+      this.#stashThumb(index, entry);
       this.#cache.delete(index);
       this.#cachedBytes -= entry.bytes;
     }
+  }
+
+  /** Retain a downscaled placeholder for an evicted page, as the most-recent thumb, bounded LRU. */
+  #stashThumb(index: number, entry: CacheEntry): void {
+    const thumb = entry.content ? this.#makeThumb(entry.content) : null;
+    if (!thumb) return;
+    const prev = this.#thumbs.get(index);
+    if (prev) releaseCanvas(prev);
+    this.#thumbs.delete(index);
+    this.#thumbs.set(index, thumb);
+    while (this.#thumbs.size > MAX_THUMBS) {
+      const oldest = this.#thumbs.keys().next().value as number;
+      releaseCanvas(this.#thumbs.get(oldest)!);
+      this.#thumbs.delete(oldest);
+    }
+  }
+
+  /** Draw a page raster onto a tiny canvas. Null when no 2D canvas is available (e.g. SSR). */
+  #makeThumb(content: PageContent): PageContent | null {
+    const { width, height } = content;
+    if (!width || !height || typeof document === 'undefined') return null;
+    const factor = Math.min(1, THUMB_MAX_PX / Math.max(width, height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * factor));
+    canvas.height = Math.max(1, Math.round(height * factor));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(content, 0, 0, canvas.width, canvas.height);
+    return canvas;
   }
 
   /**
