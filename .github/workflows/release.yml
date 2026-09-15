@@ -3,11 +3,11 @@ name: Release
 # Publishes @zinejs/core and @zinejs/pdf to npm with provenance when you push a
 # version tag (e.g. v1.0.0). Also runnable manually from the Actions tab.
 #
-# Auth is tokenless: npm Trusted Publishing (OIDC) is configured for this repo +
-# workflow on npmjs.com, so no NPM_TOKEN secret is needed. Trusted publishing only
-# activates for `npm publish` run from the package directory (not a tarball path),
-# so each package is published in place. @zinejs/pdf's `workspace:^` dep is rewritten
-# to the real version first (what pnpm would otherwise do at pack time).
+# Tokenless auth via npm Trusted Publishing (OIDC), configured for this repo +
+# release.yml on npmjs.com. Requirements (npm docs): id-token: write, npm >= 11.5.1,
+# and `registry-url` set on setup-node so npm is pointed at the registry for the OIDC
+# exchange. No NPM_TOKEN. @zinejs/pdf's `workspace:^` dep is rewritten to the real
+# version before publishing (what pnpm would do at pack time).
 on:
   push:
     tags: ['v*.*.*']
@@ -15,7 +15,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for OIDC trusted publishing + provenance (Sigstore)
+  id-token: write # OIDC trusted publishing + provenance (Sigstore)
 
 jobs:
   publish:
@@ -30,20 +30,23 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 26
+          registry-url: 'https://registry.npmjs.org' # required for the OIDC exchange
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Build here and publish with --ignore-scripts, so the prepublishOnly build does not
-      # run twice. core builds first; pdf's declaration build resolves core from its dist.
+      # Build (published with --ignore-scripts so prepublishOnly does not build again), and
+      # copy the root LICENSE into each package so the published tarball carries it.
       - name: Build
         run: |
           pnpm --filter @zinejs/core build
           pnpm --filter @zinejs/pdf build
+          cp LICENSE packages/core/LICENSE
+          cp LICENSE packages/pdf/LICENSE
 
-      # Publish from the package directory so npm performs the OIDC exchange (tokenless).
-      # Skip if the version is already on npm so re-runs are safe.
+      # Publish from the package directory (the flow trusted publishing hooks into). Skip if
+      # the version is already on npm so re-runs are safe.
       - name: Publish @zinejs/core
         run: |
           V=$(node -p "require('./packages/core/package.json').version")
