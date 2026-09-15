@@ -1,0 +1,40 @@
+name: Release
+
+# Publishes @zinejs/core and @zinejs/pdf to npm with provenance when you push a
+# version tag (e.g. v1.0.0). Also runnable manually from the Actions tab.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance (keyless Sigstore signing via OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org # wires NODE_AUTH_TOKEN into .npmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm -r publish` publishes core then pdf (topological order), running each package's
+      # prepublishOnly build. It rewrites `workspace:^` deps to real versions, skips any version
+      # already on npm, and skips the private root + demo. `--provenance` attaches a signed
+      # attestation linking each tarball to this repo + commit + workflow run.
+      - name: Publish with provenance
+        run: pnpm -r publish --provenance --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
