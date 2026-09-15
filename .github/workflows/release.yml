@@ -2,6 +2,11 @@ name: Release
 
 # Publishes @zinejs/core and @zinejs/pdf to npm with provenance when you push a
 # version tag (e.g. v1.0.0). Also runnable manually from the Actions tab.
+#
+# Auth is tokenless: npm Trusted Publishing (OIDC) is configured for this repo +
+# workflow on npmjs.com, so no NPM_TOKEN secret is needed. The npm CLI (not pnpm,
+# which lacks OIDC/provenance support at the pinned version) performs the publish;
+# `pnpm pack` first rewrites the `workspace:^` dep in @zinejs/pdf to a real version.
 on:
   push:
     tags: ['v*.*.*']
@@ -9,7 +14,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for npm provenance (keyless Sigstore signing via OIDC)
+  id-token: write # required for OIDC trusted publishing + provenance (Sigstore)
 
 jobs:
   publish:
@@ -24,17 +29,35 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 26
-          registry-url: https://registry.npmjs.org # wires NODE_AUTH_TOKEN into .npmrc
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `pnpm -r publish` publishes core then pdf (topological order), running each package's
-      # prepublishOnly build. It rewrites `workspace:^` deps to real versions, skips any version
-      # already on npm, and skips the private root + demo. `--provenance` attaches a signed
-      # attestation linking each tarball to this repo + commit + workflow run.
-      - name: Publish with provenance
-        run: pnpm -r publish --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Tarball publishes do not run the build lifecycle, so build explicitly (core first;
+      # pdf's declaration build resolves core from its dist).
+      - name: Build
+        run: |
+          pnpm --filter @zinejs/core build
+          pnpm --filter @zinejs/pdf build
+
+      # For each package: skip if that version is already on npm; otherwise pnpm-pack it
+      # (rewriting workspace:^ to the real version) and npm-publish the tarball with
+      # provenance. npm uses the repo's OIDC identity (no token).
+      - name: Publish @zinejs/core
+        run: |
+          V=$(node -p "require('./packages/core/package.json').version")
+          if npm view "@zinejs/core@$V" version >/dev/null 2>&1; then
+            echo "@zinejs/core@$V already on npm, skipping"; exit 0
+          fi
+          TGZ=$(cd packages/core && pnpm pack | tail -1)
+          npm publish "packages/core/$TGZ" --provenance --access public
+
+      - name: Publish @zinejs/pdf
+        run: |
+          V=$(node -p "require('./packages/pdf/package.json').version")
+          if npm view "@zinejs/pdf@$V" version >/dev/null 2>&1; then
+            echo "@zinejs/pdf@$V already on npm, skipping"; exit 0
+          fi
+          TGZ=$(cd packages/pdf && pnpm pack | tail -1)
+          npm publish "packages/pdf/$TGZ" --provenance --access public
