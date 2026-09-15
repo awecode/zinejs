@@ -20,6 +20,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Must match the "Environment" set on the npm trusted-publisher config (public), so the
+    # OIDC token's environment claim lines up. Remove both sides together to drop it.
+    environment: public
     steps:
       - uses: actions/checkout@v7
 
