@@ -41,6 +41,8 @@ importers:
 
   packages/core: {}
 
+  packages/create: {}
+
   packages/pdf:
     dependencies:
       pdfjs-dist:

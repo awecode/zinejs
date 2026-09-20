@@ -36,7 +36,7 @@ if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?
   exit 1
 fi
 
-PKGS=(packages/core packages/pdf)
+PKGS=(packages/core packages/pdf packages/create)
 
 # Current version = the highest of the two packages (they are normally in sync).
 CORE_V=$(node -p "require('./packages/core/package.json').version")

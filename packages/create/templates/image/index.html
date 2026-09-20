@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>zinejs flipbook</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #14141b;
+      }
+      /* Size the book by width; zinejs sets the height via aspect-ratio after the first paint. */
+      #book {
+        width: min(900px, 92vw);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="book"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

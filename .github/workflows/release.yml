@@ -47,6 +47,7 @@ jobs:
           pnpm --filter @zinejs/pdf build
           cp LICENSE packages/core/LICENSE
           cp LICENSE packages/pdf/LICENSE
+          cp LICENSE packages/create/LICENSE
 
       # Publish from the package directory (the flow trusted publishing hooks into). Skip if
       # the version is already on npm so re-runs are safe.
@@ -66,3 +67,11 @@ jobs:
           fi
           node -e "const fs=require('fs');const p='packages/pdf/package.json';const j=JSON.parse(fs.readFileSync(p));const cv=require('./packages/core/package.json').version;for(const s of ['dependencies','devDependencies','peerDependencies','optionalDependencies']){const d=j[s];if(d)for(const k in d)if(String(d[k]).startsWith('workspace:'))d[k]='^'+cv;}fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');console.log('rewrote workspace deps to ^'+cv);"
           cd packages/pdf && npm publish --provenance --access public --ignore-scripts
+
+      - name: Publish @zinejs/create
+        run: |
+          V=$(node -p "require('./packages/create/package.json').version")
+          if npm view "@zinejs/create@$V" version >/dev/null 2>&1; then
+            echo "@zinejs/create@$V already on npm, skipping"; exit 0
+          fi
+          cd packages/create && npm publish --provenance --access public --ignore-scripts
