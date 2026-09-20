@@ -60,7 +60,10 @@ function zinejs_render_container($opts) {
     if (isset($opts['clickToFlip']) && in_array($opts['clickToFlip'], array('edge', 'half', 'off'), true)) {
         $zine['clickToFlip'] = $opts['clickToFlip'];
     }
-    if (isset($opts['curl']) && in_array($opts['curl'], array('cone', 'simple'), true)) {
+    // cone/simple resolve by name in the engine; roll/leaf/flick/silk are loaded on demand and
+    // swapped for their model objects by the init script (see init.js).
+    if (isset($opts['curl']) &&
+        in_array($opts['curl'], array('cone', 'simple', 'roll', 'leaf', 'flick', 'silk'), true)) {
         $zine['curl'] = $opts['curl'];
     }
     $flip = isset($opts['flipDuration']) ? intval($opts['flipDuration']) : 0;

@@ -4,7 +4,7 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.1.9
 License: PolyForm Noncommercial 1.0.0
 License URI: https://zinejs.com/license
 
@@ -66,6 +66,11 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 Yes. Add multiple blocks or shortcodes; each mounts independently.
 
 == Changelog ==
+
+= 0.1.9 =
+* All six curl styles selectable (cone, simple, roll, leaf, flick, silk); the non-bundled ones load on demand.
+* Block sidebar: Spread mode stands alone at the top, other layout options collapsed.
+* Default to full container width (no forced cap) and let the book set its own aspect ratio.
 
 = 0.1.5 =
 * Split into two dedicated blocks: Zine PDF Flipbook and Zine Image Flipbook (shared options).

@@ -111,6 +111,10 @@
         options: [
           { label: __('Cone (realistic)', 'zinejs'), value: 'cone' },
           { label: __('Simple (flat fold)', 'zinejs'), value: 'simple' },
+          { label: __('Roll', 'zinejs'), value: 'roll' },
+          { label: __('Leaf', 'zinejs'), value: 'leaf' },
+          { label: __('Flick', 'zinejs'), value: 'flick' },
+          { label: __('Silk', 'zinejs'), value: 'silk' },
         ],
         onChange: function (v) { set({ curl: v }); },
       }),
