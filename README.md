@@ -607,7 +607,7 @@ Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short f
 
 ## Localization
 
-Every reader-facing string (control labels, panel and loading text, and the screen-reader page announcement) defaults to English and can be overridden via `strings`. Pass only the keys you want to change; the rest stay English. Bring your own translations; no locale packs are bundled.
+Every reader-facing string (control labels, panel and loading text, and the screen-reader page announcement) defaults to English and can be overridden via `strings`. Pass only the keys you want to change; the rest stay English.
 
 ```js
 new Zine(el, {
@@ -615,15 +615,12 @@ new Zine(el, {
   strings: {
     nextPage: 'Page suivante',
     prevPage: 'Page précédente',
-    // Entries that include a number or text are functions, so word order and
-    // pluralization are yours to control:
     pageAnnounce: (current, total) => `Page ${current} sur ${total}`,
-    noMatches: (query) => `Aucun résultat pour « ${query} »`,
   },
 })
 ```
 
-Reading direction is separate: set `direction: 'rtl'` to mirror the layout and page-turn direction. The full key list is the `ZineStrings` type (exported), and `defaultStrings` is exported if you want to build on the English set.
+Full guide, including the dynamic (function) entries, the exported `ZineStrings` type, and RTL: **[LOCALIZATION.md](LOCALIZATION.md)**.
 
 ## Sources
 
