@@ -15,6 +15,7 @@
     "spreadMode": { "type": "string", "default": "cover" },
     "controls": { "type": "boolean", "default": true },
     "responsiveSpread": { "type": "boolean", "default": true },
+    "singlePageThreshold": { "type": "string", "default": "" },
     "direction": { "type": "string", "default": "ltr" },
     "fit": { "type": "string", "default": "contain" },
     "maxWidth": { "type": "string", "default": "900" },

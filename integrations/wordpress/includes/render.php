@@ -95,6 +95,7 @@ function zinejs_render_block($attributes) {
         'direction'        => isset($attributes['direction']) ? $attributes['direction'] : 'ltr',
         'fit'              => isset($attributes['fit']) ? $attributes['fit'] : 'contain',
         'responsiveSpread' => isset($attributes['responsiveSpread']) ? $attributes['responsiveSpread'] : true,
+        'singlePageThreshold' => isset($attributes['singlePageThreshold']) ? $attributes['singlePageThreshold'] : '',
         'maxWidth'         => isset($attributes['maxWidth']) ? $attributes['maxWidth'] : '900',
         'aspect'           => isset($attributes['aspect']) ? $attributes['aspect'] : '3/2',
     ));

@@ -68,6 +68,13 @@
           checked: a.responsiveSpread,
           onChange: function (v) { set({ responsiveSpread: v }); },
         }),
+        a.responsiveSpread &&
+          el(TextControl, {
+            label: __('Collapse below width (px)', 'zinejs'),
+            help: __('Screens narrower than this show one page. Blank uses the default (500).', 'zinejs'),
+            value: a.singlePageThreshold,
+            onChange: function (v) { set({ singlePageThreshold: v.replace(/[^0-9]/g, '') }); },
+          }),
         el(TextControl, {
           label: __('Max width (px)', 'zinejs'),
           value: a.maxWidth,
