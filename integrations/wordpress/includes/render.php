@@ -135,13 +135,18 @@ function zinejs_render_container($opts) {
         $config['images'] = array_map('esc_url_raw', $images);
     }
 
-    // Sizing lives in CSS: a max width and an aspect ratio (the engine also sets aspect-ratio from
-    // the book, but a starting value avoids a layout jump before the first page loads).
+    // Sizing lives in CSS. By default the book fills its container (the theme column, or the block's
+    // wide/full alignment). An optional max width caps it; an optional aspect ratio reserves a shape
+    // before the first page loads (the engine sets the real aspect-ratio from the book after paint).
+    $style = '';
     $max_width = preg_replace('/[^0-9]/', '', (string) $opts['maxWidth']);
-    $max_width = $max_width !== '' ? $max_width : '900';
+    if ($max_width !== '') {
+        $style .= 'max-width:' . esc_attr($max_width) . 'px;';
+    }
     $aspect = (string) $opts['aspect'];
-    $aspect_css = ($aspect === '' || $aspect === 'auto') ? '' : 'aspect-ratio:' . esc_attr($aspect) . ';';
-    $style = 'width:min(' . esc_attr($max_width) . 'px,100%);' . $aspect_css;
+    if ($aspect !== '' && $aspect !== 'auto') {
+        $style .= 'aspect-ratio:' . esc_attr($aspect) . ';';
+    }
 
     $json = wp_json_encode($config);
 
@@ -170,8 +175,8 @@ function zinejs_shared_block_opts($attributes) {
         'fit'                 => $a('fit', 'contain'),
         'responsiveSpread'    => $a('responsiveSpread', true),
         'singlePageThreshold' => $a('singlePageThreshold', ''),
-        'maxWidth'            => $a('maxWidth', '900'),
-        'aspect'              => $a('aspect', '3/2'),
+        'maxWidth'            => $a('maxWidth', ''),
+        'aspect'              => $a('aspect', 'auto'),
         'clickToFlip'         => $a('clickToFlip', 'edge'),
         'curl'                => $a('curl', 'cone'),
         'flipDuration'        => $a('flipDuration', ''),
