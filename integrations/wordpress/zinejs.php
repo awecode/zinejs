@@ -3,7 +3,7 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://zinejs.com
  * Description:       Turn a PDF or a set of images into an interactive page-flip book, via a block or the [zine] shortcode.
- * Version:           0.1.13
+ * Version:           0.1.14
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '0.1.13');
+define('ZINEJS_VERSION', '0.1.14');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
@@ -103,32 +103,97 @@ function zinejs_register_block() {
 }
 add_action('init', 'zinejs_register_block');
 
-/** The [zine] shortcode: [zine pdf="url" spread="cover" controls="true" max-width="800"] (max-width and aspect optional). */
+/**
+ * The [zine] shortcode. Exposes the same options as the blocks; the source is a PDF (`pdf`) or a
+ * comma-separated list of image URLs (`images`).
+ *
+ * Example: [zine pdf="brochure.pdf" spread="cover" controls-position="top" curl="silk" sound="true"]
+ */
 function zinejs_shortcode($atts) {
     $atts = shortcode_atts(array(
-        'pdf'        => '',
-        'images'     => '',
-        'spread'     => 'cover',
-        'controls'   => 'true',
-        'direction'  => 'ltr',
-        'fit'        => 'contain',
-        'responsive' => 'true',
-        'threshold'  => '',
-        'max-width'  => '',
-        'aspect'     => 'auto',
+        // Source.
+        'pdf'                  => '',
+        'images'               => '',
+        // Layout.
+        'spread'               => 'cover',
+        'direction'            => 'ltr',
+        'fit'                  => 'contain',
+        'responsive'           => 'true',
+        'threshold'            => '',
+        'max-width'            => '',
+        'aspect'               => 'auto',
+        // Interaction.
+        'click-to-flip'        => 'edge',
+        'curl'                 => 'cone',
+        'flip-duration'        => '',
+        'start-page'           => '0',
+        // Zoom.
+        'zoom'                 => 'true',
+        'zoom-max'             => '',
+        'zoom-wheel'           => 'true',
+        'zoom-double-click'    => 'true',
+        // Controls and chrome.
+        'controls'             => 'true',
+        'controls-position'    => 'bottom',
+        'controls-scheme'      => 'auto',
+        'controls-arrows'      => 'true',
+        'context-menu'         => 'true',
+        'loading'              => 'true',
+        'hints'                => 'true',
+        'deep-link'            => 'true',
+        // Reader permissions.
+        'allow-download'       => 'true',
+        'allow-print'          => 'true',
+        'allow-share'          => 'true',
+        // Covers.
+        'front-cover'          => '',
+        'back-cover'           => '',
+        // Sound.
+        'sound'                => 'false',
+        'sound-volume'         => '',
+        'sound-muted'          => 'false',
+        'sound-persist'        => 'false',
     ), $atts, 'zine');
 
+    $bool = function ($key) use ($atts) {
+        return filter_var($atts[$key], FILTER_VALIDATE_BOOLEAN);
+    };
+
     return zinejs_render_container(array(
-        'pdf'              => $atts['pdf'],
-        'images'           => array_filter(array_map('trim', explode(',', $atts['images']))),
-        'spreadMode'       => $atts['spread'],
-        'controls'         => filter_var($atts['controls'], FILTER_VALIDATE_BOOLEAN),
-        'direction'        => $atts['direction'],
-        'fit'              => $atts['fit'],
-        'responsiveSpread' => filter_var($atts['responsive'], FILTER_VALIDATE_BOOLEAN),
+        'pdf'                 => $atts['pdf'],
+        'images'              => array_filter(array_map('trim', explode(',', $atts['images']))),
+        'spreadMode'          => $atts['spread'],
+        'direction'           => $atts['direction'],
+        'fit'                 => $atts['fit'],
+        'responsiveSpread'    => $bool('responsive'),
         'singlePageThreshold' => $atts['threshold'],
-        'maxWidth'         => $atts['max-width'],
-        'aspect'           => $atts['aspect'],
+        'maxWidth'            => $atts['max-width'],
+        'aspect'              => $atts['aspect'],
+        'clickToFlip'         => $atts['click-to-flip'],
+        'curl'                => $atts['curl'],
+        'flipDuration'        => $atts['flip-duration'],
+        'startPage'           => $atts['start-page'],
+        'zoomEnabled'         => $bool('zoom'),
+        'zoomMax'             => $atts['zoom-max'],
+        'zoomWheel'           => $bool('zoom-wheel'),
+        'zoomDoubleClick'     => $bool('zoom-double-click'),
+        'controls'            => $bool('controls'),
+        'controlsPosition'    => $atts['controls-position'],
+        'controlsColorScheme' => $atts['controls-scheme'],
+        'controlsArrows'      => $bool('controls-arrows'),
+        'contextMenu'         => $bool('context-menu'),
+        'loading'             => $bool('loading'),
+        'hints'               => $bool('hints'),
+        'deepLink'            => $bool('deep-link'),
+        'allowDownload'       => $bool('allow-download'),
+        'allowPrint'          => $bool('allow-print'),
+        'allowShare'          => $bool('allow-share'),
+        'frontCover'          => $atts['front-cover'],
+        'backCover'           => $atts['back-cover'],
+        'sound'               => $bool('sound'),
+        'soundVolume'         => $atts['sound-volume'],
+        'soundMuted'          => $bool('sound-muted'),
+        'soundPersist'        => $bool('sound-persist'),
     ));
 }
 add_shortcode('zine', 'zinejs_shortcode');

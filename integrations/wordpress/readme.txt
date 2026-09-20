@@ -4,7 +4,7 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.13
+Stable tag: 0.1.14
 License: PolyForm Noncommercial 1.0.0
 License URI: https://zinejs.com/license
 
@@ -27,14 +27,20 @@ scripts are enqueued only on pages that actually contain a flipbook.
 
 = Shortcode =
 
-`[zine pdf="https://example.com/brochure.pdf" spread="cover" controls="true" max-width="900" aspect="3/2"]`
+`[zine pdf="https://example.com/brochure.pdf" spread="cover" curl="silk" controls-position="top"]`
 
-Attributes: `pdf` (URL), `images` (comma-separated URLs, as an alternative to a PDF), `spread`
-(cover | double | single | book), `controls` (true | false), `direction` (ltr | rtl),
-`fit` (contain | fill), `responsive` (true | false), `threshold` (px), `max-width` (px),
-`aspect` (e.g. 3/2, or auto).
+The shortcode accepts the same options as the blocks. Source: `pdf` (URL) or `images`
+(comma-separated URLs). Layout: `spread` (cover | double | single | book), `direction` (ltr | rtl),
+`fit` (contain | fill), `responsive` (true | false), `threshold` (px), `max-width` (px), `aspect`
+(e.g. 3/2, or auto). Interaction: `click-to-flip` (edge | half | off), `curl` (cone | simple | roll
+| leaf | flick | silk), `flip-duration` (ms), `start-page` (0-based). Zoom: `zoom` (true | false),
+`zoom-max`, `zoom-wheel`, `zoom-double-click`. Controls: `controls` (true | false),
+`controls-position` (top | bottom | left | right), `controls-scheme` (auto | light | dark),
+`controls-arrows`, `context-menu`, `loading`, `hints`, `deep-link`. Permissions: `allow-download`,
+`allow-print`, `allow-share`. Covers: `front-cover` (URL), `back-cover` (URL). Sound: `sound`
+(true | false), `sound-volume` (0..1), `sound-muted`, `sound-persist`.
 
-By default the book drops to one page per spread when its container is narrower than 640px
+By default the book drops to one page per spread when its container is narrower than 500px
 (`threshold`), so it stays readable on phones and in narrow theme columns. If your column is narrow
 but you still want two-page spreads (for example in `cover` mode), set `responsive="false"`, or use
 the block's Wide/Full alignment to give it more room.
@@ -66,6 +72,9 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 Yes. Add multiple blocks or shortcodes; each mounts independently.
 
 == Changelog ==
+
+= 0.1.14 =
+* Shortcode now accepts the full option set (parity with the blocks).
 
 = 0.1.13 =
 * Block: toolbar position (top/bottom/left/right), color scheme (auto/light/dark) and large page arrows.
