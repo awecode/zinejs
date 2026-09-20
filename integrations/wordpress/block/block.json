@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "zinejs/flipbook",
+  "title": "Zine Flipbook",
+  "category": "media",
+  "icon": "book-alt",
+  "description": "Turn a PDF into an interactive page-flip book.",
+  "keywords": ["flipbook", "pdf", "book", "magazine", "zine"],
+  "textdomain": "zinejs",
+  "editorScript": "zinejs-block",
+  "editorStyle": "zinejs",
+  "attributes": {
+    "url": { "type": "string", "default": "" },
+    "spreadMode": { "type": "string", "default": "cover" },
+    "controls": { "type": "boolean", "default": true },
+    "direction": { "type": "string", "default": "ltr" },
+    "fit": { "type": "string", "default": "contain" },
+    "maxWidth": { "type": "string", "default": "900" },
+    "aspect": { "type": "string", "default": "3/2" }
+  },
+  "supports": {
+    "html": false,
+    "align": ["wide", "full"]
+  }
+}
