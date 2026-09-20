@@ -47,7 +47,11 @@ function zinejs_render_container($opts) {
         'responsiveSpread' => array_key_exists('responsiveSpread', $opts)
             ? (bool) $opts['responsiveSpread'] : true,
     );
-    $threshold = isset($opts['singlePageThreshold']) ? intval($opts['singlePageThreshold']) : 0;
+    // Default the collapse-to-one-page breakpoint below a typical WordPress content column (often
+    // ~620px), so 'cover'/'double' keep two-page spreads in a normal column and collapse only on
+    // genuinely narrow screens (phones). Core's own default is 640; a WP embed wants it lower.
+    $raw = isset($opts['singlePageThreshold']) ? $opts['singlePageThreshold'] : '';
+    $threshold = ($raw === '' || $raw === null) ? 500 : intval($raw);
     if ($threshold > 0) {
         $zine['singlePageThreshold'] = $threshold;
     }

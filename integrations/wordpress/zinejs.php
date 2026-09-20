@@ -3,7 +3,7 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://zinejs.com
  * Description:       Turn a PDF or a set of images into an interactive page-flip book, via a block or the [zine] shortcode.
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '0.1.0');
+define('ZINEJS_VERSION', '0.1.1');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
