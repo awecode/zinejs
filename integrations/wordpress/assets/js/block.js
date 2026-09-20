@@ -1,7 +1,7 @@
 /**
- * Editor UI for the Zine Flipbook block. Written in plain JS (no JSX/build step): it picks a PDF
- * from the Media Library and exposes a few options. The block is dynamic, so the front-end markup
- * comes from PHP (render_callback); `save` returns null.
+ * Editor UI for the two Zine Flipbook blocks (PDF and Images). Written in plain JS (no JSX/build
+ * step). Both blocks are dynamic (PHP renders the front end; `save` returns null) and share every
+ * option panel; only the source picker differs.
  */
 (function (blocks, element, blockEditor, components, i18n) {
   'use strict';
@@ -18,13 +18,11 @@
   var Button = components.Button;
   var Placeholder = components.Placeholder;
 
-  function edit(props) {
-    var a = props.attributes;
-    var set = props.setAttributes;
-
+  /** The option panels shared by both blocks. Returns an <InspectorControls>. */
+  function sharedSettings(a, set) {
     var num = function (key) {
       return function (v) {
-        var set2 = {}; set2[key] = v.replace(/[^0-9]/g, ''); set(set2);
+        var s = {}; s[key] = v.replace(/[^0-9]/g, ''); set(s);
       };
     };
 
@@ -204,7 +202,6 @@
       })
     );
 
-    // Front/back cover pickers (image URLs prepended/appended as lone pages).
     var coverPicker = function (key, label) {
       return el(
         'div',
@@ -218,8 +215,12 @@
             return el(
               'div',
               { style: { display: 'flex', gap: '8px' } },
-              el(Button, { variant: 'secondary', onClick: o.open }, a[key] ? __('Replace', 'zinejs') : __('Select image', 'zinejs')),
-              a[key] && el(Button, { variant: 'tertiary', isDestructive: true, onClick: function () { var c = {}; c[key] = ''; set(c); } }, __('Remove', 'zinejs'))
+              el(Button, { variant: 'secondary', onClick: o.open },
+                a[key] ? __('Replace', 'zinejs') : __('Select image', 'zinejs')),
+              a[key] && el(Button, {
+                variant: 'tertiary', isDestructive: true,
+                onClick: function () { var c = {}; c[key] = ''; set(c); },
+              }, __('Remove', 'zinejs'))
             );
           },
         }))
@@ -232,21 +233,23 @@
       coverPicker('backCover', __('Back cover image', 'zinejs'))
     );
 
-    var settings = el(InspectorControls, {}, layout, interaction, zoom, chrome, permissions, covers);
+    return el(InspectorControls, {}, layout, interaction, zoom, chrome, permissions, covers);
+  }
 
-    var isImages = a.sourceType === 'images';
+  /** Preview shown once a source is chosen: a summary line plus the picker to change it. */
+  function preview(fileLabel, picker) {
+    return el(
+      'div',
+      { className: 'zine-block-preview' },
+      el('p', { className: 'zine-block-file' }, fileLabel),
+      el('p', { className: 'zine-block-note' }, __('The flipbook renders on the published page.', 'zinejs')),
+      picker
+    );
+  }
 
-    var sourceToggle = el(SelectControl, {
-      label: __('Source', 'zinejs'),
-      value: a.sourceType,
-      options: [
-        { label: __('PDF', 'zinejs'), value: 'pdf' },
-        { label: __('Images', 'zinejs'), value: 'images' },
-      ],
-      onChange: function (v) { set({ sourceType: v }); },
-    });
-
-    var pdfPicker = el(MediaUploadCheck, {}, el(MediaUpload, {
+  function editPdf(props) {
+    var a = props.attributes, set = props.setAttributes;
+    var picker = el(MediaUploadCheck, {}, el(MediaUpload, {
       onSelect: function (m) { set({ url: m.url }); },
       allowedTypes: ['application/pdf'],
       value: a.url,
@@ -255,8 +258,19 @@
           a.url ? __('Replace PDF', 'zinejs') : __('Select PDF', 'zinejs'));
       },
     }));
+    var body = a.url
+      ? preview(a.url.split('/').pop(), picker)
+      : el(Placeholder, {
+          icon: 'media-document',
+          label: __('Zine PDF Flipbook', 'zinejs'),
+          instructions: __('Choose a PDF to turn into a page-flip book.', 'zinejs'),
+        }, picker);
+    return el('div', useBlockProps(), sharedSettings(a, set), body);
+  }
 
-    var imagesPicker = el(MediaUploadCheck, {}, el(MediaUpload, {
+  function editImage(props) {
+    var a = props.attributes, set = props.setAttributes;
+    var picker = el(MediaUploadCheck, {}, el(MediaUpload, {
       onSelect: function (media) {
         set({
           images: media.map(function (m) { return m.url; }),
@@ -273,44 +287,20 @@
           count ? __('Edit images', 'zinejs') + ' (' + count + ')' : __('Select images', 'zinejs'));
       },
     }));
-
-    var picker = isImages ? imagesPicker : pdfPicker;
-    var hasSource = isImages ? (a.images && a.images.length) : a.url;
-    var fileLabel = isImages ? (a.images.length + ' ' + __('images', 'zinejs')) : (a.url ? a.url.split('/').pop() : '');
-
-    var body = hasSource
-      ? el(
-          'div',
-          { className: 'zine-block-preview' },
-          el('p', { className: 'zine-block-file' }, fileLabel),
-          el(
-            'p',
-            { className: 'zine-block-note' },
-            __('The flipbook renders on the published page.', 'zinejs')
-          ),
-          sourceToggle,
-          picker
-        )
-      : el(
-          Placeholder,
-          {
-            icon: 'book-alt',
-            label: __('Zine Flipbook', 'zinejs'),
-            instructions: isImages
-              ? __('Choose images to turn into a page-flip book.', 'zinejs')
-              : __('Choose a PDF to turn into a page-flip book.', 'zinejs'),
-          },
-          sourceToggle,
-          picker
-        );
-
-    return el('div', useBlockProps(), settings, body);
+    var count = (a.images || []).length;
+    var body = count
+      ? preview(count + ' ' + __('images', 'zinejs'), picker)
+      : el(Placeholder, {
+          icon: 'images-alt2',
+          label: __('Zine Image Flipbook', 'zinejs'),
+          instructions: __('Choose images to turn into a page-flip book.', 'zinejs'),
+        }, picker);
+    return el('div', useBlockProps(), sharedSettings(a, set), body);
   }
 
-  blocks.registerBlockType('zinejs/flipbook', {
-    edit: edit,
-    save: function () { return null; }, // dynamic: PHP renders the front end
-  });
+  var save = function () { return null; }; // dynamic: PHP renders the front end
+  blocks.registerBlockType('zinejs/pdf-flipbook', { edit: editPdf, save: save });
+  blocks.registerBlockType('zinejs/image-flipbook', { edit: editImage, save: save });
 })(
   window.wp.blocks,
   window.wp.element,

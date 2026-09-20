@@ -3,7 +3,7 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://zinejs.com
  * Description:       Turn a PDF or a set of images into an interactive page-flip book, via a block or the [zine] shortcode.
- * Version:           0.1.4
+ * Version:           0.1.5
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '0.1.4');
+define('ZINEJS_VERSION', '0.1.5');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
@@ -78,14 +78,13 @@ function zinejs_enqueue() {
     wp_enqueue_script('zinejs-init');
 }
 
-/** Register the block (dynamic: PHP renders it, so the block and the shortcode share one path). */
+/** Register the two blocks (dynamic: PHP renders them, so blocks and shortcode share one path).
+ *  A PDF block and an image block, each with its own picker; all options are shared. */
 function zinejs_register_block() {
     if (!function_exists('register_block_type')) {
         return; // Classic-only WordPress; the shortcode still works.
     }
-    register_block_type(ZINEJS_PATH . 'block', array(
-        'render_callback' => 'zinejs_render_block',
-    ));
+    // One editor script registers both block types; each block.json points its editorScript here.
     wp_register_script(
         'zinejs-block',
         ZINEJS_URL . 'assets/js/block.js',
@@ -93,6 +92,12 @@ function zinejs_register_block() {
         ZINEJS_VERSION,
         true
     );
+    register_block_type(ZINEJS_PATH . 'block-pdf', array(
+        'render_callback' => 'zinejs_render_pdf_block',
+    ));
+    register_block_type(ZINEJS_PATH . 'block-image', array(
+        'render_callback' => 'zinejs_render_image_block',
+    ));
 }
 add_action('init', 'zinejs_register_block');
 

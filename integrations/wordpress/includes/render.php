@@ -152,21 +152,12 @@ function zinejs_render_container($opts) {
     );
 }
 
-/**
- * Block render callback. Maps the block's saved attributes onto the shared renderer.
- *
- * @param array $attributes
- * @return string
- */
-function zinejs_render_block($attributes) {
+/** Map the options shared by both blocks (everything except the source) from block attributes. */
+function zinejs_shared_block_opts($attributes) {
     $a = function ($key, $default) use ($attributes) {
         return array_key_exists($key, $attributes) ? $attributes[$key] : $default;
     };
-    $images_mode = $a('sourceType', 'pdf') === 'images';
-    $images = $a('images', array());
-    return zinejs_render_container(array(
-        'pdf'                 => $images_mode ? '' : $a('url', ''),
-        'images'              => $images_mode && is_array($images) ? $images : array(),
+    return array(
         'frontCover'          => $a('frontCover', ''),
         'backCover'           => $a('backCover', ''),
         'deepLink'            => $a('deepLink', true),
@@ -181,19 +172,33 @@ function zinejs_render_block($attributes) {
         'singlePageThreshold' => $a('singlePageThreshold', ''),
         'maxWidth'            => $a('maxWidth', '900'),
         'aspect'              => $a('aspect', '3/2'),
-        // Interaction.
         'clickToFlip'         => $a('clickToFlip', 'edge'),
         'curl'                => $a('curl', 'cone'),
         'flipDuration'        => $a('flipDuration', ''),
         'startPage'           => $a('startPage', 0),
-        // Zoom.
         'zoomEnabled'         => $a('zoomEnabled', true),
         'zoomMax'             => $a('zoomMax', ''),
         'zoomWheel'           => $a('zoomWheel', true),
         'zoomDoubleClick'     => $a('zoomDoubleClick', true),
-        // Chrome.
         'contextMenu'         => $a('contextMenu', true),
         'loading'             => $a('loading', true),
         'hints'               => $a('hints', true),
-    ));
+    );
+}
+
+/** Render callback for the PDF block. */
+function zinejs_render_pdf_block($attributes) {
+    $opts = zinejs_shared_block_opts($attributes);
+    $opts['pdf'] = isset($attributes['url']) ? $attributes['url'] : '';
+    $opts['images'] = array();
+    return zinejs_render_container($opts);
+}
+
+/** Render callback for the image block. */
+function zinejs_render_image_block($attributes) {
+    $opts = zinejs_shared_block_opts($attributes);
+    $opts['pdf'] = '';
+    $opts['images'] = isset($attributes['images']) && is_array($attributes['images'])
+        ? $attributes['images'] : array();
+    return zinejs_render_container($opts);
 }

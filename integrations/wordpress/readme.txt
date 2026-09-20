@@ -16,9 +16,10 @@ zinejs Flipbook embeds a fast, GPU-accelerated page-flip reader in your posts an
 PDF from your Media Library and readers can flip, zoom, and page through it like a real book. A CSS
 fallback keeps it working on devices without WebGL.
 
-Two ways to add a flipbook:
+Ways to add a flipbook:
 
-* The **Zine Flipbook** block: pick a PDF and set a few options in the editor.
+* The **Zine PDF Flipbook** block: pick a PDF and set options in the editor.
+* The **Zine Image Flipbook** block: pick a set of images.
 * The **[zine] shortcode**: for the Classic editor, theme templates, and page builders.
 
 The engine and pdf.js are bundled with the plugin, so nothing loads from a third-party CDN, and the
@@ -65,6 +66,9 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 Yes. Add multiple blocks or shortcodes; each mounts independently.
 
 == Changelog ==
+
+= 0.1.5 =
+* Split into two dedicated blocks: Zine PDF Flipbook and Zine Image Flipbook (shared options).
 
 = 0.1.4 =
 * Block: image-book source (build a flipbook from images, not just a PDF).
