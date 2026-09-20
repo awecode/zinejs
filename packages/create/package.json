@@ -1,10 +1,16 @@
 {
   "name": "@zinejs/create",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Scaffold a new zinejs flipbook project (npm create @zinejs).",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
-  "keywords": ["zinejs", "flipbook", "create", "scaffold", "starter"],
+  "keywords": [
+    "zinejs",
+    "flipbook",
+    "create",
+    "scaffold",
+    "starter"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/awecode/zinejs.git",
@@ -15,7 +21,10 @@
   "bin": {
     "create-zine": "index.js"
   },
-  "files": ["index.js", "templates"],
+  "files": [
+    "index.js",
+    "templates"
+  ],
   "publishConfig": {
     "access": "public"
   },
