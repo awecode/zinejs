@@ -26,9 +26,11 @@
       };
     };
 
-    var layout = el(
+    // The one commonly-changed control sits on its own, open by default; the rest of the layout
+    // options are used rarely, so they live in a collapsed panel below.
+    var book = el(
       PanelBody,
-      { title: __('Layout', 'zinejs'), initialOpen: true },
+      { title: __('Book', 'zinejs'), initialOpen: true },
       el(SelectControl, {
         label: __('Spread mode', 'zinejs'),
         value: a.spreadMode,
@@ -39,7 +41,12 @@
           { label: __('Book (lone first and last)', 'zinejs'), value: 'book' },
         ],
         onChange: function (v) { set({ spreadMode: v }); },
-      }),
+      })
+    );
+
+    var layout = el(
+      PanelBody,
+      { title: __('Layout', 'zinejs'), initialOpen: false },
       el(SelectControl, {
         label: __('Reading direction', 'zinejs'),
         value: a.direction,
@@ -233,7 +240,7 @@
       coverPicker('backCover', __('Back cover image', 'zinejs'))
     );
 
-    return el(InspectorControls, {}, layout, interaction, zoom, chrome, permissions, covers);
+    return el(InspectorControls, {}, book, layout, interaction, zoom, chrome, permissions, covers);
   }
 
   /** Preview shown once a source is chosen: a summary line plus the picker to change it. */
