@@ -83,6 +83,12 @@
       "default": "edge",
       "description": "How a tap/click turns pages: near an edge, by page half, or off."
     },
+    "fit": {
+      "type": "string",
+      "enum": ["contain", "fill"],
+      "default": "contain",
+      "description": "How a page whose size differs from the book fits: contain keeps its aspect and centers it (a margin shows); fill stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout."
+    },
     "clickZoneSize": {
       "type": "number",
       "minimum": 0,

@@ -19,6 +19,9 @@ export interface RenderOptions {
   curl?: CurlSpec;
   /** Corner the fold originates from for anchored curls; y in [0,1] (where the reader tapped). */
   anchor?: CurlAnchor;
+  /** How a page whose size differs from the book's fits: `contain` (default) keeps its aspect and
+   *  centers it (a margin appears); `fill` stretches it to the book's shape. Book-global. */
+  fit?: 'contain' | 'fill';
 }
 
 /** Layout metrics the engine needs for geometry and mode decisions. */
@@ -34,6 +37,10 @@ export interface LayoutMetrics {
    *  full spread, but the centered half for a lone page (cover / book front-back). This is the
    *  region the engine hit-tests against so taps track the visible page. Omit to fall back. */
   content?: { x: number; y: number; width: number; height: number };
+  /** The book's stable aspect (width / height) for the whole document, from the first page rather
+   *  than the current spread. The container is sized to this so a document with off-size pages does
+   *  not resize (layout shift) as you navigate. Omit before the first paint. */
+  containerAspect?: number;
   /**
    * Where `content` would land at zoom `scale` with no pan, in container px.
    *

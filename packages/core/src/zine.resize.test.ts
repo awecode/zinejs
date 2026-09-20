@@ -179,6 +179,32 @@ describe('Zine — container aspect-ratio convergence', () => {
     // comparison rewrote on every cycle, the loop). At most one settling write is acceptable.
     expect(writes.length - afterReady).toBeLessThanOrEqual(1);
   });
+
+  it('sizes the container from the stable containerAspect, not the per-spread book box', async () => {
+    // A document with off-size pages: the painted book aspect changes per spread, but the renderer
+    // reports a fixed containerAspect (from the first page). The container must follow that stable
+    // value so navigating across a page-size boundary does not resize it (the reported layout shift).
+    class MixedRenderer extends JitterRenderer {
+      override measure(): LayoutMetrics {
+        return { ...super.measure(), containerAspect: 1.3274 };
+      }
+    }
+    const { el, writes } = spyContainer();
+    const renderer = new MixedRenderer();
+    const zine = new Zine(el, { source: new FakeSource(6), renderer, spreadMode: 'double', hints: false });
+    await zine.ready;
+    const afterReady = writes.length;
+
+    // Navigate across page-size boundaries: the painted book aspect swings, containerAspect holds.
+    for (const a of [1.3289, 1.31, 1.345, 1.31]) {
+      renderer.aspect = a;
+      zine.update();
+      await flush();
+    }
+
+    expect(writes.length - afterReady).toBe(0); // container never re-sized
+    expect(writes.every((w) => w === '1.3274')).toBe(true); // it used the stable containerAspect
+  });
 });
 
 describe('Zine — responsiveSpread', () => {

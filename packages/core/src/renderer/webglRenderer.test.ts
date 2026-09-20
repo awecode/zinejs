@@ -90,22 +90,49 @@ afterEach(() => {
 });
 
 describe('WebglRenderer — book aspect', () => {
-  it('latches the book aspect to the first page so off-size pages do not resize the container', async () => {
+  it('keeps a stable container aspect across off-size spreads (no layout shift)', async () => {
     const { gl } = fakeGl();
     stubContext(gl);
     const el = container();
     const r = new WebglRenderer();
     await r.mount(el);
 
-    // First spread establishes the book shape.
     r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150) });
-    const first = r.measure().book!;
-    const firstAspect = first.width / first.height;
+    const first = r.measure().containerAspect;
 
-    // A later spread with a differently sized page must not change the book's aspect.
+    // A later spread with a differently sized page must not change the container aspect.
     r.renderSpread(spread, { left: sized(100, 160), right: sized(100, 160) });
-    const later = r.measure().book!;
-    expect(later.width / later.height).toBeCloseTo(firstAspect, 5);
+    expect(r.measure().containerAspect).toBeCloseTo(first!, 5);
+    r.destroy();
+  });
+
+  it('contain (default) letterboxes an off-size spread without distorting it', async () => {
+    const { gl } = fakeGl();
+    stubContext(gl);
+    const el = container();
+    const r = new WebglRenderer();
+    await r.mount(el);
+
+    r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150) });
+    // A taller page: its painted book keeps the page's true aspect (a half is 100x160 -> 0.625).
+    r.renderSpread(spread, { left: sized(100, 160), right: sized(100, 160) });
+    const book = r.measure().book!;
+    expect(book.width / 2 / book.height).toBeCloseTo(100 / 160, 3); // no distortion
+    r.destroy();
+  });
+
+  it('fill stretches an off-size spread to the document book shape', async () => {
+    const { gl } = fakeGl();
+    stubContext(gl);
+    const el = container();
+    const r = new WebglRenderer();
+    await r.mount(el);
+
+    r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150) }, { fit: 'fill' });
+    r.renderSpread(spread, { left: sized(100, 160), right: sized(100, 160) }, { fit: 'fill' });
+    const book = r.measure().book!;
+    // Under fill the book keeps the first page's shape; the off-size page is stretched into it.
+    expect(book.width / 2 / book.height).toBeCloseTo(100 / 150, 3);
     r.destroy();
   });
 });

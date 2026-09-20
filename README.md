@@ -97,6 +97,7 @@ Options (only `source` is required):
 | `backCover` | `string` (URL) | — | Image appended as a lone back cover (adds a page). See [Covers](#covers-and-page-replacement). |
 | `pages` | `Record<number, string>` | — | Replace source pages with image URLs, keyed by 0-based index (negative = from the end). See [Covers](#covers-and-page-replacement). |
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
+| `fit` | `'contain' \| 'fill'` | `'contain'` | How a page whose size differs from the book fits: `contain` keeps its aspect and centers it (a small margin shows); `fill` stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout. |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
 | `cursorHints` | `boolean` | `true` | On a mouse, change the cursor over the book to hint what a press does. `false` to keep the default cursor. See [Discoverability hints](#discoverability-hints). |

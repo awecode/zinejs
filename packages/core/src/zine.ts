@@ -210,6 +210,10 @@ export interface ZineOptions {
   flipDuration?: number;
   /** How a tap/click turns pages: near an edge ('edge'), by page half ('half'), or 'off'. Default 'edge'. */
   clickToFlip?: 'edge' | 'half' | 'off';
+  /** How a page whose size differs from the book fits: 'contain' (default) keeps its aspect and
+   *  centers it (a small margin shows); 'fill' stretches it to the book's shape. Either way the
+   *  book keeps one shape for the whole document, so mixed-size pages never cause a layout shift. */
+  fit?: 'contain' | 'fill';
   /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
   clickZoneSize?: number;
   /**
@@ -341,6 +345,7 @@ export class Zine {
   #curl: CurlSpec;
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
+  #fit: 'contain' | 'fill';
   #clickZoneSize: number;
   #cursorHints: boolean;
   /** Last mouse position over the container in client px, so the cursor can be re-derived after a
@@ -495,6 +500,7 @@ export class Zine {
     this.#configuredMode = this.#spreadMode;
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
+    this.#fit = options.fit ?? 'contain';
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#cursorHints = options.cursorHints ?? true;
     const hints = options.hints ?? true;
@@ -1185,6 +1191,7 @@ export class Zine {
     if (generation !== this.#flipGeneration) return;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
+      fit: this.#fit,
       curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
@@ -1373,6 +1380,7 @@ export class Zine {
     this.#drag.toContent = toContent;
     this.#renderer?.beginFlip(this.#currentContent, toContent, direction, {
       fill: this.#singlePage,
+      fit: this.#fit,
       curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
@@ -1689,6 +1697,7 @@ export class Zine {
     this.#anchorY = 1;
     this.#renderer.beginFlip(this.#currentContent, toContent, 'forward', {
       fill: this.#singlePage,
+      fit: this.#fit,
       curl: this.#effectiveCurl(),
       anchor: { y: this.#anchorY },
     });
@@ -2360,7 +2369,7 @@ export class Zine {
   }
 
   #paintSpread(spread: Spread, content: SpreadContent): void {
-    this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage });
+    this.#renderer?.renderSpread(spread, content, { fill: this.#singlePage, fit: this.#fit });
     this.#applyContainerAspect();
     // These pages were resolved at fit-to-screen; if the reader is zoomed, ask for them sharper.
     this.#zoomedAt = 1;
@@ -2371,9 +2380,16 @@ export class Zine {
    *  Non-destructive: `aspect-ratio` only drives whichever dimension the consumer leaves
    *  auto (fit-width when they set a width), and is ignored if both are fixed. */
   #applyContainerAspect(): void {
-    const b = this.#renderer?.measure().book;
-    if (!b || b.width <= 0 || b.height <= 0) return;
-    const ratio = b.width / b.height;
+    const m = this.#renderer?.measure();
+    // Prefer the document-stable aspect (from the first page) so a book with off-size pages keeps
+    // one container shape as you navigate; fall back to the painted book box before it is known.
+    let ratio = m?.containerAspect;
+    if (ratio === undefined) {
+      const b = m?.book;
+      if (!b || b.width <= 0 || b.height <= 0) return;
+      ratio = b.width / b.height;
+    }
+    if (ratio <= 0) return;
     // Tolerance, not exact equality: writing `aspect-ratio` resizes the container, whose ResizeObserver
     // re-measures a book box off by a sub-pixel and would rewrite a marginally different ratio, an
     // endless resize/measure/write feedback loop (cheap for images, but re-rasterizes a PDF each turn,
@@ -2550,7 +2566,7 @@ export class Zine {
 
     this.#zoomedAt = scale;
     this.#currentContent = { left, right };
-    this.#renderer.renderSpread(spread, this.#currentContent, { fill: this.#singlePage });
+    this.#renderer.renderSpread(spread, this.#currentContent, { fill: this.#singlePage, fit: this.#fit });
   }
 
   /** Apply any upgrade that arrived mid-flip, now that the book has settled. */
@@ -2716,6 +2732,11 @@ function validateOptions(container: unknown, options: unknown): void {
   const clickToFlip = o.clickToFlip;
   if (clickToFlip !== undefined && !['edge', 'half', 'off'].includes(clickToFlip as string)) {
     throw new Error(`Zine: clickToFlip must be 'edge', 'half', or 'off'; got ${JSON.stringify(clickToFlip)}.`);
+  }
+
+  const fit = o.fit;
+  if (fit !== undefined && fit !== 'contain' && fit !== 'fill') {
+    throw new Error(`Zine: fit must be 'contain' or 'fill'; got ${JSON.stringify(fit)}.`);
   }
 
   const curl = o.curl;

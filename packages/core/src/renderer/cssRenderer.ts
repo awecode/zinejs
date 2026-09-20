@@ -54,6 +54,10 @@ export class CssRenderer implements Renderer {
   #toShiftUnit = 0;
   // Book aspect fit: the spread is letterboxed to the page aspect (see the WebGL renderer).
   #pageAspect = 0;
+  // First page's aspect, latched: the container is sized to this document-wide so off-size pages
+  // do not resize it. `contain` letterboxes them within it; `fill` stretches them to it.
+  #docAspect = 0;
+  #fit: 'contain' | 'fill' = 'contain';
   #bookW = 0;
   #fill = false;
   #contentShift = 0; // shiftUnit of the current static spread (nonzero = lone page, centered)
@@ -127,6 +131,7 @@ export class CssRenderer implements Renderer {
       this.#paint(this.#pageRight, content.right);
     }
     this.#fill = options?.fill ?? false;
+    if (options?.fit) this.#fit = options.fit;
     this.#contentShift = this.#fill ? 0 : shiftUnit(content);
     this.#trackAspect(content);
     this.#layoutBook();
@@ -178,6 +183,7 @@ export class CssRenderer implements Renderer {
     this.#fromShiftUnit = options?.fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = options?.fill ? 0 : shiftUnit(to);
     this.#fill = options?.fill ?? false;
+    if (options?.fit) this.#fit = options.fit;
     this.#trackAspect(to);
     this.#layoutBook();
     this.#applyShift(this.#fromShiftUnit);
@@ -201,13 +207,20 @@ export class CssRenderer implements Renderer {
     this.#book.style.transform = px ? `translateX(${px}px)` : '';
   }
 
-  /** Remember the page aspect (width/height) so the book can be letterboxed to it. Latched to the
-   *  first page: the book keeps one shape for the whole document, so a PDF with off-size pages does
-   *  not resize the container (layout shift) as you navigate. Off-size pages stretch to fit. */
+  /** Remember the current spread's page aspect (for drawing) and latch the first page's aspect (for
+   *  the container). The container follows #docAspect so off-size pages do not resize it. */
   #trackAspect(content: SpreadContent): void {
-    if (this.#pageAspect > 0) return;
     const p = content.left ?? content.right;
-    if (p && p.height) this.#pageAspect = p.width / p.height;
+    if (p && p.height) {
+      this.#pageAspect = p.width / p.height;
+      if (this.#docAspect === 0) this.#docAspect = this.#pageAspect;
+    }
+  }
+
+  /** Aspect the book is drawn at: the current page under `contain` (letterboxed within the stable
+   *  container), or the document aspect under `fill` (fills it, stretching off-size pages). */
+  #drawAspect(): number {
+    return this.#fit === 'fill' && this.#docAspect > 0 ? this.#docAspect : this.#pageAspect;
   }
 
   /** Letterbox the 2-page book to the page aspect, centered in the container, so pages
@@ -227,8 +240,9 @@ export class CssRenderer implements Renderer {
   #bookBox(): { x: number; y: number; width: number; height: number } {
     const cw = this.#container?.clientWidth ?? 0;
     const ch = this.#container?.clientHeight ?? 0;
-    if (this.#pageAspect <= 0 || cw <= 0 || ch <= 0) return { x: 0, y: 0, width: cw, height: ch };
-    const ba = (this.#fill ? 1 : 2) * this.#pageAspect;
+    const aspect = this.#drawAspect();
+    if (aspect <= 0 || cw <= 0 || ch <= 0) return { x: 0, y: 0, width: cw, height: ch };
+    const ba = (this.#fill ? 1 : 2) * aspect;
     let bw = cw;
     let bh = ch;
     if (ba > cw / ch) bh = cw / ba;
@@ -272,6 +286,7 @@ export class CssRenderer implements Renderer {
       book,
       content,
       screenAt,
+      containerAspect: this.#docAspect > 0 ? (this.#fill ? 1 : 2) * this.#docAspect : undefined,
     };
   }
 
