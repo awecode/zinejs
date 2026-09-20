@@ -195,6 +195,37 @@
       })
     );
 
+    var sound = el(
+      PanelBody,
+      { title: __('Sound', 'zinejs'), initialOpen: false },
+      el(ToggleControl, {
+        label: __('Page-flip sound', 'zinejs'),
+        help: __('Off by default. When on, a mute control appears in the toolbar.', 'zinejs'),
+        checked: a.sound,
+        onChange: function (v) { set({ sound: v }); },
+      }),
+      a.sound &&
+        el(TextControl, {
+          label: __('Volume (0 to 1)', 'zinejs'),
+          help: __('Blank uses the default (0.5).', 'zinejs'),
+          value: a.soundVolume,
+          onChange: function (v) { set({ soundVolume: v.replace(/[^0-9.]/g, '') }); },
+        }),
+      a.sound &&
+        el(ToggleControl, {
+          label: __('Start muted', 'zinejs'),
+          help: __('Offer sound but start silent; the reader unmutes it.', 'zinejs'),
+          checked: a.soundMuted,
+          onChange: function (v) { set({ soundMuted: v }); },
+        }),
+      a.sound &&
+        el(ToggleControl, {
+          label: __("Remember the reader's mute choice", 'zinejs'),
+          checked: a.soundPersist,
+          onChange: function (v) { set({ soundPersist: v }); },
+        })
+    );
+
     var permissions = el(
       PanelBody,
       { title: __('Reader permissions', 'zinejs'), initialOpen: false },
@@ -246,7 +277,7 @@
       coverPicker('backCover', __('Back cover image', 'zinejs'))
     );
 
-    return el(InspectorControls, {}, spread, layout, interaction, zoom, chrome, permissions, covers);
+    return el(InspectorControls, {}, spread, layout, interaction, zoom, sound, chrome, permissions, covers);
   }
 
   /** Preview shown once a source is chosen: a summary line plus the picker to change it. */

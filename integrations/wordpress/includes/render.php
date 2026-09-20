@@ -124,6 +124,23 @@ function zinejs_render_container($opts) {
         $zine['hideControls'] = $hidden;
     }
 
+    // Page-flip sound (opt-in). true uses the bundled clip; an object overrides volume and mute
+    // behavior. Enabling it makes the engine show a mute control in the toolbar automatically.
+    if (!empty($opts['sound'])) {
+        $snd = array();
+        $vol = isset($opts['soundVolume']) && $opts['soundVolume'] !== '' ? floatval($opts['soundVolume']) : -1;
+        if ($vol >= 0 && $vol <= 1) {
+            $snd['volume'] = $vol;
+        }
+        if (!empty($opts['soundMuted'])) {
+            $snd['muted'] = true;
+        }
+        if (!empty($opts['soundPersist'])) {
+            $snd['persist'] = true;
+        }
+        $zine['sound'] = empty($snd) ? true : $snd;
+    }
+
     // Covers: image URLs prepended/appended as lone pages.
     if (!empty($opts['frontCover'])) {
         $zine['frontCover'] = esc_url_raw((string) $opts['frontCover']);
@@ -192,6 +209,10 @@ function zinejs_shared_block_opts($attributes) {
         'contextMenu'         => $a('contextMenu', true),
         'loading'             => $a('loading', true),
         'hints'               => $a('hints', true),
+        'sound'               => $a('sound', false),
+        'soundVolume'         => $a('soundVolume', ''),
+        'soundMuted'          => $a('soundMuted', false),
+        'soundPersist'        => $a('soundPersist', false),
     );
 }
 
