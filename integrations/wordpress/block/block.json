@@ -11,7 +11,12 @@
   "editorScript": "zinejs-block",
   "editorStyle": "zinejs",
   "attributes": {
+    "sourceType": { "type": "string", "default": "pdf" },
     "url": { "type": "string", "default": "" },
+    "images": { "type": "array", "default": [] },
+    "imageIds": { "type": "array", "default": [] },
+    "frontCover": { "type": "string", "default": "" },
+    "backCover": { "type": "string", "default": "" },
     "spreadMode": { "type": "string", "default": "cover" },
     "direction": { "type": "string", "default": "ltr" },
     "fit": { "type": "string", "default": "contain" },
@@ -30,7 +35,11 @@
     "controls": { "type": "boolean", "default": true },
     "contextMenu": { "type": "boolean", "default": true },
     "loading": { "type": "boolean", "default": true },
-    "hints": { "type": "boolean", "default": true }
+    "hints": { "type": "boolean", "default": true },
+    "deepLink": { "type": "boolean", "default": true },
+    "allowDownload": { "type": "boolean", "default": true },
+    "allowPrint": { "type": "boolean", "default": true },
+    "allowShare": { "type": "boolean", "default": true }
   },
   "supports": {
     "html": false,

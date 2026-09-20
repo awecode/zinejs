@@ -4,7 +4,7 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.4
 License: PolyForm Noncommercial 1.0.0
 License URI: https://zinejs.com/license
 
@@ -65,6 +65,15 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 Yes. Add multiple blocks or shortcodes; each mounts independently.
 
 == Changelog ==
+
+= 0.1.4 =
+* Block: image-book source (build a flipbook from images, not just a PDF).
+* Block: front/back cover images, reader permission toggles (download/print/share), and deep-link control.
+* Block: options grouped into Layout, Interaction, Zoom, Controls, Permissions and Covers panels.
+
+= 0.1.1 =
+* Lower the default single-page breakpoint to 500px so normal theme columns keep two-page spreads.
+* Add responsive-spread and threshold controls to the block and shortcode.
 
 = 0.1.0 =
 * First release: Zine Flipbook block and [zine] shortcode, with bundled engine and pdf.js.

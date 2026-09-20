@@ -175,38 +175,120 @@
         help: __('Subtle first-time cues (corner peek, zoom caption).', 'zinejs'),
         checked: a.hints,
         onChange: function (v) { set({ hints: v }); },
+      }),
+      el(ToggleControl, {
+        label: __('Keep current page in the URL', 'zinejs'),
+        help: __('Makes a page shareable and bookmarkable (deep link).', 'zinejs'),
+        checked: a.deepLink,
+        onChange: function (v) { set({ deepLink: v }); },
       })
     );
 
-    var settings = el(InspectorControls, {}, layout, interaction, zoom, chrome);
-
-    var picker = el(
-      MediaUploadCheck,
-      {},
-      el(MediaUpload, {
-        onSelect: function (media) { set({ url: media.url }); },
-        allowedTypes: ['application/pdf'],
-        value: a.url,
-        render: function (o) {
-          return el(
-            Button,
-            { variant: 'primary', onClick: o.open },
-            a.url ? __('Replace PDF', 'zinejs') : __('Select PDF', 'zinejs')
-          );
-        },
+    var permissions = el(
+      PanelBody,
+      { title: __('Reader permissions', 'zinejs'), initialOpen: false },
+      el(ToggleControl, {
+        label: __('Allow download', 'zinejs'),
+        checked: a.allowDownload,
+        onChange: function (v) { set({ allowDownload: v }); },
+      }),
+      el(ToggleControl, {
+        label: __('Allow print', 'zinejs'),
+        checked: a.allowPrint,
+        onChange: function (v) { set({ allowPrint: v }); },
+      }),
+      el(ToggleControl, {
+        label: __('Allow share', 'zinejs'),
+        checked: a.allowShare,
+        onChange: function (v) { set({ allowShare: v }); },
       })
     );
 
-    var body = a.url
+    // Front/back cover pickers (image URLs prepended/appended as lone pages).
+    var coverPicker = function (key, label) {
+      return el(
+        'div',
+        { className: 'zine-cover-field' },
+        el('p', { style: { margin: '0 0 4px', fontSize: '12px' } }, label),
+        el(MediaUploadCheck, {}, el(MediaUpload, {
+          onSelect: function (m) { var o = {}; o[key] = m.url; set(o); },
+          allowedTypes: ['image'],
+          value: a[key],
+          render: function (o) {
+            return el(
+              'div',
+              { style: { display: 'flex', gap: '8px' } },
+              el(Button, { variant: 'secondary', onClick: o.open }, a[key] ? __('Replace', 'zinejs') : __('Select image', 'zinejs')),
+              a[key] && el(Button, { variant: 'tertiary', isDestructive: true, onClick: function () { var c = {}; c[key] = ''; set(c); } }, __('Remove', 'zinejs'))
+            );
+          },
+        }))
+      );
+    };
+    var covers = el(
+      PanelBody,
+      { title: __('Covers', 'zinejs'), initialOpen: false },
+      coverPicker('frontCover', __('Front cover image', 'zinejs')),
+      coverPicker('backCover', __('Back cover image', 'zinejs'))
+    );
+
+    var settings = el(InspectorControls, {}, layout, interaction, zoom, chrome, permissions, covers);
+
+    var isImages = a.sourceType === 'images';
+
+    var sourceToggle = el(SelectControl, {
+      label: __('Source', 'zinejs'),
+      value: a.sourceType,
+      options: [
+        { label: __('PDF', 'zinejs'), value: 'pdf' },
+        { label: __('Images', 'zinejs'), value: 'images' },
+      ],
+      onChange: function (v) { set({ sourceType: v }); },
+    });
+
+    var pdfPicker = el(MediaUploadCheck, {}, el(MediaUpload, {
+      onSelect: function (m) { set({ url: m.url }); },
+      allowedTypes: ['application/pdf'],
+      value: a.url,
+      render: function (o) {
+        return el(Button, { variant: 'primary', onClick: o.open },
+          a.url ? __('Replace PDF', 'zinejs') : __('Select PDF', 'zinejs'));
+      },
+    }));
+
+    var imagesPicker = el(MediaUploadCheck, {}, el(MediaUpload, {
+      onSelect: function (media) {
+        set({
+          images: media.map(function (m) { return m.url; }),
+          imageIds: media.map(function (m) { return m.id; }),
+        });
+      },
+      allowedTypes: ['image'],
+      multiple: true,
+      gallery: true,
+      value: a.imageIds,
+      render: function (o) {
+        var count = (a.images || []).length;
+        return el(Button, { variant: 'primary', onClick: o.open },
+          count ? __('Edit images', 'zinejs') + ' (' + count + ')' : __('Select images', 'zinejs'));
+      },
+    }));
+
+    var picker = isImages ? imagesPicker : pdfPicker;
+    var hasSource = isImages ? (a.images && a.images.length) : a.url;
+    var fileLabel = isImages ? (a.images.length + ' ' + __('images', 'zinejs')) : (a.url ? a.url.split('/').pop() : '');
+
+    var body = hasSource
       ? el(
           'div',
           { className: 'zine-block-preview' },
-          el('p', { className: 'zine-block-file' }, a.url.split('/').pop()),
+          el('p', { className: 'zine-block-file' }, fileLabel),
           el(
             'p',
             { className: 'zine-block-note' },
             __('The flipbook renders on the published page.', 'zinejs')
           ),
+          sourceToggle,
           picker
         )
       : el(
@@ -214,8 +296,11 @@
           {
             icon: 'book-alt',
             label: __('Zine Flipbook', 'zinejs'),
-            instructions: __('Choose a PDF to turn into a page-flip book.', 'zinejs'),
+            instructions: isImages
+              ? __('Choose images to turn into a page-flip book.', 'zinejs')
+              : __('Choose a PDF to turn into a page-flip book.', 'zinejs'),
           },
+          sourceToggle,
           picker
         );
 

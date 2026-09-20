@@ -101,6 +101,32 @@ function zinejs_render_container($opts) {
     if (array_key_exists('hints', $opts) && !$opts['hints']) {
         $zine['hints'] = false;
     }
+    if (array_key_exists('deepLink', $opts) && !$opts['deepLink']) {
+        $zine['deepLink'] = false;
+    }
+
+    // Permission toggles map to hidden toolbar controls (the reader can still not do what is hidden).
+    $hidden = array();
+    if (array_key_exists('allowDownload', $opts) && !$opts['allowDownload']) {
+        $hidden[] = 'download';
+    }
+    if (array_key_exists('allowPrint', $opts) && !$opts['allowPrint']) {
+        $hidden[] = 'print';
+    }
+    if (array_key_exists('allowShare', $opts) && !$opts['allowShare']) {
+        $hidden[] = 'share';
+    }
+    if (!empty($hidden)) {
+        $zine['hideControls'] = $hidden;
+    }
+
+    // Covers: image URLs prepended/appended as lone pages.
+    if (!empty($opts['frontCover'])) {
+        $zine['frontCover'] = esc_url_raw((string) $opts['frontCover']);
+    }
+    if (!empty($opts['backCover'])) {
+        $zine['backCover'] = esc_url_raw((string) $opts['backCover']);
+    }
 
     $config = array('zine' => $zine);
     if ($pdf !== '') {
@@ -136,9 +162,17 @@ function zinejs_render_block($attributes) {
     $a = function ($key, $default) use ($attributes) {
         return array_key_exists($key, $attributes) ? $attributes[$key] : $default;
     };
+    $images_mode = $a('sourceType', 'pdf') === 'images';
+    $images = $a('images', array());
     return zinejs_render_container(array(
-        'pdf'                 => $a('url', ''),
-        'images'              => array(),
+        'pdf'                 => $images_mode ? '' : $a('url', ''),
+        'images'              => $images_mode && is_array($images) ? $images : array(),
+        'frontCover'          => $a('frontCover', ''),
+        'backCover'           => $a('backCover', ''),
+        'deepLink'            => $a('deepLink', true),
+        'allowDownload'       => $a('allowDownload', true),
+        'allowPrint'          => $a('allowPrint', true),
+        'allowShare'          => $a('allowShare', true),
         'spreadMode'          => $a('spreadMode', 'cover'),
         'controls'            => $a('controls', true),
         'direction'           => $a('direction', 'ltr'),
