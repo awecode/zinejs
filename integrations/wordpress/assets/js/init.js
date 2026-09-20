@@ -12,12 +12,12 @@
   var pdfjsPromise = null;
   var curlsPromise = null;
 
-  // Which curls are not bundled (must be loaded as models) comes from the engine itself when
-  // available, so this stays correct as core adds or drops curls; the literal is a fallback for an
-  // older global that does not expose the list.
+  // Which curls are not bundled (must be loaded as models) comes straight from the engine, so it
+  // stays correct as core adds or drops curls. The plugin ships its own core, which always exports
+  // this, so the empty array is only a crash guard, not a maintained copy of the list.
   function importableCurls() {
     var z = window.ZineJS;
-    return (z && Array.isArray(z.IMPORTABLE_CURLS) && z.IMPORTABLE_CURLS) || ['roll', 'leaf', 'flick', 'silk'];
+    return z && Array.isArray(z.IMPORTABLE_CURLS) ? z.IMPORTABLE_CURLS : [];
   }
 
   function books() {
