@@ -13,13 +13,24 @@
   "attributes": {
     "url": { "type": "string", "default": "" },
     "spreadMode": { "type": "string", "default": "cover" },
-    "controls": { "type": "boolean", "default": true },
-    "responsiveSpread": { "type": "boolean", "default": true },
-    "singlePageThreshold": { "type": "string", "default": "" },
     "direction": { "type": "string", "default": "ltr" },
     "fit": { "type": "string", "default": "contain" },
+    "responsiveSpread": { "type": "boolean", "default": true },
+    "singlePageThreshold": { "type": "string", "default": "" },
     "maxWidth": { "type": "string", "default": "900" },
-    "aspect": { "type": "string", "default": "3/2" }
+    "aspect": { "type": "string", "default": "3/2" },
+    "clickToFlip": { "type": "string", "default": "edge" },
+    "curl": { "type": "string", "default": "cone" },
+    "flipDuration": { "type": "string", "default": "" },
+    "startPage": { "type": "number", "default": 0 },
+    "zoomEnabled": { "type": "boolean", "default": true },
+    "zoomMax": { "type": "string", "default": "" },
+    "zoomWheel": { "type": "boolean", "default": true },
+    "zoomDoubleClick": { "type": "boolean", "default": true },
+    "controls": { "type": "boolean", "default": true },
+    "contextMenu": { "type": "boolean", "default": true },
+    "loading": { "type": "boolean", "default": true },
+    "hints": { "type": "boolean", "default": true }
   },
   "supports": {
     "html": false,

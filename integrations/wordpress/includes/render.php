@@ -56,6 +56,52 @@ function zinejs_render_container($opts) {
         $zine['singlePageThreshold'] = $threshold;
     }
 
+    // Interaction. Only set values that differ from the engine defaults, to keep the payload lean.
+    if (isset($opts['clickToFlip']) && in_array($opts['clickToFlip'], array('edge', 'half', 'off'), true)) {
+        $zine['clickToFlip'] = $opts['clickToFlip'];
+    }
+    if (isset($opts['curl']) && in_array($opts['curl'], array('cone', 'simple'), true)) {
+        $zine['curl'] = $opts['curl'];
+    }
+    $flip = isset($opts['flipDuration']) ? intval($opts['flipDuration']) : 0;
+    if ($flip > 0) {
+        $zine['flipDuration'] = $flip;
+    }
+    $start = isset($opts['startPage']) ? intval($opts['startPage']) : 0;
+    if ($start > 0) {
+        $zine['startPage'] = $start;
+    }
+
+    // Zoom (nested); defaults are on, so only an explicit change is sent.
+    $zoom = array();
+    if (array_key_exists('zoomEnabled', $opts) && !$opts['zoomEnabled']) {
+        $zoom['enabled'] = false;
+    }
+    $zoom_max = isset($opts['zoomMax']) ? floatval($opts['zoomMax']) : 0;
+    if ($zoom_max > 1) {
+        $zoom['max'] = $zoom_max;
+    }
+    if (array_key_exists('zoomWheel', $opts) && !$opts['zoomWheel']) {
+        $zoom['wheel'] = false;
+    }
+    if (array_key_exists('zoomDoubleClick', $opts) && !$opts['zoomDoubleClick']) {
+        $zoom['doubleClick'] = false;
+    }
+    if (!empty($zoom)) {
+        $zine['zoom'] = $zoom;
+    }
+
+    // Chrome. All default on, so only an explicit off is sent.
+    if (array_key_exists('contextMenu', $opts) && !$opts['contextMenu']) {
+        $zine['contextMenu'] = false;
+    }
+    if (array_key_exists('loading', $opts) && !$opts['loading']) {
+        $zine['loading'] = false;
+    }
+    if (array_key_exists('hints', $opts) && !$opts['hints']) {
+        $zine['hints'] = false;
+    }
+
     $config = array('zine' => $zine);
     if ($pdf !== '') {
         $config['pdf'] = esc_url_raw($pdf);
@@ -87,16 +133,33 @@ function zinejs_render_container($opts) {
  * @return string
  */
 function zinejs_render_block($attributes) {
+    $a = function ($key, $default) use ($attributes) {
+        return array_key_exists($key, $attributes) ? $attributes[$key] : $default;
+    };
     return zinejs_render_container(array(
-        'pdf'              => isset($attributes['url']) ? $attributes['url'] : '',
-        'images'           => array(),
-        'spreadMode'       => isset($attributes['spreadMode']) ? $attributes['spreadMode'] : 'cover',
-        'controls'         => isset($attributes['controls']) ? $attributes['controls'] : true,
-        'direction'        => isset($attributes['direction']) ? $attributes['direction'] : 'ltr',
-        'fit'              => isset($attributes['fit']) ? $attributes['fit'] : 'contain',
-        'responsiveSpread' => isset($attributes['responsiveSpread']) ? $attributes['responsiveSpread'] : true,
-        'singlePageThreshold' => isset($attributes['singlePageThreshold']) ? $attributes['singlePageThreshold'] : '',
-        'maxWidth'         => isset($attributes['maxWidth']) ? $attributes['maxWidth'] : '900',
-        'aspect'           => isset($attributes['aspect']) ? $attributes['aspect'] : '3/2',
+        'pdf'                 => $a('url', ''),
+        'images'              => array(),
+        'spreadMode'          => $a('spreadMode', 'cover'),
+        'controls'            => $a('controls', true),
+        'direction'           => $a('direction', 'ltr'),
+        'fit'                 => $a('fit', 'contain'),
+        'responsiveSpread'    => $a('responsiveSpread', true),
+        'singlePageThreshold' => $a('singlePageThreshold', ''),
+        'maxWidth'            => $a('maxWidth', '900'),
+        'aspect'              => $a('aspect', '3/2'),
+        // Interaction.
+        'clickToFlip'         => $a('clickToFlip', 'edge'),
+        'curl'                => $a('curl', 'cone'),
+        'flipDuration'        => $a('flipDuration', ''),
+        'startPage'           => $a('startPage', 0),
+        // Zoom.
+        'zoomEnabled'         => $a('zoomEnabled', true),
+        'zoomMax'             => $a('zoomMax', ''),
+        'zoomWheel'           => $a('zoomWheel', true),
+        'zoomDoubleClick'     => $a('zoomDoubleClick', true),
+        // Chrome.
+        'contextMenu'         => $a('contextMenu', true),
+        'loading'             => $a('loading', true),
+        'hints'               => $a('hints', true),
     ));
 }
