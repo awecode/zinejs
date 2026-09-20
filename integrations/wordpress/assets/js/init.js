@@ -9,9 +9,16 @@
 (function () {
   'use strict';
   var CFG = window.ZINEJS_WP || {};
-  var IMPORTABLE_CURLS = ['roll', 'leaf', 'flick', 'silk'];
   var pdfjsPromise = null;
   var curlsPromise = null;
+
+  // Which curls are not bundled (must be loaded as models) comes from the engine itself when
+  // available, so this stays correct as core adds or drops curls; the literal is a fallback for an
+  // older global that does not expose the list.
+  function importableCurls() {
+    var z = window.ZineJS;
+    return (z && Array.isArray(z.IMPORTABLE_CURLS) && z.IMPORTABLE_CURLS) || ['roll', 'leaf', 'flick', 'silk'];
+  }
 
   function books() {
     return Array.prototype.slice.call(document.querySelectorAll('.zine-flipbook[data-zine]'));
@@ -54,7 +61,7 @@
       return;
     }
     var curlName = typeof opts.curl === 'string' ? opts.curl : null;
-    var needsCurls = curlName && IMPORTABLE_CURLS.indexOf(curlName) !== -1 && CFG.curls;
+    var needsCurls = curlName && importableCurls().indexOf(curlName) !== -1 && CFG.curls;
 
     el.setAttribute('data-zine-mounted', '1');
 
