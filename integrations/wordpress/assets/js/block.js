@@ -171,6 +171,36 @@
         checked: a.controls,
         onChange: function (v) { set({ controls: v }); },
       }),
+      a.controls &&
+        el(SelectControl, {
+          label: __('Toolbar position', 'zinejs'),
+          value: a.controlsPosition,
+          options: [
+            { label: __('Bottom', 'zinejs'), value: 'bottom' },
+            { label: __('Top', 'zinejs'), value: 'top' },
+            { label: __('Left', 'zinejs'), value: 'left' },
+            { label: __('Right', 'zinejs'), value: 'right' },
+          ],
+          onChange: function (v) { set({ controlsPosition: v }); },
+        }),
+      a.controls &&
+        el(SelectControl, {
+          label: __('Toolbar color scheme', 'zinejs'),
+          value: a.controlsColorScheme,
+          options: [
+            { label: __('Auto', 'zinejs'), value: 'auto' },
+            { label: __('Light', 'zinejs'), value: 'light' },
+            { label: __('Dark', 'zinejs'), value: 'dark' },
+          ],
+          onChange: function (v) { set({ controlsColorScheme: v }); },
+        }),
+      a.controls &&
+        el(ToggleControl, {
+          label: __('Large page arrows', 'zinejs'),
+          help: __('Big prev/next arrows flanking the book.', 'zinejs'),
+          checked: a.controlsArrows,
+          onChange: function (v) { set({ controlsArrows: v }); },
+        }),
       el(ToggleControl, {
         label: __('Right-click menu', 'zinejs'),
         checked: a.contextMenu,

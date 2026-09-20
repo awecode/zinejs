@@ -38,7 +38,6 @@ function zinejs_render_container($opts) {
     $zine = array(
         'spreadMode' => in_array($opts['spreadMode'], array('cover', 'double', 'single', 'book'), true)
             ? $opts['spreadMode'] : 'cover',
-        'controls'  => !empty($opts['controls']),
         'direction' => ($opts['direction'] === 'rtl') ? 'rtl' : 'ltr',
         'fit'       => ($opts['fit'] === 'fill') ? 'fill' : 'contain',
         // Whether a container narrower than singlePageThreshold may drop to one page. Off holds the
@@ -93,6 +92,28 @@ function zinejs_render_container($opts) {
     }
     if (!empty($zoom)) {
         $zine['zoom'] = $zoom;
+    }
+
+    // Controls: false turns the whole toolbar off; otherwise send an options object only for the
+    // sub-options that differ from the engine defaults (position bottom, arrows on, scheme auto).
+    if (empty($opts['controls'])) {
+        $zine['controls'] = false;
+    } else {
+        $co = array();
+        $pos = isset($opts['controlsPosition']) ? $opts['controlsPosition'] : 'bottom';
+        if (in_array($pos, array('top', 'bottom', 'left', 'right'), true) && $pos !== 'bottom') {
+            $co['position'] = $pos;
+        }
+        if (array_key_exists('controlsArrows', $opts) && !$opts['controlsArrows']) {
+            $co['arrows'] = false;
+        }
+        $scheme = isset($opts['controlsColorScheme']) ? $opts['controlsColorScheme'] : 'auto';
+        if (in_array($scheme, array('light', 'dark', 'auto'), true) && $scheme !== 'auto') {
+            $co['colorScheme'] = $scheme;
+        }
+        if (!empty($co)) {
+            $zine['controls'] = $co;
+        }
     }
 
     // Chrome. All default on, so only an explicit off is sent.
@@ -192,6 +213,9 @@ function zinejs_shared_block_opts($attributes) {
         'allowShare'          => $a('allowShare', true),
         'spreadMode'          => $a('spreadMode', 'cover'),
         'controls'            => $a('controls', true),
+        'controlsPosition'    => $a('controlsPosition', 'bottom'),
+        'controlsArrows'      => $a('controlsArrows', true),
+        'controlsColorScheme' => $a('controlsColorScheme', 'auto'),
         'direction'           => $a('direction', 'ltr'),
         'fit'                 => $a('fit', 'contain'),
         'responsiveSpread'    => $a('responsiveSpread', true),
