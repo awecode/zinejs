@@ -108,6 +108,8 @@
         label: __('Curl style', 'zinejs'),
         help: __('The page-turn effect (GPU renderer).', 'zinejs'),
         value: a.curl,
+        // Keep in sync with the engine's curls and the render whitelist (see README, "Updating
+        // curl styles"). cone/simple are bundled; the rest load on demand via init.js.
         options: [
           { label: __('Cone (realistic)', 'zinejs'), value: 'cone' },
           { label: __('Simple (flat fold)', 'zinejs'), value: 'simple' },

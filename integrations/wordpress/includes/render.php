@@ -61,7 +61,8 @@ function zinejs_render_container($opts) {
         $zine['clickToFlip'] = $opts['clickToFlip'];
     }
     // cone/simple resolve by name in the engine; roll/leaf/flick/silk are loaded on demand and
-    // swapped for their model objects by the init script (see init.js).
+    // swapped for their model objects by the init script (see init.js). Keep this list in sync with
+    // the engine and the block dropdown (see README, "Updating curl styles").
     if (isset($opts['curl']) &&
         in_array($opts['curl'], array('cone', 'simple', 'roll', 'leaf', 'flick', 'silk'), true)) {
         $zine['curl'] = $opts['curl'];
