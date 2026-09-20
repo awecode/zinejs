@@ -275,8 +275,11 @@ export class WebglRenderer implements Renderer {
     this.#render();
   }
 
-  /** Remember the page aspect (width/height) so the book can be letterboxed to it. */
+  /** Remember the page aspect (width/height) so the book can be letterboxed to it. Latched to the
+   *  first page: the book keeps one shape for the whole document, so a PDF with off-size pages does
+   *  not resize the container (layout shift) as you navigate. Off-size pages stretch to fit. */
   #trackAspect(content: SpreadContent): void {
+    if (this.#pageAspect > 0) return;
     const p = content.left ?? content.right;
     if (p && p.height) this.#pageAspect = p.width / p.height;
   }

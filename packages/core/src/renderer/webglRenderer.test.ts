@@ -77,9 +77,37 @@ const content = (): SpreadContent => ({ left: page(), right: page() });
 const lostEvent = (): Event => new Event('webglcontextlost', { cancelable: true });
 const restoredEvent = (): Event => new Event('webglcontextrestored');
 
+const sized = (w: number, h: number): HTMLCanvasElement => {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+describe('WebglRenderer — book aspect', () => {
+  it('latches the book aspect to the first page so off-size pages do not resize the container', async () => {
+    const { gl } = fakeGl();
+    stubContext(gl);
+    const el = container();
+    const r = new WebglRenderer();
+    await r.mount(el);
+
+    // First spread establishes the book shape.
+    r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150) });
+    const first = r.measure().book!;
+    const firstAspect = first.width / first.height;
+
+    // A later spread with a differently sized page must not change the book's aspect.
+    r.renderSpread(spread, { left: sized(100, 160), right: sized(100, 160) });
+    const later = r.measure().book!;
+    expect(later.width / later.height).toBeCloseTo(firstAspect, 5);
+    r.destroy();
+  });
 });
 
 describe('WebglRenderer — runtime context loss', () => {
