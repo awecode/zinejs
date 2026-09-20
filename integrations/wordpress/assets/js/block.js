@@ -26,11 +26,11 @@
       };
     };
 
-    // The one commonly-changed control sits on its own, open by default; the rest of the layout
-    // options are used rarely, so they live in a collapsed panel below.
-    var book = el(
-      PanelBody,
-      { title: __('Book', 'zinejs'), initialOpen: true },
+    // The one commonly-changed control stands on its own at the top (no panel header); the rest of
+    // the layout options are used rarely, so they live in the collapsed Layout panel below.
+    var spread = el(
+      'div',
+      { style: { padding: '16px 16px 0' } },
       el(SelectControl, {
         label: __('Spread mode', 'zinejs'),
         value: a.spreadMode,
@@ -240,7 +240,7 @@
       coverPicker('backCover', __('Back cover image', 'zinejs'))
     );
 
-    return el(InspectorControls, {}, book, layout, interaction, zoom, chrome, permissions, covers);
+    return el(InspectorControls, {}, spread, layout, interaction, zoom, chrome, permissions, covers);
   }
 
   /** Preview shown once a source is chosen: a summary line plus the picker to change it. */
