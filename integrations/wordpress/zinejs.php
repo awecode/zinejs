@@ -99,25 +99,29 @@ add_action('init', 'zinejs_register_block');
 /** The [zine] shortcode: [zine pdf="url" spread="cover" controls="true" max-width="900" aspect="3/2"]. */
 function zinejs_shortcode($atts) {
     $atts = shortcode_atts(array(
-        'pdf'       => '',
-        'images'    => '',
-        'spread'    => 'cover',
-        'controls'  => 'true',
-        'direction' => 'ltr',
-        'fit'       => 'contain',
-        'max-width' => '900',
-        'aspect'    => '3/2',
+        'pdf'        => '',
+        'images'     => '',
+        'spread'     => 'cover',
+        'controls'   => 'true',
+        'direction'  => 'ltr',
+        'fit'        => 'contain',
+        'responsive' => 'true',
+        'threshold'  => '',
+        'max-width'  => '900',
+        'aspect'     => '3/2',
     ), $atts, 'zine');
 
     return zinejs_render_container(array(
-        'pdf'       => $atts['pdf'],
-        'images'    => array_filter(array_map('trim', explode(',', $atts['images']))),
-        'spreadMode' => $atts['spread'],
-        'controls'  => filter_var($atts['controls'], FILTER_VALIDATE_BOOLEAN),
-        'direction' => $atts['direction'],
-        'fit'       => $atts['fit'],
-        'maxWidth'  => $atts['max-width'],
-        'aspect'    => $atts['aspect'],
+        'pdf'              => $atts['pdf'],
+        'images'           => array_filter(array_map('trim', explode(',', $atts['images']))),
+        'spreadMode'       => $atts['spread'],
+        'controls'         => filter_var($atts['controls'], FILTER_VALIDATE_BOOLEAN),
+        'direction'        => $atts['direction'],
+        'fit'              => $atts['fit'],
+        'responsiveSpread' => filter_var($atts['responsive'], FILTER_VALIDATE_BOOLEAN),
+        'singlePageThreshold' => $atts['threshold'],
+        'maxWidth'         => $atts['max-width'],
+        'aspect'           => $atts['aspect'],
     ));
 }
 add_shortcode('zine', 'zinejs_shortcode');

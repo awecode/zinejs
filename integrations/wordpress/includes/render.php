@@ -41,7 +41,16 @@ function zinejs_render_container($opts) {
         'controls'  => !empty($opts['controls']),
         'direction' => ($opts['direction'] === 'rtl') ? 'rtl' : 'ltr',
         'fit'       => ($opts['fit'] === 'fill') ? 'fill' : 'contain',
+        // Whether a container narrower than singlePageThreshold may drop to one page. Off holds the
+        // chosen spread mode at every width (so 'cover'/'double' keep two-page spreads in a narrow
+        // theme column). See https://zinejs.com/docs/.
+        'responsiveSpread' => array_key_exists('responsiveSpread', $opts)
+            ? (bool) $opts['responsiveSpread'] : true,
     );
+    $threshold = isset($opts['singlePageThreshold']) ? intval($opts['singlePageThreshold']) : 0;
+    if ($threshold > 0) {
+        $zine['singlePageThreshold'] = $threshold;
+    }
 
     $config = array('zine' => $zine);
     if ($pdf !== '') {
@@ -75,13 +84,14 @@ function zinejs_render_container($opts) {
  */
 function zinejs_render_block($attributes) {
     return zinejs_render_container(array(
-        'pdf'        => isset($attributes['url']) ? $attributes['url'] : '',
-        'images'     => array(),
-        'spreadMode' => isset($attributes['spreadMode']) ? $attributes['spreadMode'] : 'cover',
-        'controls'   => isset($attributes['controls']) ? $attributes['controls'] : true,
-        'direction'  => isset($attributes['direction']) ? $attributes['direction'] : 'ltr',
-        'fit'        => isset($attributes['fit']) ? $attributes['fit'] : 'contain',
-        'maxWidth'   => isset($attributes['maxWidth']) ? $attributes['maxWidth'] : '900',
-        'aspect'     => isset($attributes['aspect']) ? $attributes['aspect'] : '3/2',
+        'pdf'              => isset($attributes['url']) ? $attributes['url'] : '',
+        'images'           => array(),
+        'spreadMode'       => isset($attributes['spreadMode']) ? $attributes['spreadMode'] : 'cover',
+        'controls'         => isset($attributes['controls']) ? $attributes['controls'] : true,
+        'direction'        => isset($attributes['direction']) ? $attributes['direction'] : 'ltr',
+        'fit'              => isset($attributes['fit']) ? $attributes['fit'] : 'contain',
+        'responsiveSpread' => isset($attributes['responsiveSpread']) ? $attributes['responsiveSpread'] : true,
+        'maxWidth'         => isset($attributes['maxWidth']) ? $attributes['maxWidth'] : '900',
+        'aspect'           => isset($attributes['aspect']) ? $attributes['aspect'] : '3/2',
     ));
 }

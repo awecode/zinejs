@@ -62,6 +62,12 @@
           checked: a.controls,
           onChange: function (v) { set({ controls: v }); },
         }),
+        el(ToggleControl, {
+          label: __('Collapse to one page on narrow screens', 'zinejs'),
+          help: __('Off keeps the chosen spread mode at every width (e.g. cover stays two pages in a narrow column).', 'zinejs'),
+          checked: a.responsiveSpread,
+          onChange: function (v) { set({ responsiveSpread: v }); },
+        }),
         el(TextControl, {
           label: __('Max width (px)', 'zinejs'),
           value: a.maxWidth,

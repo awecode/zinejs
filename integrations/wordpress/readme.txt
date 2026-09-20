@@ -30,7 +30,13 @@ scripts are enqueued only on pages that actually contain a flipbook.
 
 Attributes: `pdf` (URL), `images` (comma-separated URLs, as an alternative to a PDF), `spread`
 (cover | double | single | book), `controls` (true | false), `direction` (ltr | rtl),
-`fit` (contain | fill), `max-width` (px), `aspect` (e.g. 3/2, or auto).
+`fit` (contain | fill), `responsive` (true | false), `threshold` (px), `max-width` (px),
+`aspect` (e.g. 3/2, or auto).
+
+By default the book drops to one page per spread when its container is narrower than 640px
+(`threshold`), so it stays readable on phones and in narrow theme columns. If your column is narrow
+but you still want two-page spreads (for example in `cover` mode), set `responsive="false"`, or use
+the block's Wide/Full alignment to give it more room.
 
 == Licensing ==
 

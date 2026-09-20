@@ -14,6 +14,7 @@
     "url": { "type": "string", "default": "" },
     "spreadMode": { "type": "string", "default": "cover" },
     "controls": { "type": "boolean", "default": true },
+    "responsiveSpread": { "type": "boolean", "default": true },
     "direction": { "type": "string", "default": "ltr" },
     "fit": { "type": "string", "default": "contain" },
     "maxWidth": { "type": "string", "default": "900" },
