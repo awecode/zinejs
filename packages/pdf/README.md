@@ -58,6 +58,23 @@ Keep the worker on the same build as the library (`legacy` vs modern). If you al
 `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off. A pre-created pdf.js document needs no
 worker from this package.
 
+### Vite: exclude from dependency pre-bundling
+
+Vite's dependency optimizer may not be able to follow the worker's `?url` import, so pre-bundling
+`@zinejs/pdf` fails to start the dev server (`Could not load .../pdf.worker.min.mjs?url`).
+Exclude it so Vite's normal pipeline resolves the worker:
+
+```js
+// vite.config.js
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  optimizeDeps: { exclude: ['@zinejs/pdf'] },
+})
+```
+
+(`npm create @zinejs` sets this up for you in the PDF starter.)
+
 CDN / no bundler: load pdf.js first, expose `globalThis.pdfjsLib`, then the UMD builds (core
 first). See the [HTML CDN example](https://zinejs.com/examples/html-cdn). A UMD host has no
 bundler to resolve the worker locally, so it uses your `workerSrc`, an already-set
