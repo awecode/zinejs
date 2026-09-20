@@ -98,6 +98,7 @@ Options (only `source` is required):
 | `pages` | `Record<number, string>` | — | Replace source pages with image URLs, keyed by 0-based index (negative = from the end). See [Covers](#covers-and-page-replacement). |
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `fit` | `'contain' \| 'fill'` | `'contain'` | How a page whose size differs from the book fits: `contain` keeps its aspect and centers it (a small margin shows); `fill` stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout. |
+| `strings` | `Partial<ZineStrings>` | English | Override reader-facing text for localization. See [Localization](#localization). |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |
 | `cursorHints` | `boolean` | `true` | On a mouse, change the cursor over the book to hint what a press does. `false` to keep the default cursor. See [Discoverability hints](#discoverability-hints). |
@@ -603,6 +604,26 @@ The container is made focusable (`tabindex="0"` unless you already set one) and 
 Built-in toolbar buttons have accessible names and a `:focus-visible` outline. The share dialog is a modal: it traps focus, closes on Escape, and restores focus when it shuts. Side panels (thumbnails, outline, search) close on Escape as well.
 
 Under `prefers-reduced-motion: reduce` the book turns with `simple` at a short fixed duration, whatever `curl` and `flipDuration` say. Motion is reduced rather than removed: a page that swapped instantly would leave no cue as to which way the book moved. Decorative toolbar transitions stay off under the same preference.
+
+## Localization
+
+Every reader-facing string (control labels, panel and loading text, and the screen-reader page announcement) defaults to English and can be overridden via `strings`. Pass only the keys you want to change; the rest stay English. Bring your own translations; no locale packs are bundled.
+
+```js
+new Zine(el, {
+  source,
+  strings: {
+    nextPage: 'Page suivante',
+    prevPage: 'Page précédente',
+    // Entries that include a number or text are functions, so word order and
+    // pluralization are yours to control:
+    pageAnnounce: (current, total) => `Page ${current} sur ${total}`,
+    noMatches: (query) => `Aucun résultat pour « ${query} »`,
+  },
+})
+```
+
+Reading direction is separate: set `direction: 'rtl'` to mirror the layout and page-turn direction. The full key list is the `ZineStrings` type (exported), and `defaultStrings` is exported if you want to build on the English set.
 
 ## Sources
 

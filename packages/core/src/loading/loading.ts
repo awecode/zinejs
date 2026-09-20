@@ -1,4 +1,5 @@
 import type { LoadProgress } from '../source/types';
+import type { ZineStrings } from '../strings';
 
 /**
  * The built-in loading overlay: a spinner, a status line, and a download progress bar.
@@ -98,15 +99,13 @@ export interface LoaderHandle {
   destroy(): void;
 }
 
-const fmtMB = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-
 /**
  * Build the overlay inside `container` and return a handle to drive it.
  *
  * The overlay is hidden for the first {@link REVEAL_DELAY_MS} so a fast load never flashes it;
  * `destroy()` before then cancels the reveal outright.
  */
-export function mountLoading(container: HTMLElement): LoaderHandle {
+export function mountLoading(container: HTMLElement, strings: ZineStrings): LoaderHandle {
   const doc = container.ownerDocument;
   ensureStyles(doc);
 
@@ -121,7 +120,7 @@ export function mountLoading(container: HTMLElement): LoaderHandle {
 
   const text = doc.createElement('div');
   text.className = 'zine-loading-text';
-  text.textContent = 'Opening document…';
+  text.textContent = strings.loadingOpening;
 
   const bar = doc.createElement('div');
   bar.className = 'zine-loading-bar';
@@ -154,16 +153,16 @@ export function mountLoading(container: HTMLElement): LoaderHandle {
     update(progress: LoadProgress): void {
       if (progress.total > 0) {
         const pct = Math.min(100, Math.round((progress.loaded / progress.total) * 100));
-        text.textContent = `Downloading document… ${pct}%`;
+        text.textContent = strings.downloadingPercent(pct);
         bar.style.display = '';
         fill.style.width = `${pct}%`;
       } else {
-        text.textContent = `Downloading document… ${fmtMB(progress.loaded)}`;
+        text.textContent = strings.downloadingSize(progress.loaded / 1024 / 1024);
         bar.style.display = 'none';
       }
     },
     preparing(): void {
-      text.textContent = 'Preparing pages…';
+      text.textContent = strings.loadingPreparing;
       bar.style.display = 'none';
     },
     destroy(): void {

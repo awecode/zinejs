@@ -456,7 +456,8 @@ export class PdfSource implements Source {
     const convert = async (list: PdfOutlineNode[]): Promise<OutlineItem[]> =>
       Promise.all(
         list.map(async (node) => ({
-          title: (node.title ?? '').trim() || 'Untitled',
+          // Raw title; the outline UI supplies a localized fallback when it is empty.
+          title: (node.title ?? '').trim(),
           page: await this.#destinationPage(node.dest),
           children: node.items?.length ? await convert(node.items) : [],
         })),

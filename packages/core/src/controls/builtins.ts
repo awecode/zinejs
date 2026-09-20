@@ -21,7 +21,7 @@ const isFullscreen = (ctx: ControlContext): boolean => {
 export function registerBuiltins(): void {
   defineControl({
     id: 'prev',
-    title: 'Previous page',
+    title: (ctx) => ctx.strings.prevPage,
     icon: ICONS.prev,
     isDisabled: (ctx) => !ctx.zine.canFlipPrev(),
     action: (ctx) => ctx.zine.flipPrev(),
@@ -29,7 +29,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'next',
-    title: 'Next page',
+    title: (ctx) => ctx.strings.nextPage,
     icon: ICONS.next,
     isDisabled: (ctx) => !ctx.zine.canFlipNext(),
     action: (ctx) => ctx.zine.flipNext(),
@@ -41,7 +41,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'first',
-    title: 'First page',
+    title: (ctx) => ctx.strings.firstPage,
     icon: (ctx) => (rtl(ctx) ? ICONS.last : ICONS.first),
     isDisabled: (ctx) => !ctx.zine.canFlipPrev(),
     action: (ctx) => {
@@ -52,7 +52,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'last',
-    title: 'Last page',
+    title: (ctx) => ctx.strings.lastPage,
     icon: (ctx) => (rtl(ctx) ? ICONS.first : ICONS.last),
     isDisabled: (ctx) => !ctx.zine.canFlipNext(),
     action: (ctx) => {
@@ -63,7 +63,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'zoomIn',
-    title: 'Zoom in',
+    title: (ctx) => ctx.strings.zoomIn,
     icon: ICONS.zoomIn,
     isDisabled: (ctx) => ctx.zine.getZoom() >= ctx.zine.getMaxZoom() - 1e-6,
     action: (ctx) => ctx.zine.setZoom(ctx.zine.getZoom() * ZOOM_STEP),
@@ -71,7 +71,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'zoomOut',
-    title: 'Zoom out',
+    title: (ctx) => ctx.strings.zoomOut,
     icon: ICONS.zoomOut,
     isDisabled: (ctx) => ctx.zine.getZoom() <= 1 + 1e-6,
     action: (ctx) => ctx.zine.setZoom(ctx.zine.getZoom() / ZOOM_STEP),
@@ -79,7 +79,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'fullscreen',
-    title: 'Fullscreen',
+    title: (ctx) => ctx.strings.fullscreen,
     icon: ICONS.fullscreen,
     isVisible: (ctx) => typeof ctx.zine.container.requestFullscreen === 'function',
     isActive: isFullscreen,
@@ -93,7 +93,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'mute',
-    title: (ctx) => (ctx.zine.isSoundMuted() ? 'Unmute page sound' : 'Mute page sound'),
+    title: (ctx) => (ctx.zine.isSoundMuted() ? ctx.strings.unmute : ctx.strings.mute),
     icon: (ctx) => (ctx.zine.isSoundMuted() ? ICONS.soundOff : ICONS.soundOn),
     // Only meaningful when flip sound is on; hidden otherwise so existing layouts are unchanged.
     isVisible: (ctx) => ctx.zine.isSoundEnabled(),
@@ -103,7 +103,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'share',
-    title: 'Share',
+    title: (ctx) => ctx.strings.share,
     icon: ICONS.share,
     action: (ctx) => {
       ctx.close();
@@ -120,7 +120,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'download',
-    title: 'Download PDF',
+    title: (ctx) => ctx.strings.downloadPdf,
     icon: ICONS.download,
     // Hidden for image books and for PDFs opened from a caller-owned pdf.js document, which
     // have no file of their own to save.
@@ -137,7 +137,7 @@ export function registerBuiltins(): void {
     id: 'spread',
     // Says what pressing it will do, not what the book is doing now, and in the reader's terms —
     // "spread mode" is the library's word for it, not theirs.
-    title: (ctx) => (ctx.zine.isSinglePage() ? 'Show two pages' : 'Show one page'),
+    title: (ctx) => (ctx.zine.isSinglePage() ? ctx.strings.showTwoPages : ctx.strings.showOnePage),
     icon: (ctx) => (ctx.zine.isSinglePage() ? ICONS.twoPages : ICONS.onePage),
     // Hidden while a narrow container is forcing one page: pressing it could not honour two.
     isVisible: (ctx) => !ctx.zine.isResponsiveSingle(),
@@ -149,7 +149,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'print',
-    title: 'Print',
+    title: (ctx) => ctx.strings.print,
     icon: ICONS.print,
     // Same reach as download: there has to be an original document to print.
     isVisible: (ctx) => ctx.zine.canPrint(),
@@ -163,7 +163,7 @@ export function registerBuiltins(): void {
 
   defineControl({
     id: 'menu',
-    title: 'More',
+    title: (ctx) => ctx.strings.more,
     icon: ICONS.menu,
     // Share and fullscreen sit on the bar itself by default, so the overflow holds what is left.
     // `mute` only appears here when sound is enabled (its isVisible), so it costs nothing otherwise.

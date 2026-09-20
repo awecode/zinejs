@@ -4,6 +4,7 @@ import { qrSvg } from './qr';
 import { applyColorScheme } from './styles';
 import type { ControlsColorScheme } from './types';
 import type { Zine } from '../zine';
+import type { ZineStrings } from '../strings';
 
 /** QR edge length in CSS px. */
 const QR_SIZE = 132;
@@ -23,14 +24,16 @@ export class ShareDialog {
   #lastFocus: Element | null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #onKey: (e: KeyboardEvent) => void;
+  #strings: ZineStrings;
 
   constructor(zine: Zine, container: HTMLElement, colorScheme: ControlsColorScheme = 'auto') {
     const doc = container.ownerDocument!;
     this.#doc = doc;
     this.#lastFocus = doc.activeElement;
+    this.#strings = zine.strings;
 
     const url = zine.pageLink();
-    const title = doc.title || 'Flipbook';
+    const title = doc.title || this.#strings.shareFallbackTitle;
 
     this.#backdrop = doc.createElement('div');
     this.#backdrop.className = 'zine-share-backdrop';
@@ -45,17 +48,17 @@ export class ShareDialog {
     this.#dialog.className = 'zine-share';
     this.#dialog.setAttribute('role', 'dialog');
     this.#dialog.setAttribute('aria-modal', 'true');
-    this.#dialog.setAttribute('aria-label', 'Share');
+    this.#dialog.setAttribute('aria-label', this.#strings.share);
     this.#backdrop.appendChild(this.#dialog);
 
     const head = doc.createElement('div');
     head.className = 'zine-share-head';
     const heading = doc.createElement('strong');
-    heading.textContent = 'Share';
+    heading.textContent = this.#strings.share;
     const close = doc.createElement('button');
     close.type = 'button';
     close.className = 'zine-share-close';
-    close.setAttribute('aria-label', 'Close');
+    close.setAttribute('aria-label', this.#strings.close);
     close.appendChild(createIcon(doc, ICONS.close));
     close.addEventListener('click', () => this.close());
     head.append(heading, close);
@@ -81,7 +84,7 @@ export class ShareDialog {
       const wrap = doc.createElement('div');
       wrap.className = 'zine-share-qr';
       wrap.innerHTML = qrSvg(url, QR_SIZE);
-      wrap.setAttribute('aria-label', 'QR code for this page');
+      wrap.setAttribute('aria-label', this.#strings.qrLabel);
       wrap.setAttribute('role', 'img');
       return wrap;
     } catch {
@@ -96,13 +99,13 @@ export class ShareDialog {
     input.type = 'text';
     input.readOnly = true;
     input.value = url;
-    input.setAttribute('aria-label', 'Link to this page');
+    input.setAttribute('aria-label', this.#strings.linkLabel);
     input.addEventListener('focus', () => input.select());
 
     const copy = doc.createElement('button');
     copy.type = 'button';
     copy.className = 'zine-share-copy';
-    copy.textContent = 'Copy';
+    copy.textContent = this.#strings.copy;
     copy.addEventListener('click', () => {
       void this.#copy(url, copy);
     });
@@ -113,13 +116,13 @@ export class ShareDialog {
   async #copy(url: string, button: HTMLButtonElement): Promise<void> {
     try {
       await navigator.clipboard?.writeText(url);
-      button.textContent = 'Copied';
+      button.textContent = this.#strings.copied;
     } catch {
-      button.textContent = 'Press Ctrl+C';
+      button.textContent = this.#strings.copyManual;
     }
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {
-      button.textContent = 'Copy';
+      button.textContent = this.#strings.copy;
     }, COPIED_MS);
   }
 
@@ -130,8 +133,10 @@ export class ShareDialog {
       const link = doc.createElement('a');
       link.className = 'zine-share-social';
       link.href = social.href(url, title);
-      link.title = social.label;
-      link.setAttribute('aria-label', `Share on ${social.label}`);
+      // Brand names stay as-is; "Email" is the one social label that translates.
+      const label = social.id === 'email' ? this.#strings.email : social.label;
+      link.title = label;
+      link.setAttribute('aria-label', this.#strings.shareOn(label));
       if (social.id !== 'email') {
         link.target = '_blank';
         link.rel = 'noopener noreferrer';

@@ -31,6 +31,7 @@ import { composeSource } from './source/compose';
 import type { ContextMenuOptions, ControlsOptions } from './controls/types';
 import type { LoaderHandle } from './loading/loading';
 import type { FlipSound } from './sound/flipSound';
+import { resolveStrings, type ZineStrings } from './strings';
 
 /** Grab-zone size as a fraction of the smaller container dimension. */
 const CORNER_FRACTION = 0.25;
@@ -214,6 +215,10 @@ export interface ZineOptions {
    *  centers it (a small margin shows); 'fill' stretches it to the book's shape. Either way the
    *  book keeps one shape for the whole document, so mixed-size pages never cause a layout shift. */
   fit?: 'contain' | 'fill';
+  /** Override any reader-facing text (control labels, screen-reader announcements, panel and
+   *  loading text) for localization. English by default; pass only the keys you want to change.
+   *  Interpolated entries (e.g. the page announcement) are functions. See {@link ZineStrings}. */
+  strings?: Partial<ZineStrings>;
   /** Edge-zone size in px per side, used when clickToFlip is 'edge'. Default 64. */
   clickZoneSize?: number;
   /**
@@ -346,6 +351,7 @@ export class Zine {
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
   #fit: 'contain' | 'fill';
+  #strings: ZineStrings;
   #clickZoneSize: number;
   #cursorHints: boolean;
   /** Last mouse position over the container in client px, so the cursor can be re-derived after a
@@ -501,6 +507,7 @@ export class Zine {
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#fit = options.fit ?? 'contain';
+    this.#strings = resolveStrings(options.strings);
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#cursorHints = options.cursorHints ?? true;
     const hints = options.hints ?? true;
@@ -1030,6 +1037,12 @@ export class Zine {
 
   resetZoom(): void {
     this.setZoom(1);
+  }
+
+  /** The resolved reader-facing text (English defaults merged with the `strings` option). Read by
+   *  the controls and panels so a translation reaches every label and announcement. */
+  get strings(): ZineStrings {
+    return this.#strings;
   }
 
   /** Whether page-flip sound is enabled for this book (the `sound` option was set). */
@@ -1802,7 +1815,7 @@ export class Zine {
    *  A dark toast pill with light text reads on any page background and either theme. */
   #showPanCaption(): void {
     if (this.#learned.pan) return;
-    this.#showCaption('Drag to move'); // panning has no visual analog, so this one hint uses words
+    this.#showCaption(this.#strings.panHint); // panning has no visual analog, so this one hint uses words
   }
 
   /** Show a transient caption pill over the book, replacing any caption already up. Self-contained
@@ -1874,14 +1887,13 @@ export class Zine {
    *  always one (this fires only where a double-click would zoom); Ctrl/⌘-scroll is added when wheel
    *  zoom is on, with the platform's modifier. */
   #zoomHintText(): string {
-    const parts: string[] = [];
-    if (this.#doubleClickLevels !== null) parts.push('Double-click');
-    if (this.#wheelZoom) {
-      const nav = this.#container.ownerDocument?.defaultView?.navigator;
-      const mac = /Mac|iPhone|iPad/.test(nav?.platform ?? '');
-      parts.push(`${mac ? '⌘' : 'Ctrl'}-scroll`);
-    }
-    return `${parts.join(' or ')} to zoom`;
+    const nav = this.#container.ownerDocument?.defaultView?.navigator;
+    const mac = /Mac|iPhone|iPad/.test(nav?.platform ?? '');
+    return this.#strings.zoomHint({
+      doubleClick: this.#doubleClickLevels !== null,
+      wheel: this.#wheelZoom,
+      mac,
+    });
   }
 
   #clearZoomHint(): void {
@@ -2141,7 +2153,7 @@ export class Zine {
       const { mountLoading } = await import('./loading/loading');
       // The spread may have painted while the chunk was in flight; do not pop an overlay over it.
       if (this.#loaderPhase === 'done' || this.#destroyed) return;
-      this.#loader = mountLoading(container);
+      this.#loader = mountLoading(container, this.#strings);
       if (this.#lastProgress) this.#loader.update(this.#lastProgress);
       if (this.#loaderPhase === 'preparing') this.#loader.preparing();
     } catch {
@@ -2268,7 +2280,7 @@ export class Zine {
     if (!doc || typeof container.setAttribute !== 'function') return null;
 
     if (!container.hasAttribute('tabindex')) container.tabIndex = 0;
-    container.setAttribute('aria-roledescription', 'flipbook');
+    container.setAttribute('aria-roledescription', this.#strings.roledescription);
     const onKey = (e: KeyboardEvent): void => this.#onKeyDown(e);
     container.addEventListener('keydown', onKey);
 
@@ -2311,7 +2323,10 @@ export class Zine {
 
   #announce(): void {
     if (this.#liveRegion) {
-      this.#liveRegion.textContent = `Page ${this.#currentPage + 1} of ${this.#source.pageCount}`;
+      this.#liveRegion.textContent = this.#strings.pageAnnounce(
+        this.#currentPage + 1,
+        this.#source.pageCount,
+      );
     }
   }
 
@@ -2737,6 +2752,11 @@ function validateOptions(container: unknown, options: unknown): void {
   const fit = o.fit;
   if (fit !== undefined && fit !== 'contain' && fit !== 'fill') {
     throw new Error(`Zine: fit must be 'contain' or 'fill'; got ${JSON.stringify(fit)}.`);
+  }
+
+  const strings = o.strings;
+  if (strings !== undefined && (typeof strings !== 'object' || strings === null)) {
+    throw new Error(`Zine: strings must be an object of text overrides; got ${typeName(strings)}.`);
   }
 
   const curl = o.curl;

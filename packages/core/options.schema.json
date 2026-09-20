@@ -89,6 +89,10 @@
       "default": "contain",
       "description": "How a page whose size differs from the book fits: contain keeps its aspect and centers it (a margin shows); fill stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout."
     },
+    "strings": {
+      "type": "object",
+      "description": "Override any reader-facing text (control labels, screen-reader announcements, panel and loading text) for localization. English by default; pass only the keys to change. Interpolated entries are functions, so this is set in code, not JSON."
+    },
     "clickZoneSize": {
       "type": "number",
       "minimum": 0,

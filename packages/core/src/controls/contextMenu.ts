@@ -102,7 +102,12 @@ export class ContextMenu {
   }
 
   #context(): ControlContext {
-    return { zine: this.#zine, close: () => this.#close(), colorScheme: this.#colorScheme };
+    return {
+      zine: this.#zine,
+      close: () => this.#close(),
+      colorScheme: this.#colorScheme,
+      strings: this.#zine.strings,
+    };
   }
 
   #open(clientX: number, clientY: number): void {

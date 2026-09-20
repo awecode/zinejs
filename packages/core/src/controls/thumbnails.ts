@@ -35,7 +35,8 @@ export class Thumbnails {
     this.#doc = doc;
     this.#bar = new Sidebar(doc, container, {
       className: 'zine-thumbs',
-      label: 'Pages',
+      label: zine.strings.thumbnailsLabel,
+      closeLabel: zine.strings.close,
       width: THUMB_WIDTH + RAIL_PAD * 2,
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
@@ -79,10 +80,7 @@ export class Thumbnails {
       }
 
       const labels = [...pages].sort((a, b) => a - b).map((p) => p + 1);
-      row.setAttribute(
-        'aria-label',
-        labels.length > 1 ? `Pages ${labels[0]}–${labels.at(-1)}` : `Page ${labels[0] ?? ''}`,
-      );
+      row.setAttribute('aria-label', this.#zine.strings.thumbnailAria(labels.map(String)));
 
       const caption = this.#doc.createElement('span');
       caption.className = 'zine-thumbs-caption';

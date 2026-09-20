@@ -1349,3 +1349,26 @@ describe('Zine.download', () => {
     expect(clicked).toEqual([{ href: 'blob:mock-object-url', download: '1084.pdf' }]);
   });
 });
+
+describe('i18n (strings option)', () => {
+  it('translates a control label through to its aria-label', async () => {
+    const { el } = await mount({ strings: { nextPage: 'Siguiente' } });
+    expect(byLabel(el, 'Siguiente')).toBeDefined();
+    expect(byLabel(el, 'Next page')).toBeUndefined(); // the English default is gone
+  });
+
+  it('uses a pageAnnounce override for the live-region announcement', async () => {
+    const { zine, el } = await mount({
+      strings: { pageAnnounce: (c, t) => `Página ${c} de ${t}` },
+    });
+    zine.flipNext();
+    await flush();
+    const live = el.querySelector('[aria-live="polite"]')!;
+    expect(live.textContent).toMatch(/^Página \d+ de 8$/);
+  });
+
+  it('leaves un-overridden labels in English', async () => {
+    const { el } = await mount({ strings: { nextPage: 'Siguiente' } });
+    expect(byLabel(el, 'Previous page')).toBeDefined();
+  });
+});

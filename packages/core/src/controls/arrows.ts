@@ -36,10 +36,10 @@ export class Arrows {
 
     const rtl = zine.getDirection() === 'rtl';
     // The arrows point where the page goes, so in RTL they swap: "back" is to the right.
-    this.#prev = this.#button(doc, rtl ? ICONS.next : ICONS.prev, 'Previous page', () =>
+    this.#prev = this.#button(doc, rtl ? ICONS.next : ICONS.prev, zine.strings.prevPage, () =>
       zine.flipPrev(),
     );
-    this.#next = this.#button(doc, rtl ? ICONS.prev : ICONS.next, 'Next page', () =>
+    this.#next = this.#button(doc, rtl ? ICONS.prev : ICONS.next, zine.strings.nextPage, () =>
       zine.flipNext(),
     );
 

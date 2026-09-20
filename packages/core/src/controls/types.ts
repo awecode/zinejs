@@ -1,4 +1,5 @@
 import type { Zine } from '../zine';
+import type { ZineStrings } from '../strings';
 
 /** Where the toolbar sits relative to the book. */
 export type ControlsPosition = 'top' | 'bottom' | 'left' | 'right';
@@ -15,6 +16,8 @@ export interface ControlContext {
   /** The controls' resolved colour scheme, for a control that mounts its own root outside the
    *  toolbar (the share dialog) and so has to carry the scheme across to it. */
   readonly colorScheme: ControlsColorScheme;
+  /** Resolved reader-facing text (English defaults merged with the `strings` option). */
+  readonly strings: ZineStrings;
 }
 
 /**

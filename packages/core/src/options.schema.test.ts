@@ -20,6 +20,7 @@ describe('options.schema.json', () => {
         'flipDuration',
         'clickToFlip',
         'fit',
+        'strings',
         'clickZoneSize',
         'cursorHints',
         'hints',

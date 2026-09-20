@@ -56,6 +56,8 @@ export class Sidebar {
        *  than the whole container, which is taller whenever the page is letterboxed (its aspect not
        *  matching the container's) or a docked toolbar padded the wrap. Re-read on every resize. */
       pageBox?: () => PageBox | null;
+      /** aria-label for the drawer's close button. Defaults to 'Close'. */
+      closeLabel?: string;
     },
   ) {
     this.#doc = doc;
@@ -78,7 +80,7 @@ export class Sidebar {
 
     this.#place(doc, container, options.rtl ?? false, options.overlay ?? false);
 
-    if (options.onDismiss) this.#armDismiss(doc, options.onDismiss);
+    if (options.onDismiss) this.#armDismiss(doc, options.onDismiss, options.closeLabel ?? 'Close');
 
     this.#trackPage(container);
   }
@@ -145,11 +147,11 @@ export class Sidebar {
    * a column for it. When there is no wrap (the parentless overlay fallback), there is no book
    * beside it to dim, so the scrim is skipped and only the button and Escape are armed.
    */
-  #armDismiss(doc: Document, onDismiss: () => void): void {
+  #armDismiss(doc: Document, onDismiss: () => void, closeLabel: string): void {
     const close = doc.createElement('button');
     close.type = 'button';
     close.className = 'zine-panel-close';
-    close.setAttribute('aria-label', 'Close');
+    close.setAttribute('aria-label', closeLabel);
     close.appendChild(createIcon(doc, ICONS.close));
     // Floats over the scrolling list (see styles.ts); stop the click reaching the book's tap handler
     // in the overlay fallback, where the rail sits inside the container.

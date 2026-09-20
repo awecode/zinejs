@@ -116,7 +116,7 @@ export class Toolbar {
       .filter(Boolean)
       .join(' ');
     this.#root.setAttribute('role', 'toolbar');
-    this.#root.setAttribute('aria-label', 'Flipbook controls');
+    this.#root.setAttribute('aria-label', this.#zine.strings.controlsLabel);
     applyColorScheme(this.#root, this.#colorScheme);
 
     this.#bar = doc.createElement('div');
@@ -224,7 +224,7 @@ export class Toolbar {
   }
 
   #context(close: () => void = () => this.#closePopover()): ControlContext {
-    return { zine: this.#zine, close, colorScheme: this.#colorScheme };
+    return { zine: this.#zine, close, colorScheme: this.#colorScheme, strings: this.#zine.strings };
   }
 
   #build(items: readonly ControlItem[]): void {
@@ -356,9 +356,9 @@ export class Toolbar {
     input.min = '1';
     input.max = String(this.#zine.getPageCount());
     input.value = String(this.#zine.getPage() + 1);
-    input.setAttribute('aria-label', 'Page number');
+    input.setAttribute('aria-label', this.#zine.strings.pageNumberLabel);
     const total = this.#doc.createElement('span');
-    total.textContent = `/ ${this.#zine.getPageCount()}`;
+    total.textContent = this.#zine.strings.pageTotal(this.#zine.getPageCount());
 
     // Enter commits and then blurs, and the blur commits again; a click-away blur commits on its
     // own. Guard so only the first call per editing session navigates: flipTo animates, so a
@@ -467,7 +467,8 @@ export function registerWidgets(toolbar: Toolbar): void {
   registerBuiltins();
   defineControl({
     id: 'thumbnails',
-    title: () => (toolbar.openPanel() === 'thumbnails' ? 'Hide thumbnails' : 'Show thumbnails'),
+    title: (ctx) =>
+      toolbar.openPanel() === 'thumbnails' ? ctx.strings.hideThumbnails : ctx.strings.showThumbnails,
     icon: ICONS.thumbnails,
     // Documents only, for now: an image book is already a short, flat list of pictures.
     isVisible: (ctx) => ctx.zine.isDocument(),
@@ -479,7 +480,8 @@ export function registerWidgets(toolbar: Toolbar): void {
   });
   defineControl({
     id: 'outline',
-    title: () => (toolbar.openPanel() === 'outline' ? 'Hide outline' : 'Show outline'),
+    title: (ctx) =>
+      toolbar.openPanel() === 'outline' ? ctx.strings.hideOutline : ctx.strings.showOutline,
     icon: ICONS.outline,
     // Only when the document actually has entries to show.
     isVisible: () => toolbar.hasOutline(),
@@ -491,12 +493,12 @@ export function registerWidgets(toolbar: Toolbar): void {
   });
   defineControl({
     id: 'pageInput',
-    title: 'Page',
+    title: (ctx) => ctx.strings.pageWidgetLabel,
     render: () => toolbar.makePageInput(),
   });
   defineControl({
     id: 'search',
-    title: () => (toolbar.openPanel() === 'search' ? 'Hide search' : 'Search'),
+    title: (ctx) => (toolbar.openPanel() === 'search' ? ctx.strings.searchClose : ctx.strings.searchOpen),
     icon: ICONS.search,
     isVisible: (ctx) => ctx.zine.canSearch(),
     isActive: () => toolbar.openPanel() === 'search',

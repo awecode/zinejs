@@ -1,5 +1,7 @@
 export { Zine } from './zine';
 export type { ZineOptions, ZoomOptions, SearchHit } from './zine';
+export { defaultStrings } from './strings';
+export type { ZineStrings } from './strings';
 
 // Just the registry mechanism — the toolbar, its icons and the built-in definitions all live in
 // the lazily-loaded chunk, so registering a custom control costs nothing up front.

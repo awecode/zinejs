@@ -55,7 +55,7 @@
     {
       "name": "core (ESM, gzip, excl. lazy renderer chunks)",
       "path": "dist/index.js",
-      "limit": "16 kB",
+      "limit": "17 kB",
       "gzip": true
     },
     {

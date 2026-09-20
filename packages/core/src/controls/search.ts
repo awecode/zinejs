@@ -50,7 +50,8 @@ export class Search {
     this.#onDismiss = options.onDismiss;
     this.#bar = new Sidebar(doc, container, {
       className: 'zine-search',
-      label: 'Search results',
+      label: zine.strings.searchResultsLabel,
+      closeLabel: zine.strings.close,
       width: RAIL_WIDTH,
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
@@ -62,8 +63,8 @@ export class Search {
     this.#input = doc.createElement('input');
     this.#input.type = 'search';
     this.#input.className = 'zine-search-input';
-    this.#input.placeholder = 'Search…';
-    this.#input.setAttribute('aria-label', 'Search the document');
+    this.#input.placeholder = zine.strings.searchPlaceholder;
+    this.#input.setAttribute('aria-label', zine.strings.searchInputLabel);
     this.#input.addEventListener('input', () => {
       if (this.#timer) clearTimeout(this.#timer);
       this.#timer = setTimeout(() => void this.#search(), DEBOUNCE_MS);
@@ -112,7 +113,7 @@ export class Search {
       this.#hits.replaceChildren();
       return;
     }
-    this.#note('Searching…');
+    this.#note(this.#zine.strings.searching);
     const results = await this.#zine.search(query);
     if (mine !== this.#run || !this.#bar.root.isConnected) return; // superseded, or closed
     this.#renderResults(query, results);
@@ -123,7 +124,7 @@ export class Search {
   #renderResults(query: string, results: SearchHit[]): void {
     this.#results = results;
     if (results.length === 0) {
-      this.#note(`No matches for “${query}”`);
+      this.#note(this.#zine.strings.noMatches(query));
       return;
     }
     this.#hits.replaceChildren(
@@ -132,10 +133,10 @@ export class Search {
         row.type = 'button';
         row.className = 'zine-search-hit';
         row.setAttribute('role', 'option');
-        row.setAttribute('aria-label', `Page ${hit.page + 1}: ${hit.excerpt}`);
+        row.setAttribute('aria-label', this.#zine.strings.searchHitAria(hit.page + 1, hit.excerpt));
         const label = this.#doc.createElement('span');
         label.className = 'zine-search-page';
-        label.textContent = `Page ${hit.page + 1}`;
+        label.textContent = this.#zine.strings.searchHitLabel(hit.page + 1);
         const excerpt = this.#doc.createElement('small');
         excerpt.textContent = hit.excerpt;
         row.append(label, excerpt);

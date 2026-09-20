@@ -32,7 +32,8 @@ export class Outline {
     this.#onDismiss = options.onDismiss;
     this.#bar = new Sidebar(doc, container, {
       className: 'zine-outline',
-      label: 'Outline',
+      label: zine.strings.outlineLabel,
+      closeLabel: zine.strings.close,
       width: RAIL_WIDTH,
       onDismiss: options.onDismiss,
       rtl: zine.getDirection() === 'rtl',
@@ -41,7 +42,7 @@ export class Outline {
     });
     this.root = this.#bar.root;
 
-    this.#note('Loading…');
+    this.#note(zine.strings.outlineLoading);
     void this.#build();
 
     this.#unsubscribe.push(zine.on('pageChanged', () => this.#markCurrent()));
@@ -60,7 +61,7 @@ export class Outline {
     if (items.length === 0) {
       // The toolbar hides the control when there is nothing to list, so this is only reachable
       // through a hand-written layout that names 'outline' regardless.
-      this.#note('This document has no outline.');
+      this.#note(this.#zine.strings.outlineEmpty);
       return;
     }
     this.#bar.root.replaceChildren();
@@ -75,14 +76,16 @@ export class Outline {
       row.className = 'zine-outline-row';
       row.setAttribute('role', 'option');
       row.style.paddingLeft = `${8 + depth * INDENT}px`;
-      row.textContent = item.title;
-      row.title = item.title;
+      // The entry text is document content; only the empty-title fallback is a translatable label.
+      const title = item.title.trim() || this.#zine.strings.untitled;
+      row.textContent = title;
+      row.title = title;
       if (item.page === null) {
         // Keep the heading visible but inert: it still tells the reader what is in the document.
         row.disabled = true;
       } else {
         const page = item.page;
-        row.setAttribute('aria-label', `${item.title}, page ${page + 1}`);
+        row.setAttribute('aria-label', this.#zine.strings.outlineEntryAria(title, page + 1));
         row.addEventListener('click', () => {
           this.#zine.flipTo(page);
           this.#onDismiss?.(); // clicking a heading has served its purpose; get the rail out of the way
