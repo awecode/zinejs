@@ -13,8 +13,8 @@
  * Text Domain:       zinejs
  *
  * This WordPress plugin, and the zinejs engine it bundles, are distributed here under the GNU GPL
- * v2 or later. The engine is dual-licensed; other editions are available at https://zinejs.com.
- * Bundled pdf.js is licensed under Apache-2.0 (compatible with GPLv3).
+ * v2 or later. Engine source: https://github.com/awecode/zinejs (dual-licensed; other editions at
+ * https://zinejs.com). Bundled pdf.js is licensed under Apache-2.0 (compatible with GPLv3).
  */
 
 if (!defined('ABSPATH')) {

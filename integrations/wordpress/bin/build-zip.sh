@@ -20,7 +20,6 @@ rsync -a \
   --exclude '.wp-env.json' \
   --exclude '.distignore' \
   --exclude 'README.md' \
-  --exclude 'SUBMISSION.md' \
   --exclude 'bin' \
   --exclude 'dist' \
   --exclude '.wordpress-org' \

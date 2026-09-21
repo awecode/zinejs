@@ -11,7 +11,7 @@ is server-rendered (PHP `render_callback`), and the front end is bootstrapped by
 
 - `zinejs.php` — plugin header, asset registration, block + shortcode registration.
 - `includes/render.php` — the shared markup path for the block and the shortcode.
-- `block/block.json` — block metadata (dynamic block; PHP renders the front end).
+- `block-pdf/`, `block-image/` — block.json metadata for the two dynamic blocks (PHP renders the front end).
 - `assets/js/block.js` — editor UI (PDF picker + options).
 - `assets/js/init.js` — front-end: mounts a flipbook on each `.zine-flipbook` container.
 - `assets/vendor/` — bundled engine + pdf.js (see below).
@@ -57,8 +57,8 @@ back to the default automatically; a removed *bundled* curl would error, so keep
 wordpress.org uses SVN and a `readme.txt` (present here) in its own format. The plugin folder that
 ships is this directory; there is nothing to compile.
 
-## Licensing
+## License
 
-Free plugin. The zinejs engine is PolyForm Noncommercial 1.0.0: commercial sites need a commercial
-license (https://zinejs.com/license). The license-key surface (freemium enforcement) is a follow-up;
-for now the readme and the block link to the license page.
+The WordPress.org edition (this plugin plus the engine build it bundles) is distributed under GPLv2
+or later. The engine is dual-licensed: PolyForm Noncommercial governs its other editions. See
+`readme.txt` and `LICENSE`.

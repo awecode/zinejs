@@ -48,8 +48,13 @@ the block's Wide/Full alignment to give it more room.
 == License ==
 
 This plugin is free and open source, licensed under the GNU GPL v2 or later. The zinejs engine it
-bundles is distributed here under the same GPL license (the engine is dual-licensed; other editions
-are available at https://zinejs.com). Bundled pdf.js is licensed under Apache-2.0.
+bundles is distributed here under the same GPL license, and its source is available at
+https://github.com/awecode/zinejs (the engine is dual-licensed; other editions exist at
+https://zinejs.com). Bundled pdf.js is licensed under Apache-2.0; its source is at
+https://github.com/mozilla/pdf.js.
+
+The plugin's own code is unminified and readable. The bundled `assets/vendor/*` files are built from
+the sources above; see the repository for the build steps.
 
 == Installation ==
 
