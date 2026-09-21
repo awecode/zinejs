@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://zinejs.com
- * Description:       Turn a PDF or a set of images into an interactive page-flip book, via a block or the [zine] shortcode.
+ * Description:       A real page-flip reader for PDFs and images, via a block or the [zine] shortcode.
  * Version:           1.0.0
  * Requires at least: 6.3
  * Requires PHP:      7.4
