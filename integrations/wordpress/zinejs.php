@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       zinejs Flipbook
- * Plugin URI:        https://zinejs.com
+ * Plugin URI:        https://github.com/awecode/zinejs
  * Description:       A real page-flip reader for PDFs and images, via a block or the [zine] shortcode.
  * Version:           1.0.0
  * Requires at least: 6.3
