@@ -4,9 +4,9 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.14
-License: PolyForm Noncommercial 1.0.0
-License URI: https://zinejs.com/license
+Stable tag: 1.0.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Turn a PDF (or a set of images) into an interactive page-flip book with a block or the [zine] shortcode.
 
@@ -45,11 +45,11 @@ By default the book drops to one page per spread when its container is narrower 
 but you still want two-page spreads (for example in `cover` mode), set `responsive="false"`, or use
 the block's Wide/Full alignment to give it more room.
 
-== Licensing ==
+== License ==
 
-The plugin is free to install. The underlying zinejs engine is licensed under PolyForm Noncommercial
-1.0.0: free for personal, educational, and non-profit sites. **Commercial sites require a commercial
-license.** See https://zinejs.com/license.
+This plugin is free and open source, licensed under the GNU GPL v2 or later. The zinejs engine it
+bundles is distributed here under the same GPL license (the engine is dual-licensed; other editions
+are available at https://zinejs.com). Bundled pdf.js is licensed under Apache-2.0.
 
 == Installation ==
 
@@ -71,7 +71,16 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 
 Yes. Add multiple blocks or shortcodes; each mounts independently.
 
+== Screenshots ==
+
+1. A two-page PDF spread rendered by the PDF Flipbook block.
+2. An image flipbook with the built-in reader toolbar.
+
 == Changelog ==
+
+= 1.0.0 =
+* First public release on WordPress.org, licensed under the GPL v2 or later.
+* Two blocks (PDF and Images) plus the [zine] shortcode, with the full zinejs option set.
 
 = 0.1.14 =
 * Shortcode now accepts the full option set (parity with the blocks).

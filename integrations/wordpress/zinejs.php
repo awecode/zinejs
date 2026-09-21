@@ -3,24 +3,25 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://zinejs.com
  * Description:       Turn a PDF or a set of images into an interactive page-flip book, via a block or the [zine] shortcode.
- * Version:           0.1.14
+ * Version:           1.0.0
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
  * Author URI:        https://zinejs.com
- * License:           PolyForm Noncommercial 1.0.0 (commercial license required for commercial use)
- * License URI:       https://zinejs.com/license
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       zinejs
  *
- * Free for personal, educational and non-profit use. Commercial sites need a commercial license:
- * https://zinejs.com/license
+ * This WordPress plugin, and the zinejs engine it bundles, are distributed here under the GNU GPL
+ * v2 or later. The engine is dual-licensed; other editions are available at https://zinejs.com.
+ * Bundled pdf.js is licensed under Apache-2.0 (compatible with GPLv3).
  */
 
 if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '0.1.14');
+define('ZINEJS_VERSION', '1.0.0');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
