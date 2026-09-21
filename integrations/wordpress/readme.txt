@@ -57,7 +57,7 @@ the sources above; see the repository for the build steps.
 
 == Installation ==
 
-1. Upload the `zinejs` folder to `/wp-content/plugins/`, or install the plugin through the Plugins
+1. Upload the `zinejs-flipbook` folder to `/wp-content/plugins/`, or install the plugin through the Plugins
    screen in WordPress.
 2. Activate it through the Plugins screen.
 3. Add a "Zine Flipbook" block to a post or page, or use the `[zine]` shortcode.

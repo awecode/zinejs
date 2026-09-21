@@ -6,7 +6,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)" # the plugin dir
-SLUG="zinejs"
+SLUG="zinejs-flipbook"
 OUT="$HERE/dist"
 STAGE="$OUT/$SLUG"
 

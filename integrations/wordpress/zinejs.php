@@ -10,7 +10,7 @@
  * Author URI:        https://zinejs.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       zinejs
+ * Text Domain:       zinejs-flipbook
  *
  * This WordPress plugin, and the zinejs engine it bundles, are distributed here under the GNU GPL
  * v2 or later. Engine source: https://github.com/awecode/zinejs (dual-licensed; other editions at

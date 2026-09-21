@@ -7,7 +7,7 @@
   "icon": "media-document",
   "description": "Turn a PDF into an interactive page-flip book.",
   "keywords": ["flipbook", "pdf", "book", "magazine", "zine"],
-  "textdomain": "zinejs",
+  "textdomain": "zinejs-flipbook",
   "editorScript": "zinejs-block",
   "editorStyle": "zinejs",
   "attributes": {

@@ -7,7 +7,7 @@
   "icon": "images-alt2",
   "description": "Turn a set of images into an interactive page-flip book.",
   "keywords": ["flipbook", "images", "gallery", "book", "zine"],
-  "textdomain": "zinejs",
+  "textdomain": "zinejs-flipbook",
   "editorScript": "zinejs-block",
   "editorStyle": "zinejs",
   "attributes": {

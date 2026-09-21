@@ -4,7 +4,7 @@ name: Deploy WordPress plugin
 # updates the listing assets (icon, banner, screenshots). Runs on a `wp-*` tag, e.g. `wp-1.0.0`.
 #
 # Prerequisites (one-time, after the plugin is APPROVED on WordPress.org):
-#   1. The plugin slug `zinejs` is approved and SVN access is granted.
+#   1. The plugin slug `zinejs-flipbook` is approved and SVN access is granted.
 #   2. Repo secrets SVN_USERNAME and SVN_PASSWORD are set to your WordPress.org account.
 # Until then this workflow will fail at the deploy step, which is expected.
 
@@ -23,12 +23,12 @@ jobs:
       # Assemble a clean plugin folder (only shipped files) for SVN trunk.
       - name: Build clean plugin directory
         run: |
-          mkdir -p build/zinejs
+          mkdir -p build/zinejs-flipbook
           rsync -a \
             --exclude '.git' --exclude '.gitignore' --exclude '.wp-env.json' \
             --exclude '.distignore' --exclude 'README.md' --exclude 'bin' \
             --exclude 'dist' --exclude '.wordpress-org' --exclude 'node_modules' \
-            integrations/wordpress/ build/zinejs/
+            integrations/wordpress/ build/zinejs-flipbook/
 
       - name: Derive version from tag
         id: ver
@@ -39,7 +39,7 @@ jobs:
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-          SLUG: zinejs
+          SLUG: zinejs-flipbook
           VERSION: ${{ steps.ver.outputs.version }}
-          BUILD_DIR: ${{ github.workspace }}/build/zinejs
+          BUILD_DIR: ${{ github.workspace }}/build/zinejs-flipbook
           ASSETS_DIR: ${{ github.workspace }}/integrations/wordpress/.wordpress-org
