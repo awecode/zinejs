@@ -1,0 +1,11 @@
+# Files excluded from the distributed plugin (WordPress.org zip / SVN trunk).
+# Everything not listed here ships: zinejs.php, readme.txt, LICENSE, includes/, block-*/, assets/.
+/.git
+/.gitignore
+/.wp-env.json
+/.distignore
+/README.md
+/bin
+/dist
+/.wordpress-org
+/node_modules
