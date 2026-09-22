@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://github.com/awecode/zinejs
- * Description:       A real page-flip reader for PDFs and images, via a block or the [zine] shortcode.
+ * Description:       A real page-flip reader for PDFs and images, via a block or the [zinejs] shortcode.
  * Version:           1.0.0
  * Requires at least: 6.3
  * Requires PHP:      7.4
@@ -105,10 +105,10 @@ function zinejs_register_block() {
 add_action('init', 'zinejs_register_block');
 
 /**
- * The [zine] shortcode. Exposes the same options as the blocks; the source is a PDF (`pdf`) or a
+ * The [zinejs] shortcode. Exposes the same options as the blocks; the source is a PDF (`pdf`) or a
  * comma-separated list of image URLs (`images`).
  *
- * Example: [zine pdf="brochure.pdf" spread="cover" controls-position="top" curl="silk" sound="true"]
+ * Example: [zinejs pdf="brochure.pdf" spread="cover" controls-position="top" curl="silk" sound="true"]
  */
 function zinejs_shortcode($atts) {
     $atts = shortcode_atts(array(
@@ -154,7 +154,7 @@ function zinejs_shortcode($atts) {
         'sound-volume'         => '',
         'sound-muted'          => 'false',
         'sound-persist'        => 'false',
-    ), $atts, 'zine');
+    ), $atts, 'zinejs');
 
     $bool = function ($key) use ($atts) {
         return filter_var($atts[$key], FILTER_VALIDATE_BOOLEAN);
@@ -197,4 +197,4 @@ function zinejs_shortcode($atts) {
         'soundPersist'        => $bool('sound-persist'),
     ));
 }
-add_shortcode('zine', 'zinejs_shortcode');
+add_shortcode('zinejs', 'zinejs_shortcode');

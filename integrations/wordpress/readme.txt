@@ -8,7 +8,7 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A real page-flip reader for PDFs and images, via a block or the [zine] shortcode.
+A real page-flip reader for PDFs and images, via a block or the [zinejs] shortcode.
 
 == Description ==
 
@@ -20,13 +20,13 @@ Ways to add a flipbook:
 
 * The **Zine PDF Flipbook** block: pick a PDF and set options in the editor.
 * The **Zine Image Flipbook** block: pick a set of images.
-* The **[zine] shortcode**: for the Classic editor, theme templates, and page builders.
+* The **[zinejs] shortcode**: for the Classic editor, theme templates, and page builders.
 
 The engine and pdf.js are bundled with the plugin, and the scripts are enqueued only on pages that actually contain a flipbook.
 
 = Shortcode =
 
-`[zine pdf="https://example.com/brochure.pdf" spread="cover" curl="silk" controls-position="top"]`
+`[zinejs pdf="https://example.com/brochure.pdf" spread="cover" curl="silk" controls-position="top"]`
 
 The shortcode accepts the same options as the blocks. Source: `pdf` (URL) or `images`
 (comma-separated URLs). Layout: `spread` (cover | double | single | book), `direction` (ltr | rtl),
@@ -60,7 +60,7 @@ the sources above; see the repository for the build steps.
 1. Upload the `zinejs-flipbook` folder to `/wp-content/plugins/`, or install the plugin through the Plugins
    screen in WordPress.
 2. Activate it through the Plugins screen.
-3. Add a "Zine Flipbook" block to a post or page, or use the `[zine]` shortcode.
+3. Add a "Zine Flipbook" block to a post or page, or use the `[zinejs]` shortcode.
 
 == Frequently Asked Questions ==
 
@@ -83,4 +83,4 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 == Changelog ==
 
 = 1.0.0 =
-* Two blocks (PDF and Images) plus the [zine] shortcode, with the full zinejs option set.
+* Two blocks (PDF and Images) plus the [zinejs] shortcode, with the full zinejs option set.

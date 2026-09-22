@@ -1,7 +1,7 @@
 # zinejs Flipbook (WordPress plugin)
 
 A WordPress plugin that embeds a [zinejs](https://zinejs.com) flipbook via a Gutenberg block or the
-`[zine]` shortcode. It wraps the published `@zinejs/core` + `@zinejs/pdf` UMD builds (bundled under
+`[zinejs]` shortcode. It wraps the published `@zinejs/core` + `@zinejs/pdf` UMD builds (bundled under
 `assets/vendor/`); it does not reimplement the engine.
 
 No build step: the block editor UI is plain JS (`assets/js/block.js`, using `wp.element`), the block
@@ -24,7 +24,7 @@ Requires Docker. From this directory:
 npx @wordpress/env start
 ```
 
-Open http://localhost:8888 (admin / password), then add a Zine Flipbook block or a `[zine]`
+Open http://localhost:8888 (admin / password), then add a Zine Flipbook block or a `[zinejs]`
 shortcode. `npx @wordpress/env stop` when done.
 
 ## Refreshing the bundled assets
