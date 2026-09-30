@@ -46,6 +46,15 @@ function zinejs_render_container($opts) {
         'responsiveSpread' => array_key_exists('responsiveSpread', $opts)
             ? (bool) $opts['responsiveSpread'] : true,
     );
+
+    // Print-gutter duplicate: 'auto' finds it per spread; a number is the overlap in percent of page
+    // width here (friendlier in a form), which the engine takes as a fraction. Empty = off.
+    $gutter = isset($opts['gutterOverlap']) ? trim((string) $opts['gutterOverlap']) : '';
+    if ($gutter === 'auto') {
+        $zine['gutterOverlap'] = 'auto';
+    } elseif (is_numeric($gutter) && (float) $gutter > 0 && (float) $gutter <= 50) {
+        $zine['gutterOverlap'] = (float) $gutter / 100;
+    }
     // Default the collapse-to-one-page breakpoint below a typical WordPress content column (often
     // ~620px), so 'cover'/'double' keep two-page spreads in a normal column and collapse only on
     // genuinely narrow screens (phones). Core's own default is 640; a WP embed wants it lower.
@@ -218,6 +227,7 @@ function zinejs_shared_block_opts($attributes) {
         'controlsColorScheme' => $a('controlsColorScheme', 'auto'),
         'direction'           => $a('direction', 'ltr'),
         'fit'                 => $a('fit', 'contain'),
+        'gutterOverlap'       => $a('gutterOverlap', ''),
         'responsiveSpread'    => $a('responsiveSpread', true),
         'singlePageThreshold' => $a('singlePageThreshold', ''),
         'maxWidth'            => $a('maxWidth', ''),

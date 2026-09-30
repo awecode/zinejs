@@ -17,6 +17,7 @@
     "spreadMode": { "type": "string", "default": "cover" },
     "direction": { "type": "string", "default": "ltr" },
     "fit": { "type": "string", "default": "contain" },
+    "gutterOverlap": { "type": "string", "default": "" },
     "responsiveSpread": { "type": "boolean", "default": true },
     "singlePageThreshold": { "type": "string", "default": "" },
     "maxWidth": { "type": "string", "default": "" },

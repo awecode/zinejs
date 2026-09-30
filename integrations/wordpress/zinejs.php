@@ -3,7 +3,7 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://github.com/awecode/zinejs
  * Description:       A real page-flip reader for PDFs and images, via a block or the [zinejs] shortcode.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
@@ -21,12 +21,12 @@ if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '1.0.0');
+define('ZINEJS_VERSION', '1.1.0');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
 // The bundled engine and pdf.js versions, for cache-busting and support reports.
-define('ZINEJS_ENGINE_VERSION', '0.9.2');
+define('ZINEJS_ENGINE_VERSION', '1.0.0');
 define('ZINEJS_PDFJS_VERSION', '6.2.108');
 
 require_once ZINEJS_PATH . 'includes/render.php';
@@ -119,6 +119,7 @@ function zinejs_shortcode($atts) {
         'spread'               => 'cover',
         'direction'            => 'ltr',
         'fit'                  => 'contain',
+        'gutter-overlap'       => '',
         'responsive'           => 'true',
         'threshold'            => '',
         'max-width'            => '',
@@ -166,6 +167,7 @@ function zinejs_shortcode($atts) {
         'spreadMode'          => $atts['spread'],
         'direction'           => $atts['direction'],
         'fit'                 => $atts['fit'],
+        'gutterOverlap'       => $atts['gutter-overlap'],
         'responsiveSpread'    => $bool('responsive'),
         'singlePageThreshold' => $atts['threshold'],
         'maxWidth'            => $atts['max-width'],

@@ -65,6 +65,24 @@
         ],
         onChange: function (v) { set({ fit: v }); },
       }),
+      el(SelectControl, {
+        label: __('Print gutter overlap', 'zinejs-flipbook'),
+        help: __('Hides artwork a print PDF repeats on both sides of the spine. Auto finds it per spread.', 'zinejs-flipbook'),
+        value: a.gutterOverlap === '' ? 'off' : a.gutterOverlap === 'auto' ? 'auto' : 'custom',
+        options: [
+          { label: __('Off', 'zinejs-flipbook'), value: 'off' },
+          { label: __('Auto', 'zinejs-flipbook'), value: 'auto' },
+          { label: __('Fixed amount', 'zinejs-flipbook'), value: 'custom' },
+        ],
+        onChange: function (v) { set({ gutterOverlap: v === 'off' ? '' : v === 'auto' ? 'auto' : '2' }); },
+      }),
+      a.gutterOverlap !== '' && a.gutterOverlap !== 'auto' &&
+        el(TextControl, {
+          label: __('Overlap (% of page width)', 'zinejs-flipbook'),
+          help: __('The width both pages share at the spine, e.g. 2.', 'zinejs-flipbook'),
+          value: a.gutterOverlap,
+          onChange: function (v) { set({ gutterOverlap: v.replace(/[^0-9.]/g, '') }); },
+        }),
       el(ToggleControl, {
         label: __('Collapse to one page on narrow screens', 'zinejs-flipbook'),
         help: __('Off keeps the chosen spread mode at every width (e.g. cover stays two pages in a narrow column).', 'zinejs-flipbook'),

@@ -4,7 +4,7 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,7 +30,7 @@ The engine and pdf.js are bundled with the plugin, and the scripts are enqueued 
 
 The shortcode accepts the same options as the blocks. Source: `pdf` (URL) or `images`
 (comma-separated URLs). Layout: `spread` (cover | double | single | book), `direction` (ltr | rtl),
-`fit` (contain | fill), `responsive` (true | false), `threshold` (px), `max-width` (px), `aspect`
+`fit` (contain | fill), `gutter-overlap` (auto, or a percent of page width such as 2), `responsive` (true | false), `threshold` (px), `max-width` (px), `aspect`
 (e.g. 3/2, or auto). Interaction: `click-to-flip` (edge | half | off), `curl` (cone | simple | roll
 | leaf | flick | silk), `flip-duration` (ms), `start-page` (0-based). Zoom: `zoom` (true | false),
 `zoom-max`, `zoom-wheel`, `zoom-double-click`. Controls: `controls` (true | false),
@@ -81,6 +81,10 @@ which blocks the worker. If pages stay blank, add this to your server config (Ap
 2. An image flipbook with the built-in reader toolbar.
 
 == Changelog ==
+
+= 1.1.0 =
+* New "Print gutter overlap" option (block and `gutter-overlap` shortcode attribute): hides artwork a print PDF repeats on both sides of the spine. Auto finds it per spread, or set a fixed percent.
+* Bundles zinejs engine 1.0.0.
 
 = 1.0.0 =
 * Two blocks (PDF and Images) plus the [zinejs] shortcode, with the full zinejs option set.
