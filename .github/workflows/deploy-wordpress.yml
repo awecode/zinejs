@@ -42,4 +42,5 @@ jobs:
           SLUG: zinejs-flipbook
           VERSION: ${{ steps.ver.outputs.version }}
           BUILD_DIR: ${{ github.workspace }}/build/zinejs-flipbook
-          ASSETS_DIR: ${{ github.workspace }}/integrations/wordpress/.wordpress-org
+          # Must be relative: the action always prefixes ASSETS_DIR with the workspace path.
+          ASSETS_DIR: integrations/wordpress/.wordpress-org
