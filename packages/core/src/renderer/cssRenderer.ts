@@ -1,12 +1,17 @@
 import { flipProgressToPose } from '../geometry/flipProgressToPose';
 import type { Spread } from '../engine/spread';
-import type {
-  FlipDirection,
-  LayoutMetrics,
-  PageContent,
-  Renderer,
-  RenderOptions,
-  SpreadContent,
+import {
+  FULL_SPAN,
+  leftSpan,
+  rightSpan,
+  spineTrimOf,
+  type FlipDirection,
+  type LayoutMetrics,
+  type PageContent,
+  type PageSpan,
+  type Renderer,
+  type RenderOptions,
+  type SpreadContent,
 } from './types';
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -127,13 +132,14 @@ export class CssRenderer implements Renderer {
     } else {
       this.#pageLeft.style.width = '50%';
       this.#pageRight.style.display = '';
-      this.#paint(this.#pageLeft, content.left);
-      this.#paint(this.#pageRight, content.right);
+      const trim = spineTrimOf(content, false);
+      this.#paint(this.#pageLeft, content.left, leftSpan(trim));
+      this.#paint(this.#pageRight, content.right, rightSpan(trim));
     }
     this.#fill = options?.fill ?? false;
     if (options?.fit) this.#fit = options.fit;
     this.#contentShift = this.#fill ? 0 : shiftUnit(content);
-    this.#trackAspect(content);
+    this.#trackAspect(content, this.#fill);
     this.#layoutBook();
     this.#applyShift(this.#contentShift);
     // A fresh spread cancels any in-progress flip.
@@ -162,20 +168,23 @@ export class CssRenderer implements Renderer {
       this.#pageLeft.style.width = '50%';
       this.#pageRight.style.display = '';
       this.#leaf.style.width = '50%';
+      // Each page keeps the spine trim of its own spread (see the WebGL renderer).
+      const fromTrim = spineTrimOf(from, false);
+      const toTrim = spineTrimOf(to, false);
       if (direction === 'forward') {
         // Right page lifts and swings left about the spine. Left stays; right reveals `to`.
-        this.#paint(this.#pageLeft, from.left);
-        this.#paint(this.#pageRight, to.right);
-        this.#paint(this.#leafFront, from.right);
-        this.#paint(this.#leafBack, to.left);
+        this.#paint(this.#pageLeft, from.left, leftSpan(fromTrim));
+        this.#paint(this.#pageRight, to.right, rightSpan(toTrim));
+        this.#paint(this.#leafFront, from.right, rightSpan(fromTrim));
+        this.#paint(this.#leafBack, to.left, leftSpan(toTrim));
         this.#leaf.style.left = '50%';
         this.#leaf.style.transformOrigin = 'left center';
       } else {
         // Left page swings right about its right edge. Right stays; left reveals `to`.
-        this.#paint(this.#pageRight, from.right);
-        this.#paint(this.#pageLeft, to.left);
-        this.#paint(this.#leafFront, from.left);
-        this.#paint(this.#leafBack, to.right);
+        this.#paint(this.#pageRight, from.right, rightSpan(fromTrim));
+        this.#paint(this.#pageLeft, to.left, leftSpan(toTrim));
+        this.#paint(this.#leafFront, from.left, leftSpan(fromTrim));
+        this.#paint(this.#leafBack, to.right, rightSpan(toTrim));
         this.#leaf.style.left = '0';
         this.#leaf.style.transformOrigin = 'right center';
       }
@@ -184,7 +193,7 @@ export class CssRenderer implements Renderer {
     this.#toShiftUnit = options?.fill ? 0 : shiftUnit(to);
     this.#fill = options?.fill ?? false;
     if (options?.fit) this.#fit = options.fit;
-    this.#trackAspect(to);
+    this.#trackAspect(to, this.#fill);
     this.#layoutBook();
     this.#applyShift(this.#fromShiftUnit);
     this.#leaf.style.display = 'block';
@@ -207,13 +216,14 @@ export class CssRenderer implements Renderer {
     this.#book.style.transform = px ? `translateX(${px}px)` : '';
   }
 
-  /** Remember the current spread's page aspect (for drawing) and latch the first page's aspect (for
-   *  the container). The container follows #docAspect so off-size pages do not resize it. */
-  #trackAspect(content: SpreadContent): void {
+  /** Remember the current spread's page aspect (for drawing; narrowed by any spine trim) and latch
+   *  the first page's untrimmed aspect (for the container), as in the WebGL renderer. */
+  #trackAspect(content: SpreadContent, fill: boolean): void {
     const p = content.left ?? content.right;
     if (p && p.height) {
-      this.#pageAspect = p.width / p.height;
-      if (this.#docAspect === 0) this.#docAspect = this.#pageAspect;
+      const raw = p.width / p.height;
+      this.#pageAspect = raw * (1 - spineTrimOf(content, fill));
+      if (this.#docAspect === 0) this.#docAspect = raw;
     }
   }
 
@@ -297,14 +307,17 @@ export class CssRenderer implements Renderer {
     return c;
   }
 
-  #paint(canvas: HTMLCanvasElement, content: PageContent | null): void {
+  /** Paint the visible `span` of a page (the whole page unless a spine trim narrows it). */
+  #paint(canvas: HTMLCanvasElement, content: PageContent | null, span: PageSpan = FULL_SPAN): void {
     const ctx = canvas.getContext('2d');
     if (content === null) {
       ctx?.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
-    canvas.width = content.width;
+    const sx = span[0] * content.width;
+    const sw = (span[1] - span[0]) * content.width;
+    canvas.width = Math.round(sw);
     canvas.height = content.height;
-    ctx?.drawImage(content, 0, 0);
+    ctx?.drawImage(content, sx, 0, sw, content.height, 0, 0, canvas.width, content.height);
   }
 }

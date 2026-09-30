@@ -89,6 +89,14 @@
       "default": "contain",
       "description": "How a page whose size differs from the book fits: contain keeps its aspect and centers it (a margin shows); fill stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout."
     },
+    "gutterOverlap": {
+      "oneOf": [
+        { "const": "auto" },
+        { "type": "number", "minimum": 0, "maximum": 0.5 }
+      ],
+      "default": 0,
+      "description": "Hide a print-gutter duplicate (artwork repeated on both sides of the spine for binding). A number is the overlap as a fraction of page width, removed from every two-page spread, half from each page. 'auto' finds the repeat per spread and only trims spreads that have one. Lone pages are never trimmed. 0 = off."
+    },
     "strings": {
       "type": "object",
       "description": "Override any reader-facing text (control labels, screen-reader announcements, panel and loading text) for localization. English by default; pass only the keys to change. Interpolated entries are functions, so this is set in code, not JSON."

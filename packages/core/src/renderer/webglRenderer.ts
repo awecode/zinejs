@@ -4,12 +4,17 @@ import { createPageMesh, type PageMesh } from '../geometry/curls/mesh';
 import { BUNDLED_CURLS, resolveCurl } from '../geometry/curls/bundled';
 import { DEFAULT_CURL, type CurlAnchor, type CurlModel, type CurlSpec } from '../geometry/curls/types';
 import type { Spread } from '../engine/spread';
-import type {
-  FlipDirection,
-  LayoutMetrics,
-  Renderer,
-  RenderOptions,
-  SpreadContent,
+import {
+  FULL_SPAN,
+  leftSpan,
+  rightSpan,
+  spineTrimOf,
+  type FlipDirection,
+  type LayoutMetrics,
+  type PageSpan,
+  type Renderer,
+  type RenderOptions,
+  type SpreadContent,
 } from './types';
 import { createGlContext } from './gl/context';
 import { createProgram } from './gl/program';
@@ -36,9 +41,10 @@ precision mediump float;
 in vec2 vUv;
 uniform sampler2D uTex;
 uniform float uGutterSide; // +1 = spine at right edge, -1 = at left edge, 0 = none
+uniform vec2 uSpan; // visible u-range of the page texture (a spine trim narrows it)
 out vec4 outColor;
 void main() {
-  vec4 c = texture(uTex, vUv);
+  vec4 c = texture(uTex, vec2(mix(uSpan.x, uSpan.y, vUv.x), vUv.y));
   if (uGutterSide != 0.0) {
     float d = uGutterSide > 0.0 ? (1.0 - vUv.x) : vUv.x;
     c.rgb *= mix(0.72, 1.0, smoothstep(0.0, 0.10, d));
@@ -89,6 +95,8 @@ in float vFacing;
 in float vU;
 uniform sampler2D uFront;
 uniform sampler2D uBack;
+uniform vec2 uFrontSpan; // visible u-ranges of the two faces (a spine trim narrows them)
+uniform vec2 uBackSpan;
 uniform highp float uDir;
 uniform float uGloss; // 0 disables the specular highlight (e.g. the flat 'simple' curl)
 uniform float uAlpha; // leaf opacity; a lone page dissolves into the page landing beneath it
@@ -100,7 +108,9 @@ void main() {
   // flips with uDir so a left-hand leaf reads spine-inward.
   bool showFront = vFacing > 0.0;
   float fx = uDir > 0.0 ? vUv.x : 1.0 - vUv.x;
-  vec4 c = showFront ? texture(uFront, vec2(fx, vUv.y)) : texture(uBack, vec2(1.0 - fx, vUv.y));
+  vec4 c = showFront
+    ? texture(uFront, vec2(mix(uFrontSpan.x, uFrontSpan.y, fx), vUv.y))
+    : texture(uBack, vec2(mix(uBackSpan.x, uBackSpan.y, 1.0 - fx), vUv.y));
 
   // Fold shading: the sheet darkens sharply where it curves away from the viewer, so the
   // rolled edge reads as a deep crease with a soft highlight riding the ridge.
@@ -146,6 +156,11 @@ interface FlipState {
   underFull: TexImageSource | null; // fill mode
   front: TexImageSource | null;
   back: TexImageSource | null;
+  // Visible spans: each page keeps the spine trim of the spread it belongs to.
+  underLeftSpan: PageSpan;
+  underRightSpan: PageSpan;
+  frontSpan: PageSpan;
+  backSpan: PageSpan;
   dir: number; // +1 forward (leaf right of spine), -1 backward (left)
   fill: boolean;
 }
@@ -276,17 +291,19 @@ export class WebglRenderer implements Renderer {
     this.#fill = options?.fill ?? false;
     if (options?.fit) this.#fit = options.fit;
     this.#flip = null;
-    this.#trackAspect(content);
+    this.#trackAspect(content, this.#fill);
     this.#render();
   }
 
-  /** Remember the current spread's page aspect (for drawing) and latch the first page's aspect (for
-   *  the container). The container follows #docAspect so off-size pages do not resize it. */
-  #trackAspect(content: SpreadContent): void {
+  /** Remember the current spread's page aspect (for drawing; narrowed by any spine trim) and latch
+   *  the first page's untrimmed aspect (for the container). The container follows #docAspect so
+   *  off-size or trimmed pages never resize it, whichever spread the reader opened on. */
+  #trackAspect(content: SpreadContent, fill: boolean): void {
     const p = content.left ?? content.right;
     if (p && p.height) {
-      this.#pageAspect = p.width / p.height;
-      if (this.#docAspect === 0) this.#docAspect = this.#pageAspect;
+      const raw = p.width / p.height;
+      this.#pageAspect = raw * (1 - spineTrimOf(content, fill));
+      if (this.#docAspect === 0) this.#docAspect = raw;
     }
   }
 
@@ -309,7 +326,11 @@ export class WebglRenderer implements Renderer {
     if (options?.anchor) this.#anchor = options.anchor;
     this.#fromShiftUnit = fill ? 0 : shiftUnit(from);
     this.#toShiftUnit = fill ? 0 : shiftUnit(to);
-    this.#trackAspect(to);
+    this.#trackAspect(to, fill);
+    // Each page keeps the trim of its own spread, so the leaf's front matches `from` and its back
+    // matches `to`: the spine edge stays hidden through the whole turn.
+    const fromTrim = spineTrimOf(from, fill);
+    const toTrim = spineTrimOf(to, fill);
     if (fill) {
       this.#flip = {
         underLeft: null,
@@ -319,6 +340,10 @@ export class WebglRenderer implements Renderer {
         // A lone page has no facing "next" leaf on its back; show the same page mirrored
         // (the shader flips the back UV) so it reads as the sheet's own reverse side.
         back: from.right ?? from.left,
+        underLeftSpan: FULL_SPAN,
+        underRightSpan: FULL_SPAN,
+        frontSpan: FULL_SPAN,
+        backSpan: FULL_SPAN,
         dir: direction === 'forward' ? 1 : -1,
         fill: true,
       };
@@ -329,6 +354,10 @@ export class WebglRenderer implements Renderer {
         underFull: null,
         front: from.right,
         back: to.left,
+        underLeftSpan: leftSpan(fromTrim),
+        underRightSpan: rightSpan(toTrim),
+        frontSpan: rightSpan(fromTrim),
+        backSpan: leftSpan(toTrim),
         dir: 1,
         fill: false,
       };
@@ -339,6 +368,10 @@ export class WebglRenderer implements Renderer {
         underFull: null,
         front: from.left,
         back: to.right,
+        underLeftSpan: leftSpan(toTrim),
+        underRightSpan: rightSpan(fromTrim),
+        frontSpan: leftSpan(fromTrim),
+        backSpan: rightSpan(toTrim),
         dir: -1,
         fill: false,
       };
@@ -451,10 +484,10 @@ export class WebglRenderer implements Renderer {
 
     this.#flat = createProgram(gl, FLAT_VERT, FLAT_FRAG);
     this.#curl = createProgram(gl, CURL_VERT, CURL_FRAG);
-    for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide']) {
+    for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide', 'uSpan']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uGloss', 'uAlpha', 'uCrease']) {
+    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uFrontSpan', 'uBackSpan', 'uGloss', 'uAlpha', 'uCrease']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -586,8 +619,9 @@ export class WebglRenderer implements Renderer {
       this.#drawQuad({ x: 0, y: 0, w, h }, content.right ?? content.left);
     } else {
       // A lone page (one side null) gets no gutter shadow — it's a standalone, centered page.
-      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left, content.right ? 1 : 0);
-      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right, content.left ? -1 : 0);
+      const trim = spineTrimOf(content, false);
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, content.left, content.right ? 1 : 0, leftSpan(trim));
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, content.right, content.left ? -1 : 0, rightSpan(trim));
     }
   }
 
@@ -608,8 +642,8 @@ export class WebglRenderer implements Renderer {
     if (flip.fill) {
       this.#drawQuad({ x: 0, y: 0, w, h }, flip.underFull);
     } else {
-      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, flip.underLeft, 1);
-      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight, -1);
+      this.#drawQuad({ x: 0, y: 0, w: w / 2, h }, flip.underLeft, 1, flip.underLeftSpan);
+      this.#drawQuad({ x: w / 2, y: 0, w: w / 2, h }, flip.underRight, -1, flip.underRightSpan);
     }
 
     if (flip.front === null && flip.back === null) return;
@@ -642,6 +676,8 @@ export class WebglRenderer implements Renderer {
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
+    gl.uniform2f(this.#curlU.uFrontSpan ?? null, flip.frontSpan[0], flip.frontSpan[1]);
+    gl.uniform2f(this.#curlU.uBackSpan ?? null, flip.backSpan[0], flip.backSpan[1]);
     gl.uniform1f(this.#curlU.uGloss ?? null, this.#curlModel.gloss === false ? 0 : 1);
     gl.uniform1f(this.#curlU.uAlpha ?? null, flip.fill ? this.#fillFade() : 1);
     // Spreads carry the full gutter crease; a lone leaf ramps it in over the first fifth of the
@@ -676,12 +712,13 @@ export class WebglRenderer implements Renderer {
     );
   }
 
-  #drawQuad(rect: Rect, source: TexImageSource | null, gutterSide = 0): void {
+  #drawQuad(rect: Rect, source: TexImageSource | null, gutterSide = 0, span: PageSpan = FULL_SPAN): void {
     const gl = this.#gl!;
     if (source === null) return;
     this.#bindFace(gl.TEXTURE0, source);
     gl.uniform4f(this.#flatU.uRect ?? null, rect.x, rect.y, rect.w, rect.h);
     gl.uniform1f(this.#flatU.uGutterSide ?? null, gutterSide);
+    gl.uniform2f(this.#flatU.uSpan ?? null, span[0], span[1]);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 

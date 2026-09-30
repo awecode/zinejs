@@ -39,6 +39,8 @@ const opt = {
   controls: (q.get('controls') ?? 'bottom') as 'bottom' | 'top' | 'left' | 'right' | 'off',
   controlsDock: (q.get('dock') ?? 'docked') as 'docked' | 'floating',
   sound: (q.get('sound') ?? 'off') as 'off' | 'on' | 'muted',
+  // ?gutter=auto or ?gutter=0.02 hides a print-gutter duplicate at the spine; off by default.
+  gutterOverlap: q.get('gutter') === 'auto' ? ('auto' as const) : num('gutter', 0),
 };
 
 // Bundled names first, then the importable ones, so the dropdown reads in that order.
@@ -200,6 +202,7 @@ const zine = new Zine(book, {
   clickToFlip: opt.clickToFlip,
   flipDuration: opt.flipDuration,
   singlePageThreshold: opt.singlePageThreshold,
+  gutterOverlap: opt.gutterOverlap,
   sound: opt.sound === 'on' ? true : opt.sound === 'muted' ? { muted: true } : false,
   zoom: { max: opt.zoomMax },
   controls:

@@ -98,6 +98,7 @@ Options (only `source` is required):
 | `pages` | `Record<number, string>` | — | Replace source pages with image URLs, keyed by 0-based index (negative = from the end). See [Covers](#covers-and-page-replacement). |
 | `clickToFlip` | `'edge' \| 'half' \| 'off'` | `'edge'` | Tap/click to turn: near an edge, by page half, or off. |
 | `fit` | `'contain' \| 'fill'` | `'contain'` | How a page whose size differs from the book fits: `contain` keeps its aspect and centers it (a small margin shows); `fill` stretches it. The book keeps one shape document-wide, so mixed-size pages never shift layout. |
+| `gutterOverlap` | `'auto' \| number` | `0` (off) | Hide a print-gutter duplicate: print PDFs sometimes repeat a strip of artwork on both sides of the spine so nothing is lost in the binding, which shows twice when the spread lies flat. A number is the overlap as a fraction of page width (e.g. `0.02`), removed from every two-page spread, half from each page's spine edge. `'auto'` finds the repeat per spread and only trims spreads that have one (its detector loads as a separate chunk, only when used). Lone pages are never trimmed. |
 | `strings` | `Partial<ZineStrings>` | English | Override reader-facing text for localization. See [Localization](#localization). |
 | `clickZoneSize` | `number` (px) | `64` | Edge-zone width per side, when `clickToFlip: 'edge'`. |
 | `clickFlipDelay` | `number` (ms) | auto | Delay before a click flips, so a double-click zoom can preempt it. Auto: `0` normally, `250` when double-click zoom is active in the flip zone. |

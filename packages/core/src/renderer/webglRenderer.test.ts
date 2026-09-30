@@ -10,7 +10,7 @@ import type { Spread } from '../engine/spread';
  * Methods are all-lowercase/camelCase; GL constants are ALL_CAPS, so the Proxy returns a number
  * for a constant read and a no-op function for any un-modelled method.
  */
-function fakeGl() {
+function fakeGl(overrides: Record<string, unknown> = {}) {
   const calls = { createProgram: 0, drawArrays: 0, drawElements: 0, clear: 0 };
   let lost = false;
   const explicit: Record<string, unknown> = {
@@ -40,6 +40,7 @@ function fakeGl() {
     drawElements: () => {
       calls.drawElements++;
     },
+    ...overrides,
   };
   const gl = new Proxy(explicit, {
     get(target, prop) {
@@ -87,6 +88,67 @@ const sized = (w: number, h: number): HTMLCanvasElement => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+describe('WebglRenderer: spine trim (gutterOverlap)', () => {
+  /** A fake GL that names uniform locations and records every vec2 set, i.e. the texture spans. */
+  function recording(): { gl: WebGL2RenderingContext; spans: Array<[string, number, number]> } {
+    const spans: Array<[string, number, number]> = [];
+    const { gl } = fakeGl({
+      getUniformLocation: (_program: unknown, name: string) => ({ name }),
+      uniform2f: (loc: { name: string } | null, x: number, y: number) => {
+        if (loc) spans.push([loc.name, x, y]);
+      },
+    });
+    return { gl, spans };
+  }
+  const last = (spans: Array<[string, number, number]>, name: string, from = 1): [number, number] => {
+    const hit = spans.filter(([n]) => n === name).at(-from)!;
+    return [hit[1], hit[2]];
+  };
+
+  it('samples only the visible span of each page of a trimmed spread', async () => {
+    const { gl, spans } = recording();
+    stubContext(gl);
+    const r = new WebglRenderer();
+    await r.mount(container());
+    r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150), spineTrim: 0.1 });
+    const [l0, l1] = last(spans, 'uSpan', 2); // left page: its right (spine) edge hidden
+    const [r0, r1] = last(spans, 'uSpan', 1); // right page: its left edge hidden
+    expect(l0).toBe(0);
+    expect(l1).toBeCloseTo(0.9);
+    expect(r0).toBeCloseTo(0.1);
+    expect(r1).toBe(1);
+  });
+
+  it('draws the book narrower but keeps the container at the untrimmed shape', async () => {
+    const { gl } = recording();
+    stubContext(gl);
+    const r = new WebglRenderer();
+    await r.mount(container());
+    r.renderSpread(spread, { left: sized(100, 150), right: sized(100, 150), spineTrim: 0.1 });
+    const m = r.measure();
+    expect(m.containerAspect).toBeCloseTo(2 * (100 / 150));
+    expect(m.book!.width / m.book!.height).toBeCloseTo(2 * (90 / 150), 1);
+  });
+
+  it('gives each leaf face the trim of its own spread', async () => {
+    const { gl, spans } = recording();
+    stubContext(gl);
+    const r = new WebglRenderer();
+    await r.mount(container());
+    r.beginFlip(
+      { left: sized(100, 150), right: sized(100, 150), spineTrim: 0.1 },
+      { left: sized(100, 150), right: sized(100, 150) },
+      'forward',
+    );
+    r.setFlipProgress(0.5, 'forward');
+    const [f0, f1] = last(spans, 'uFrontSpan'); // from.right: trimmed at its left edge
+    const [b0, b1] = last(spans, 'uBackSpan'); // to.left: no repeat, full page
+    expect(f0).toBeCloseTo(0.1);
+    expect(f1).toBe(1);
+    expect([b0, b1]).toEqual([0, 1]);
+  });
 });
 
 describe('WebglRenderer — book aspect', () => {

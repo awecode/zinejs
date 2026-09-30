@@ -8,7 +8,24 @@ export type PageContent = ImageBitmap | HTMLCanvasElement;
 export interface SpreadContent {
   left: PageContent | null;
   right: PageContent | null;
+  /** Fraction of each page's width hidden at its spine edge, removing a print-gutter duplicate
+   *  (see `gutterOverlap`). Honoured only on a full two-page spread; 0 or omitted = none. */
+  spineTrim?: number;
 }
+
+/** The spine trim actually applied: only a full two-page spread is trimmed, never a lone page or
+ *  single-page (fill) mode, where there is no facing page to duplicate. */
+export function spineTrimOf(content: SpreadContent, fill: boolean): number {
+  return !fill && content.left !== null && content.right !== null ? (content.spineTrim ?? 0) : 0;
+}
+
+/** The visible horizontal part of a page's raster, as [start, end] fractions of its width. */
+export type PageSpan = readonly [number, number];
+export const FULL_SPAN: PageSpan = [0, 1];
+/** A left-hand page's spine is its right edge, so a spine trim narrows it from the right. */
+export const leftSpan = (trim: number): PageSpan => [0, 1 - trim];
+/** A right-hand page's spine is its left edge. */
+export const rightSpan = (trim: number): PageSpan => [trim, 1];
 
 export type FlipDirection = 'forward' | 'backward';
 

@@ -215,6 +215,12 @@ export interface ZineOptions {
    *  centers it (a small margin shows); 'fill' stretches it to the book's shape. Either way the
    *  book keeps one shape for the whole document, so mixed-size pages never cause a layout shift. */
   fit?: 'contain' | 'fill';
+  /** Hide a print-gutter duplicate: print PDFs sometimes repeat a strip of artwork on both sides
+   *  of the spine so nothing is lost in the binding, which shows twice when the spread lies flat.
+   *  A number is the overlap as a fraction of page width (e.g. 0.02 = 2%), removed from every
+   *  two-page spread, half from each page's spine edge. 'auto' finds the repeat per spread and only
+   *  trims spreads that have one. Lone pages are never trimmed. Default 0 (off). */
+  gutterOverlap?: 'auto' | number;
   /** Override any reader-facing text (control labels, screen-reader announcements, panel and
    *  loading text) for localization. English by default; pass only the keys you want to change.
    *  Interpolated entries (e.g. the page announcement) are functions. See {@link ZineStrings}. */
@@ -351,6 +357,12 @@ export class Zine {
   #anchorY = 1; // where the last tap/drag grabbed (0=top, 1=bottom); drives anchored curls
   #clickToFlip: 'edge' | 'half' | 'off';
   #fit: 'contain' | 'fill';
+  #gutterOverlap: 'auto' | number;
+  // The 'auto' detector lives in its own chunk, fetched only when the option asks for it.
+  #detectOverlap: Promise<((left: PageContent, right: PageContent) => number) | null> | null = null;
+  // 'auto' results per page pair ("left:right"), with the raster width they were measured at so a
+  // sharper render of the same pages can refine them.
+  #overlaps = new Map<string, { overlap: number; width: number }>();
   #strings: ZineStrings;
   #clickZoneSize: number;
   #cursorHints: boolean;
@@ -507,6 +519,12 @@ export class Zine {
     this.#curl = options.curl ?? DEFAULT_CURL;
     this.#clickToFlip = options.clickToFlip ?? 'edge';
     this.#fit = options.fit ?? 'contain';
+    this.#gutterOverlap = options.gutterOverlap ?? 0;
+    if (this.#gutterOverlap === 'auto') {
+      // Started now so it has landed well before the first pages decode. A failed load just
+      // leaves spreads untrimmed.
+      this.#detectOverlap = import('./engine/gutter').then((m) => m.detectOverlap, () => null);
+    }
     this.#strings = resolveStrings(options.strings);
     this.#clickZoneSize = options.clickZoneSize ?? 64;
     this.#cursorHints = options.cursorHints ?? true;
@@ -2617,7 +2635,29 @@ export class Zine {
 
   async #resolveContent(spread: Spread): Promise<SpreadContent> {
     const [left, right] = await Promise.all([this.#getPage(spread.left), this.#getPage(spread.right)]);
-    return { left, right };
+    const spineTrim = await this.#spineTrim(spread, left, right);
+    return spineTrim > 0 ? { left, right, spineTrim } : { left, right };
+  }
+
+  /** How much of each page to hide at the spine (half the gutter overlap), as a fraction of page
+   *  width. Only a spread with both pages present has a spine to trim. */
+  async #spineTrim(spread: Spread, left: PageContent | null, right: PageContent | null): Promise<number> {
+    const option = this.#gutterOverlap;
+    if (option === 0 || left === null || right === null) return 0;
+    if (option !== 'auto') return option / 2;
+    const key = `${spread.left}:${spread.right}`;
+    const known = this.#overlaps.get(key);
+    // Mid-upgrade (a progressive PDF sharpens one page before the other) the two rasters differ in
+    // size and cannot be compared: keep the last measurement until both match, and cache nothing,
+    // or a "can't compare" would stand in for the real measurement once both are sharp.
+    if (left.width !== right.width || left.height !== right.height) return (known?.overlap ?? 0) / 2;
+    // Reuse a measurement unless this render is sharper (e.g. a full page replacing a low-res one).
+    if (known !== undefined && known.width >= left.width) return known.overlap / 2;
+    const detect = await this.#detectOverlap;
+    if (!detect) return 0;
+    const overlap = detect(left, right);
+    this.#overlaps.set(key, { overlap, width: left.width });
+    return overlap / 2;
   }
 
   /** Decode one page; on failure emit `sourceError` and degrade to a blank (null) page. */
@@ -2752,6 +2792,17 @@ function validateOptions(container: unknown, options: unknown): void {
   const fit = o.fit;
   if (fit !== undefined && fit !== 'contain' && fit !== 'fill') {
     throw new Error(`Zine: fit must be 'contain' or 'fill'; got ${JSON.stringify(fit)}.`);
+  }
+
+  const gutterOverlap = o.gutterOverlap;
+  if (
+    gutterOverlap !== undefined &&
+    gutterOverlap !== 'auto' &&
+    !(typeof gutterOverlap === 'number' && gutterOverlap >= 0 && gutterOverlap <= 0.5)
+  ) {
+    throw new Error(
+      `Zine: gutterOverlap must be 'auto' or a number from 0 to 0.5 (a fraction of page width); got ${JSON.stringify(gutterOverlap)}.`,
+    );
   }
 
   const strings = o.strings;

@@ -67,6 +67,46 @@ describe('CssRenderer', () => {
     expect(pageLeft.height).toBe(400);
   });
 
+  describe('spine trim (gutterOverlap)', () => {
+    function page(w = 300, h = 400): HTMLCanvasElement {
+      return Object.assign(document.createElement('canvas'), { width: w, height: h });
+    }
+    const canvas = (c: HTMLElement, cls: string): HTMLCanvasElement => c.querySelector(cls) as HTMLCanvasElement;
+
+    it('narrows both pages of a two-page spread by the trim, keeping their height', async () => {
+      const { container, r } = await mounted();
+      r.renderSpread({ left: 0, right: 1 }, { left: page(), right: page(), spineTrim: 0.1 });
+      expect(canvas(container, '.zine-page-left').width).toBe(270);
+      expect(canvas(container, '.zine-page-right').width).toBe(270);
+      expect(canvas(container, '.zine-page-left').height).toBe(400);
+    });
+
+    it('draws the trimmed book narrower but keeps the container at the untrimmed shape', async () => {
+      const { r } = await mounted(800, 600);
+      r.renderSpread({ left: 0, right: 1 }, { left: page(), right: page(), spineTrim: 0.1 });
+      const m = r.measure();
+      expect(m.containerAspect).toBeCloseTo(1.5); // 2 x 300/400: no layout shift from the trim
+      expect(m.book!.width / m.book!.height).toBeCloseTo(1.35); // 2 x 270/400
+    });
+
+    it('never trims a lone page', async () => {
+      const { container, r } = await mounted();
+      r.renderSpread({ left: null, right: 0 }, { left: null, right: page(), spineTrim: 0.1 });
+      expect(canvas(container, '.zine-page-right').width).toBe(300);
+    });
+
+    it('keeps each leaf face at the trim of its own spread through a flip', async () => {
+      const { container, r } = await mounted();
+      r.beginFlip(
+        { left: page(), right: page(), spineTrim: 0.1 }, // from: trimmed
+        { left: page(), right: page() }, // to: no repeat found
+        'forward',
+      );
+      expect(canvas(container, '.zine-leaf-front').width).toBe(270); // from.right
+      expect(canvas(container, '.zine-leaf-back').width).toBe(300); // to.left
+    });
+  });
+
   const blank = { left: null, right: null };
 
   it('beginFlip stages the leaf on the correct side per direction', async () => {
