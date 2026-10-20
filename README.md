@@ -652,6 +652,7 @@ new PdfSource(await getDocument(...).promise) // a document you created; no work
 | --- | --- | --- | --- |
 | `workerSrc` | `string` | auto | pdf.js worker URL. Auto-resolved from your bundler / `pdfjs-dist` install (or a version-matched CDN when `cdnFallback` is true); pass it for CDN/UMD, CSP/offline, or if auto-resolve fails. |
 | `cdnFallback` | `boolean` | `true` | When local worker resolution fails, load a version-matched worker from jsDelivr and warn once. Set `false` for CSP/offline (then pass `workerSrc`). |
+| `assetsUrl` | `string` | auto | Root of a `pdfjs-dist` copy holding `cmaps/`, `standard_fonts/`, `iccs/` and `wasm/` (CJK text, non-embedded fonts, CMYK colour, JPEG 2000 / JBIG2 images). Derived from the worker URL when it points into `pdfjs-dist`, else a version-matched CDN when `cdnFallback` is true. Pass it when you self-host the worker elsewhere. |
 | `renderScale` | `number` | `1` | Base scale; pages rasterize at `renderScale × devicePixelRatio`. |
 | `preload` | `number` | `1` | Adjacent pages to prefetch. |
 | `maxCacheBytes` | `number` | ~256 MB | Soft cap on cached page bytes (LRU-evicted). |

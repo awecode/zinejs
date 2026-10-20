@@ -4,7 +4,7 @@ import {
   PdfSource,
   cdnWorkerUrl,
   resolveWorkerSrc,
-  resolveWasmUrl,
+  resolveAssetsUrl,
   __resetCdnWarnedForTests,
   type PdfSrc,
   type WorkerProbes,
@@ -305,41 +305,45 @@ describe('PdfSource', () => {
     );
   });
 
-  it('passes a wasmUrl to pdf.js so JPEG 2000 / JBIG2 images decode', async () => {
+  it('passes pdf.js its data folders so images, fonts and colour render', async () => {
     const src = new PdfSource('doc.pdf', { workerSrc: '/w.mjs' });
     await src.open();
+    const cdn = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/';
     expect(mock.getDocument).toHaveBeenCalledWith(
       expect.objectContaining({
-        wasmUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/wasm/',
+        cMapUrl: cdn + 'cmaps/',
+        standardFontDataUrl: cdn + 'standard_fonts/',
+        iccUrl: cdn + 'iccs/',
+        wasmUrl: cdn + 'wasm/',
       }),
     );
   });
 
-  it('derives wasmUrl from a worker served out of a pdfjs-dist install', () => {
-    const args = { wasmUrl: undefined, cdnFallback: true, pdfjsVersion: '6.2.108' };
+  it('derives the assets root from a worker served out of a pdfjs-dist install', () => {
+    const args = { assetsUrl: undefined, cdnFallback: true, pdfjsVersion: '6.2.108' };
     expect(
-      resolveWasmUrl({
+      resolveAssetsUrl({
         ...args,
         workerSrc: '/@fs/app/node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs?import',
       }),
-    ).toBe('/@fs/app/node_modules/pdfjs-dist/wasm/');
+    ).toBe('/@fs/app/node_modules/pdfjs-dist/');
     expect(
-      resolveWasmUrl({
+      resolveAssetsUrl({
         ...args,
         workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.mjs',
       }),
-    ).toBe('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/wasm/');
+    ).toBe('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/');
   });
 
-  it('prefers an explicit wasmUrl, and drops the CDN when cdnFallback is false', () => {
+  it('prefers an explicit assetsUrl, and drops the CDN when cdnFallback is false', () => {
     const base = { workerSrc: '/assets/pdf.worker-abc123.mjs', pdfjsVersion: '6.2.108' };
-    expect(resolveWasmUrl({ ...base, wasmUrl: '/pdfjs/wasm', cdnFallback: true })).toBe(
-      '/pdfjs/wasm/',
+    expect(resolveAssetsUrl({ ...base, assetsUrl: '/pdfjs', cdnFallback: true })).toBe('/pdfjs/');
+    expect(resolveAssetsUrl({ ...base, assetsUrl: undefined, cdnFallback: true })).toBe(
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/',
     );
-    expect(resolveWasmUrl({ ...base, wasmUrl: undefined, cdnFallback: true })).toBe(
-      'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/wasm/',
-    );
-    expect(resolveWasmUrl({ ...base, wasmUrl: undefined, cdnFallback: false })).toBeUndefined();
+    expect(
+      resolveAssetsUrl({ ...base, assetsUrl: undefined, cdnFallback: false }),
+    ).toBeUndefined();
   });
 
   it('progressive: paints low-res first, upgrades to crisp, and signals an update', async () => {

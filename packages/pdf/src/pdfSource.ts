@@ -37,6 +37,9 @@ interface DocParams {
   url?: string;
   data?: ArrayBuffer | Uint8Array;
   disableAutoFetch?: boolean;
+  cMapUrl?: string;
+  standardFontDataUrl?: string;
+  iccUrl?: string;
   wasmUrl?: string;
 }
 /** pdf.js's loading task: the document promise, plus an assignable download-progress callback. */
@@ -64,11 +67,13 @@ export interface PdfSourceOptions {
    *  CSP-restricted or offline apps, where a network worker would fail opaquely — you must
    *  then pass `workerSrc` (or set GlobalWorkerOptions.workerSrc). */
   cdnFallback?: boolean;
-  /** Folder (with a trailing slash) holding pdf.js's `wasm/` decoders, which pdf.js 5+ needs to
-   *  draw JPEG 2000 and JBIG2 images. Optional: derived from the worker URL when it points into a
+  /** Root of a `pdfjs-dist` copy holding its data folders: `cmaps/` (CJK and other non-embedded
+   *  encodings), `standard_fonts/` (PDFs that rely on the base-14 fonts), `iccs/` (CMYK colour)
+   *  and `wasm/` (JPEG 2000 and JBIG2 image decoders, pdf.js 5+). Without them pdf.js draws blank
+   *  images or wrong glyphs. Optional: derived from the worker URL when it points into a
    *  `pdfjs-dist` install, then a version-matched CDN when `cdnFallback` is true. Pass it when you
-   *  self-host the worker under another path (copy `pdfjs-dist/wasm/` alongside). */
-  wasmUrl?: string;
+   *  self-host the worker under another path (copy those folders under one base). */
+  assetsUrl?: string;
   /** Base render scale; each page is rasterized at `renderScale × devicePixelRatio`. Default 1. */
   renderScale?: number;
   /** How many adjacent pages to prefetch around a requested page. Default 1. */
@@ -292,23 +297,23 @@ export async function resolveWorkerSrc(
 
 /**
  * @internal
- * Resolve the folder of pdf.js's wasm image decoders (JPEG 2000, JBIG2). Without it pdf.js 5+
- * skips those images, leaving blanks. Explicit `wasmUrl` → the `wasm/` folder of the pdfjs-dist
- * install the worker was served from → version-matched CDN (when `cdnFallback`). A bundler that
- * emits the worker as a hashed asset leaves no install path to derive from, hence the CDN step.
+ * Resolve the `pdfjs-dist` root that pdf.js's data folders (cmaps, standard fonts, ICC profiles,
+ * wasm decoders) hang off. Explicit `assetsUrl` → the install the worker was served from →
+ * version-matched CDN (when `cdnFallback`). A bundler that emits the worker as a hashed asset
+ * leaves no install path to derive from, hence the CDN step.
  */
-export function resolveWasmUrl(args: {
-  wasmUrl: string | undefined;
+export function resolveAssetsUrl(args: {
+  assetsUrl: string | undefined;
   workerSrc: string;
   cdnFallback: boolean;
   pdfjsVersion: string | undefined;
 }): string | undefined {
-  if (args.wasmUrl) return args.wasmUrl.endsWith('/') ? args.wasmUrl : args.wasmUrl + '/';
+  if (args.assetsUrl) return args.assetsUrl.endsWith('/') ? args.assetsUrl : args.assetsUrl + '/';
   const install = /^(.*\/pdfjs-dist(?:@[^/]+)?\/)(?:legacy\/)?build\/pdf\.worker[^/]*$/.exec(
     args.workerSrc.split(/[?#]/)[0] ?? '',
   );
-  if (install) return install[1] + 'wasm/';
-  if (args.pdfjsVersion && args.cdnFallback) return cdnWorkerUrl(args.pdfjsVersion, 'wasm/');
+  if (install) return install[1];
+  if (args.pdfjsVersion && args.cdnFallback) return cdnWorkerUrl(args.pdfjsVersion, '');
   return undefined;
 }
 
@@ -338,7 +343,7 @@ export class PdfSource implements Source {
   #src: PdfSrc;
   #workerSrc: string | undefined;
   #cdnFallback: boolean;
-  #wasmUrl: string | undefined;
+  #assetsUrl: string | undefined;
   #renderScale: number;
   #preload: number;
   #doc: PdfDocumentLike | null = null;
@@ -366,7 +371,7 @@ export class PdfSource implements Source {
     this.#src = src;
     this.#workerSrc = options.workerSrc;
     this.#cdnFallback = options.cdnFallback ?? true;
-    this.#wasmUrl = options.wasmUrl;
+    this.#assetsUrl = options.assetsUrl;
     this.#renderScale = options.renderScale ?? 1;
     this.#preload = options.preload ?? 1;
     this.#maxCacheBytes = options.maxCacheBytes ?? DEFAULT_MAX_CACHE_BYTES;
@@ -397,13 +402,18 @@ export class PdfSource implements Source {
       const params: DocParams =
         typeof this.#src === 'string' ? { url: this.#src } : { data: this.#src };
       if (this.#disableAutoFetch) params.disableAutoFetch = true;
-      const wasmUrl = resolveWasmUrl({
-        wasmUrl: this.#wasmUrl,
+      const assets = resolveAssetsUrl({
+        assetsUrl: this.#assetsUrl,
         workerSrc: pdfjs.GlobalWorkerOptions.workerSrc,
         cdnFallback: this.#cdnFallback,
         pdfjsVersion: pdfjs.version,
       });
-      if (wasmUrl) params.wasmUrl = wasmUrl;
+      if (assets) {
+        params.cMapUrl = assets + 'cmaps/';
+        params.standardFontDataUrl = assets + 'standard_fonts/';
+        params.iccUrl = assets + 'iccs/';
+        params.wasmUrl = assets + 'wasm/';
+      }
       const task = pdfjs.getDocument(params);
       if (this.#onProgress) task.onProgress = this.#onProgress;
       this.#doc = await task.promise;

@@ -54,6 +54,17 @@ new PdfSource('document.pdf', { workerSrc })
 new PdfSource('document.pdf', { workerSrc, cdnFallback: false })
 ```
 
+pdf.js also loads data files on demand: `cmaps/` (CJK and other non-embedded encodings),
+`standard_fonts/` (PDFs that don't embed their fonts), `iccs/` (CMYK colour) and `wasm/` (JPEG 2000
+and JBIG2 image decoders, pdf.js 5+). Without them those pages draw blank images or wrong glyphs.
+`PdfSource` points pdf.js at the `pdfjs-dist` the worker came from, else the same jsDelivr version
+(when `cdnFallback` is on). If you self-host the worker elsewhere, copy those four folders under one
+base and pass it as `assetsUrl`:
+
+```js
+new PdfSource('document.pdf', { workerSrc: '/pdfjs/pdf.worker.min.mjs', assetsUrl: '/pdfjs/' })
+```
+
 Keep the worker on the same build as the library (`legacy` vs modern). If you already set
 `GlobalWorkerOptions.workerSrc`, leave `workerSrc` off. A pre-created pdf.js document needs no
 worker from this package.
@@ -88,6 +99,7 @@ anyway). Set `cdnFallback: false` to require explicit configuration instead.
 new PdfSource(src, {
   workerSrc,           // override the auto-resolved worker URL
   cdnFallback: true,   // false: never load the worker from jsDelivr (CSP / offline)
+  assetsUrl,           // pdfjs-dist root for cmaps / fonts / iccs / wasm (auto-resolved)
   renderScale: 1,      // pages rasterize at renderScale × devicePixelRatio
   preload: 1,          // adjacent pages to prefetch (default 1)
   maxCacheBytes,       // soft cap on cached page bytes (default ~256 MB)
