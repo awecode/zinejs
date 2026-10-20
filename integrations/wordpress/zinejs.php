@@ -26,7 +26,7 @@ define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
 // The bundled engine and pdf.js versions, for cache-busting and support reports.
-define('ZINEJS_ENGINE_VERSION', '1.0.0');
+define('ZINEJS_ENGINE_VERSION', '1.0.1');
 define('ZINEJS_PDFJS_VERSION', '6.2.108');
 
 require_once ZINEJS_PATH . 'includes/render.php';

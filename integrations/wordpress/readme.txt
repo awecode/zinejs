@@ -63,6 +63,7 @@ pdf.js loads its worker as an ES module. A few servers serve `.mjs` files with t
 
 = 1.1.1 =
 * Fix: PDF images in JPEG 2000 or JBIG2 format (common in newspaper and magazine PDFs) now render instead of showing blank. pdf.js's image decoders, CJK character maps, standard fonts and colour profiles are now bundled, so nothing loads from a CDN.
+* Bundles zinejs engine 1.0.1.
 
 = 1.1.0 =
 * New "Print gutter overlap" option (block and `gutter-overlap` shortcode attribute): hides artwork a print PDF repeats on both sides of the spine. Auto finds it per spread, or set a fixed percent.
