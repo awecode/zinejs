@@ -17,6 +17,14 @@ cp "$ROOT/packages/pdf/dist/index.umd.js" "$VENDOR/zine-pdf.umd.js"
 cp "$ROOT/node_modules/pdfjs-dist/legacy/build/pdf.min.mjs" "$VENDOR/pdf.min.mjs"
 cp "$ROOT/node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs" "$VENDOR/pdf.worker.min.mjs"
 
+# pdf.js's on-demand data (CJK cmaps, standard fonts, CMYK ICC profile, JPEG 2000 / JBIG2 / colour
+# wasm decoders), so books render fully without reaching a CDN. quickjs-eval is pdf.js's sandbox for
+# PDF form scripts, which a flipbook never runs, so it stays out.
+rm -rf "$VENDOR/pdfjs"
+mkdir -p "$VENDOR/pdfjs"
+cp -r "$ROOT/node_modules/pdfjs-dist/"{cmaps,standard_fonts,iccs,wasm} "$VENDOR/pdfjs/"
+rm -f "$VENDOR/pdfjs/wasm/"quickjs-eval.*
+
 # The importable curls (roll/leaf/flick/silk) are a code-split ESM chunk that imports sibling
 # chunks with hashed names (which change every build). Vendor curls.js as zine-curls.mjs and copy
 # the exact chunks it imports, transitively, so the relative imports resolve at runtime.

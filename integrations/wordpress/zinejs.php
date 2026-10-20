@@ -3,7 +3,7 @@
  * Plugin Name:       zinejs Flipbook
  * Plugin URI:        https://github.com/awecode/zinejs
  * Description:       A real page-flip reader for PDFs and images, via a block or the [zinejs] shortcode.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            zinejs
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('ZINEJS_VERSION', '1.1.0');
+define('ZINEJS_VERSION', '1.1.1');
 define('ZINEJS_FILE', __FILE__);
 define('ZINEJS_URL', plugin_dir_url(__FILE__));
 define('ZINEJS_PATH', plugin_dir_path(__FILE__));
@@ -65,6 +65,8 @@ function zinejs_register_assets() {
     wp_localize_script('zinejs-init', 'ZINEJS_WP', array(
         'pdfjs'  => ZINEJS_URL . 'assets/vendor/pdf.min.mjs',
         'worker' => ZINEJS_URL . 'assets/vendor/pdf.worker.min.mjs',
+        // pdf.js's cmaps, standard fonts, ICC profiles and wasm image decoders.
+        'assets' => ZINEJS_URL . 'assets/vendor/pdfjs/',
         // The non-bundled curls (roll/leaf/flick/silk) load on demand from here.
         'curls'  => ZINEJS_URL . 'assets/vendor/zine-curls.mjs',
     ));

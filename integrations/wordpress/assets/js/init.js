@@ -78,7 +78,7 @@
           else delete opts.curl;
         }
         var source = cfg.pdf
-          ? new window.ZineJS.PdfSource(cfg.pdf)
+          ? new window.ZineJS.PdfSource(cfg.pdf, CFG.assets ? { assetsUrl: CFG.assets } : {})
           : cfg.images && cfg.images.length
             ? new window.ZineJS.ImageSource(cfg.images)
             : null;
