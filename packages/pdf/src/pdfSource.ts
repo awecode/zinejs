@@ -100,6 +100,9 @@ const PROGRESSIVE_LOW_RATIO = 0.35;
 // Ceiling on zoom-tile magnification. Past roughly this point a screen pixel already holds more
 // detail than the reader can resolve, and rasterizing further only costs memory and time.
 const MAX_ZOOM_RENDER_SCALE = 6;
+// Largest raster area (px). Safari refuses canvases over 16,777,216 px (4096²); this stays a little
+// under so rounding each side up cannot cross it. About 64 MB of RGBA.
+const MAX_CANVAS_PIXELS = 16_000_000;
 // Largest dimension (px) of the thumbnail kept when a full page is evicted from the byte cap, so
 // flipping back to an out-of-budget page paints a blurry placeholder at once instead of a blank
 // while it re-rasterizes. A few KB each.
@@ -703,13 +706,20 @@ export class PdfSource implements Source {
   async #rasterize(index: number, scale: number, maxSize?: number): Promise<PageContent> {
     if (this.#doc === null) throw new Error('PdfSource: use after open() — the document is not loaded.');
     const page = await this.#doc.getPage(index + 1); // pdf.js pages are 1-indexed
+    const base = page.getViewport({ scale: 1 });
+    const longest = Math.max(base.width, base.height);
+    // A page whose size in points exceeds the screen (print-sized exports, posters) can never be
+    // shown whole at more than screen size, so rasterize it as if it fit the screen. Zoom and
+    // progressive scales are multiples of this, so they shrink with it.
+    const screenPx = typeof screen === 'undefined' ? 0 : Math.max(screen.width, screen.height);
+    if (screenPx > 0 && longest > screenPx) scale *= screenPx / longest;
     // Cap the scale so neither axis exceeds the GPU's texture limit: past it the upload paints black
     // (the renderer downscales as a backstop, but rendering to fit avoids the wasted memory spike).
-    if (maxSize !== undefined && maxSize > 0) {
-      const base = page.getViewport({ scale: 1 });
-      const fit = maxSize / Math.max(base.width, base.height);
-      scale = Math.min(scale, fit);
-    }
+    if (maxSize !== undefined && maxSize > 0) scale = Math.min(scale, maxSize / longest);
+    // Past Safari's canvas area limit the canvas fails to allocate, and iOS kills the tab well
+    // before that from the memory alone, with no error to catch.
+    const area = base.width * base.height * scale * scale;
+    if (area > MAX_CANVAS_PIXELS) scale *= Math.sqrt(MAX_CANVAS_PIXELS / area);
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);

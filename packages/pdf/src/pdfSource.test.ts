@@ -578,6 +578,45 @@ describe('PdfSource — zoomed pages', () => {
   });
 });
 
+describe('PdfSource — oversized pages', () => {
+  // A print-sized Figma export: 1728x2304 pt per page. On an iPhone (DPR 3) the old sizing gave a
+  // 5184x6912 canvas (143 MB) per page, and iOS killed the tab.
+  const bigDoc = () => {
+    const page = {
+      getViewport: ({ scale }: { scale: number }) => ({ width: 1728 * scale, height: 2304 * scale }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    return { numPages: 3, getPage: async () => page, destroy: () => {} } as unknown as PdfSrc;
+  };
+  const whole = { x: 0, y: 0, width: 1, height: 1 };
+
+  beforeEach(() => {
+    vi.stubGlobal('devicePixelRatio', 3);
+    vi.stubGlobal('screen', { width: 430, height: 932 });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('rasterizes a page bigger than the screen at screen size, not at its size in points', async () => {
+    const src = new PdfSource(bigDoc(), { preload: 0 });
+    await src.open();
+
+    const canvas = (await src.get(0)) as HTMLCanvasElement;
+    expect(canvas.height).toBe(932 * 3); // the screen's longest side in device pixels
+    expect(canvas.width).toBe(2097); // 1728 * (2796 / 2304), rounded up
+  });
+
+  it('keeps every raster under the Safari canvas area limit, however deep the zoom', async () => {
+    const src = new PdfSource(bigDoc(), { preload: 0 });
+    await src.open();
+
+    const canvas = (await src.get(0, { scale: 6, region: whole, maxSize: 16384 })) as HTMLCanvasElement;
+    expect(canvas.width * canvas.height).toBeLessThanOrEqual(4096 * 4096);
+    expect(canvas.width * canvas.height).toBeGreaterThan(15_000_000); // capped, not collapsed
+  });
+});
+
 describe('PdfSource — getDownload', () => {
   it('offers the source URL for download, named from its last path segment', async () => {
     const src = new PdfSource('/docs/brochure-2024.pdf');
