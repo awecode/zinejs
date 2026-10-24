@@ -1,11 +1,11 @@
 # Publishing
 
-Releases are tag-driven. You run one script locally; GitHub Actions builds and publishes.
+Releases are tag-driven. A local script bumps versions, tags and pushes; GitHub Actions builds and publishes.
 
-| What | Trigger | Workflow |
-| --- | --- | --- |
-| `@zinejs/core`, `@zinejs/pdf`, `@zinejs/create` to npm | `v*.*.*` tag | [.github/workflows/release.yml](.github/workflows/release.yml) |
-| WordPress plugin to wordpress.org | `wp-*` tag | [.github/workflows/deploy-wordpress.yml](.github/workflows/deploy-wordpress.yml) |
+| What | Script | Trigger | Workflow |
+| --- | --- | --- | --- |
+| `@zinejs/core`, `@zinejs/pdf`, `@zinejs/create` to npm | `scripts/release.sh` | `v*.*.*` tag | [.github/workflows/release.yml](.github/workflows/release.yml) |
+| WordPress plugin to wordpress.org | `scripts/release-wp.sh` | `wp-*` tag | [.github/workflows/deploy-wordpress.yml](.github/workflows/deploy-wordpress.yml) |
 
 ## npm packages
 
@@ -51,21 +51,39 @@ The jsDelivr and unpkg URLs pick up the new version on their own.
 
 ## WordPress plugin
 
-The plugin in [integrations/wordpress](integrations/wordpress) bundles its own copy of the engine, so release npm first when the engine changed.
+The plugin in [integrations/wordpress](integrations/wordpress) bundles its own copy of the engine. It has its own version, separate from npm: a plugin-only change needs no engine release, and an engine change that does not affect WordPress needs no plugin release.
 
-1. Refresh the bundled engine and pdf.js files:
+### 1. Release npm first, if the engine changed
 
-   ```bash
-   integrations/wordpress/bin/update-assets.sh
-   ```
+Run `scripts/release.sh` as above. The plugin script refuses to bundle an engine that differs from its released `v*` tag.
 
-2. In [zinejs.php](integrations/wordpress/zinejs.php), bump the plugin `Version:` header and `ZINEJS_VERSION`. Set `ZINEJS_ENGINE_VERSION` and `ZINEJS_PDFJS_VERSION` to the bundled versions; they are the cache-busting query on the vendored scripts, so a stale value keeps visitors on the old files.
-3. In [readme.txt](integrations/wordpress/readme.txt), bump `Stable tag` and add a changelog entry.
-4. Commit, then tag and push:
+### 2. Write the changelog
 
-   ```bash
-   git tag -a wp-1.1.1 -m wp-1.1.1 && git push origin wp-1.1.1
-   ```
+Add an entry at the top of the changelog in [readme.txt](integrations/wordpress/readme.txt), ending with the engine it bundles:
+
+```
+= 1.1.3 =
+* Fix: what changed, in words a site owner understands.
+* Bundles zinejs engine 1.0.3.
+```
+
+It may stay uncommitted; the script includes it in the release commit.
+
+### 3. Release
+
+```bash
+scripts/release-wp.sh 1.1.3        # asks for confirmation; add --yes to skip
+```
+
+The script:
+
+1. Checks the version is valid and newer than the plugin's, the tag is unused, the changelog entry exists, and nothing but `readme.txt` is uncommitted.
+2. Checks the engine in `packages/core/package.json` has a `v*` tag and no source changes since it.
+3. Rebuilds the bundled engine and pdf.js files (`integrations/wordpress/bin/update-assets.sh`).
+4. Writes the plugin version into the `Version:` header, `ZINEJS_VERSION` and `Stable tag`, and the engine and pdf.js versions into `ZINEJS_ENGINE_VERSION` and `ZINEJS_PDFJS_VERSION`. The last two are the cache-busting query on the vendored scripts, so they must match what is bundled.
+5. Commits `chore(wp): release X.Y.Z (engine A.B.C)`, tags `wp-X.Y.Z`, and pushes the branch and the tag.
+
+### 4. Deploy (automatic)
 
 The **Deploy WordPress plugin** workflow copies the shipped files (it excludes dev files such as `bin/`, `README.md` and `.wordpress-org/`) to wordpress.org SVN trunk, creates the SVN tag, and updates the listing assets from `.wordpress-org/`. It needs the `SVN_USERNAME` and `SVN_PASSWORD` repo secrets.
 
