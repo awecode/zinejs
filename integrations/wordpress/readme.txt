@@ -4,7 +4,7 @@ Tags: flipbook, pdf, page flip, magazine, viewer
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,6 +60,10 @@ pdf.js loads its worker as an ES module. A few servers serve `.mjs` files with t
 2. An image flipbook with the built-in reader toolbar.
 
 == Changelog ==
+
+= 1.1.2 =
+* Fix: very large PDF pages (print-sized exports, posters) no longer crash Safari on iPhone and iPad. Pages now render at screen size instead of their full print size, and decoded images are freed after each page is drawn.
+* Bundles zinejs engine 1.0.2.
 
 = 1.1.1 =
 * Fix: PDF images in JPEG 2000 or JBIG2 format (common in newspaper and magazine PDFs) now render instead of showing blank. pdf.js's image decoders, CJK character maps, standard fonts and colour profiles are now bundled, so nothing loads from a CDN.
