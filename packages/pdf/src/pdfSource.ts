@@ -16,6 +16,8 @@ interface PdfPageLike {
   };
   /** Optional: absent on scanned PDFs with no text layer, and on hand-rolled document stubs. */
   getTextContent?(): Promise<{ items: { str?: string; hasEOL?: boolean }[] }>;
+  /** Optional: frees the page's decoded images; a no-op while another render of it is running. */
+  cleanup?(): boolean;
 }
 /** A pdf.js outline entry. `dest` is either a named destination or an explicit array whose first
  *  element references the target page. */
@@ -725,6 +727,10 @@ export class PdfSource implements Source {
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    // The raster is all we keep. pdf.js otherwise holds the page's decoded images (64 MB for one
+    // 16-megapixel photo) until the document closes, and on a photo-heavy PDF that alone outgrows
+    // an iOS tab's memory.
+    page.cleanup?.();
     return canvas;
   }
 }

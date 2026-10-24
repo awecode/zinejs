@@ -615,6 +615,21 @@ describe('PdfSource — oversized pages', () => {
     expect(canvas.width * canvas.height).toBeLessThanOrEqual(4096 * 4096);
     expect(canvas.width * canvas.height).toBeGreaterThan(15_000_000); // capped, not collapsed
   });
+
+  it("frees pdf.js's decoded images once a page is rasterized", async () => {
+    const cleanup = vi.fn(() => true);
+    const page = {
+      getViewport: () => ({ width: 120, height: 160 }),
+      render: () => ({ promise: Promise.resolve() }),
+      cleanup,
+    };
+    const doc = { numPages: 1, getPage: async () => page, destroy: () => {} } as unknown as PdfSrc;
+    const src = new PdfSource(doc, { preload: 0 });
+    await src.open();
+
+    await src.get(0);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('PdfSource — getDownload', () => {
