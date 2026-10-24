@@ -1,6 +1,6 @@
 {
   "name": "@zinejs/create",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Scaffold a new zinejs flipbook project (npm create @zinejs).",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
