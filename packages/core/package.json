@@ -1,6 +1,6 @@
 {
   "name": "@zinejs/core",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Framework-agnostic flipbook engine with CSS and WebGL2 renderers and no dependencies.",
   "type": "module",
   "sideEffects": false,
