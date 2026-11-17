@@ -61,6 +61,12 @@ pdf.js loads its worker as an ES module. A few servers serve `.mjs` files with t
 
 == Changelog ==
 
+= 1.1.3 =
+* Fix: zooming in on a single page, or on a spread in fullscreen, no longer cuts the page off at its resting edges. The zoomed page now fills the viewer and stays under the point you zoomed on.
+* Fix: entering or leaving fullscreen while zoomed in keeps the same part of the page in view, instead of shifting it aside and jumping on the next drag.
+* Thanks to Chaim Rosenberg for reporting these and proposing the fix.
+* Bundles zinejs engine 1.0.3.
+
 = 1.1.2 =
 * Fix: very large PDF pages (print-sized exports, posters) no longer crash Safari on iPhone and iPad. Pages now render at screen size instead of their full print size, and decoded images are freed after each page is drawn.
 * Bundles zinejs engine 1.0.2.
