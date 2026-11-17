@@ -59,7 +59,8 @@ const CURL_VERT = `#version 300 es
 in vec3 aPos;    // leaf-local device px: x = bent offset from spine, y 0..H, z depth
 in vec3 aNormal;
 in vec2 aUv;
-uniform vec2 uViewport;
+uniform vec2 uViewport; // canvas size in device px
+uniform vec2 uBook;     // book size in device px (the perspective centre)
 uniform vec3 uView;   // scale, tx, ty
 uniform float uOriginX; // spine x in device px
 uniform float uDir;     // +1 leaf to the right of spine, -1 to the left
@@ -76,8 +77,8 @@ void main() {
   // turning sheet and reads more like a fisheye than a page lifting.
   float D = uLeafW * 5.3;
   float persp = D / max(D - Z, 1.0);
-  float cx = uViewport.x * 0.5;
-  float cy = uViewport.y * 0.5;
+  float cx = uBook.x * 0.5;
+  float cy = uBook.y * 0.5;
   float px = cx + (bookX - cx) * persp;
   float py = cy + (bookY - cy) * min(persp, 1.0); // Y only shrinks (top-safe)
   vec2 p = vec2(px, py) * uView.x + uView.yz;
@@ -225,6 +226,10 @@ export class WebglRenderer implements Renderer {
   #fit: 'contain' | 'fill' = 'contain';
   #bookW = 0;
   #bookH = 0;
+  // Top-left of the letterboxed book in the canvas (device px). Pages are laid out book-local and
+  // shifted by this inside the view transform, so a zoomed book can spill into the letterbox.
+  #bookX = 0;
+  #bookY = 0;
 
   #contextLost = false;
   #fatalFired = false;
@@ -487,7 +492,7 @@ export class WebglRenderer implements Renderer {
     for (const name of ['uViewport', 'uRect', 'uView', 'uTex', 'uGutterSide', 'uSpan']) {
       this.#flatU[name] = gl.getUniformLocation(this.#flat, name);
     }
-    for (const name of ['uViewport', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uFrontSpan', 'uBackSpan', 'uGloss', 'uAlpha', 'uCrease']) {
+    for (const name of ['uViewport', 'uBook', 'uView', 'uOriginX', 'uDir', 'uLeafW', 'uFront', 'uBack', 'uFrontSpan', 'uBackSpan', 'uGloss', 'uAlpha', 'uCrease']) {
       this.#curlU[name] = gl.getUniformLocation(this.#curl, name);
     }
 
@@ -583,8 +588,9 @@ export class WebglRenderer implements Renderer {
     else if (this.#content !== null) this.#drawStatic();
   }
 
-  /** Letterbox the 2-page book to the page aspect, centered; restricts the GL viewport
-   *  so pages fill their halves without stretching (the surround stays cleared). */
+  /** Letterbox the 2-page book to the page aspect, centered, so pages fill their halves without
+   *  stretching. The GL viewport stays the whole canvas: restricting it to the book would clip a
+   *  zoomed book to its resting rect instead of letting it fill the container. */
   #fitBook(): void {
     const gl = this.#gl!;
     const canvas = this.#canvas!;
@@ -604,9 +610,9 @@ export class WebglRenderer implements Renderer {
       this.#bookW = cw;
       this.#bookH = ch;
     }
-    const bx = Math.round((cw - this.#bookW) / 2);
-    const by = Math.round((ch - this.#bookH) / 2); // centered, so GL's bottom offset == by
-    gl.viewport(bx, by, this.#bookW, this.#bookH);
+    this.#bookX = Math.round((cw - this.#bookW) / 2);
+    this.#bookY = Math.round((ch - this.#bookH) / 2);
+    gl.viewport(0, 0, cw, ch);
   }
 
   #drawStatic(): void {
@@ -666,13 +672,9 @@ export class WebglRenderer implements Renderer {
 
     gl.useProgram(this.#curl);
     gl.bindVertexArray(this.#curlVao);
-    gl.uniform2f(this.#curlU.uViewport ?? null, w, h);
-    gl.uniform3f(
-      this.#curlU.uView ?? null,
-      this.#view.scale,
-      this.#view.tx * this.#dpr + this.#shiftX,
-      this.#view.ty * this.#dpr,
-    );
+    gl.uniform2f(this.#curlU.uViewport ?? null, this.#canvas!.width, this.#canvas!.height);
+    gl.uniform2f(this.#curlU.uBook ?? null, w, h);
+    this.#setView(this.#curlU.uView ?? null);
     gl.uniform1f(this.#curlU.uOriginX ?? null, originX);
     gl.uniform1f(this.#curlU.uDir ?? null, flip.dir);
     gl.uniform1f(this.#curlU.uLeafW ?? null, leafW);
@@ -703,12 +705,20 @@ export class WebglRenderer implements Renderer {
     gl.useProgram(this.#flat);
     gl.bindVertexArray(this.#quadVao);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform2f(this.#flatU.uViewport ?? null, this.#bookW, this.#bookH);
-    gl.uniform3f(
-      this.#flatU.uView ?? null,
-      this.#view.scale,
-      this.#view.tx * this.#dpr + this.#shiftX,
-      this.#view.ty * this.#dpr,
+    gl.uniform2f(this.#flatU.uViewport ?? null, this.#canvas!.width, this.#canvas!.height);
+    this.#setView(this.#flatU.uView ?? null);
+  }
+
+  /** Zoom/pan for book-local geometry: canvas = (local + bookXY) * scale + pan, with the lone-page
+   *  shift outside the scale (as measure().screenAt assumes). Scaling about the canvas origin,
+   *  not the book's, keeps the engine's container-space focal point fixed on a letterboxed book. */
+  #setView(loc: WebGLUniformLocation | null): void {
+    const s = this.#view.scale;
+    this.#gl!.uniform3f(
+      loc,
+      s,
+      this.#bookX * s + this.#view.tx * this.#dpr + this.#shiftX,
+      this.#bookY * s + this.#view.ty * this.#dpr,
     );
   }
 
