@@ -40,3 +40,22 @@ test('a zoomed letterboxed page fills the box instead of clipping to its resting
   expect(await alphaAt(page, 40, mid)).toBe(255);
   expect(await alphaAt(page, 860, mid)).toBe(255);
 });
+
+// The pan is in container px, so resizing the box while zoomed (entering or leaving fullscreen)
+// must re-fit it, keeping the same part of the page in the middle, not leave a stale offset that
+// shows a band beside the page and jumps on the next drag.
+test('a zoomed page stays centred and fills the box after the box resizes', async ({ page }) => {
+  await page.goto('/fixture.html?single');
+  await expect(page.locator('#page')).toHaveText('page 1 / 20');
+  for (let i = 0; i < 3; i++) await page.locator('#zoomin').click();
+  await expect(page.locator('#zoom')).toHaveText('3.4×');
+
+  await page.evaluate(() => {
+    const book = document.getElementById('book')!;
+    book.style.width = '1200px';
+    book.style.height = '700px';
+  });
+  await page.waitForTimeout(300);
+  expect(await alphaAt(page, 20, 350)).toBe(255);
+  expect(await alphaAt(page, 1180, 350)).toBe(255);
+});

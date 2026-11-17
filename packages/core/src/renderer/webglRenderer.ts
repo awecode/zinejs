@@ -611,7 +611,9 @@ export class WebglRenderer implements Renderer {
       this.#bookH = ch;
     }
     this.#bookX = Math.round((cw - this.#bookW) / 2);
-    this.#bookY = Math.round((ch - this.#bookH) / 2);
+    // Measured from the top (the shaders are y-down) but rounded as the bottom margin, which keeps
+    // the pixel placement the old bottom-anchored GL viewport had when the margin is odd.
+    this.#bookY = ch - this.#bookH - Math.round((ch - this.#bookH) / 2);
     gl.viewport(0, 0, cw, ch);
   }
 

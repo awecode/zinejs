@@ -485,6 +485,10 @@ export class Zine {
   #loaderPhase: 'download' | 'preparing' | 'done' = 'download';
   /** Resolution multiplier the current spread is rasterized at; 1 while not zoomed. */
   #zoomedAt = 1;
+  /** While zoomed, the page point at the centre of the view, as fractions of the book box. The
+   *  pan is in container px, so it goes stale when the container resizes (entering or leaving
+   *  fullscreen, a window drag); update() uses this to put the same point back in the middle. */
+  #viewAnchor: { u: number; v: number } | null = null;
   /** Guards against an out-of-date tile landing after the view has already moved on. */
   #tileGeneration = 0;
   #tileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1041,6 +1045,7 @@ export class Zine {
     this.#tx = tx;
     this.#ty = ty;
     this.#renderer.setViewTransform(s2, tx, ty);
+    this.#recordViewAnchor();
     // Crossing in/out of zoom flips who owns vertical panning: browser scroll at rest, us when zoomed.
     if ((s1 > 1) !== (s2 > 1)) this.#applyTouchAction();
     this.#refreshZoomTiles();
@@ -1433,6 +1438,7 @@ export class Zine {
       this.#tx = tx;
       this.#ty = ty;
       this.#renderer.setViewTransform(this.#scale, tx, ty);
+      this.#recordViewAnchor();
       this.#refreshZoomTiles();
       this.#markLearned('pan'); // the reader is panning — the caption has served its purpose
       this.#hideCaption();
@@ -2364,8 +2370,49 @@ export class Zine {
   update(): void {
     if (!this.#renderer || this.#machine.state !== 'idle') return;
     this.#applySinglePage(this.#renderer.measure().containerWidth);
-    void this.#renderCurrent();
+    this.#refitZoom();
+    // Again once the spread is re-laid out: a responsive single/double switch changes the book box.
+    void this.#renderCurrent().then(() => {
+      if (!this.#destroyed) this.#refitZoom();
+    });
     this.#updateCursor(); // the drawn box (and its zones) may have moved under a resting pointer
+  }
+
+  /** Remember which page point the zoomed view is centred on (see #viewAnchor). */
+  #recordViewAnchor(): void {
+    const m = this.#renderer?.measure();
+    const book = m?.book;
+    if (this.#scale <= 1 || !m || !book || book.width <= 0 || book.height <= 0) {
+      this.#viewAnchor = null;
+      return;
+    }
+    this.#viewAnchor = {
+      u: ((m.containerWidth / 2 - this.#tx) / this.#scale - book.x) / book.width,
+      v: ((m.containerHeight / 2 - this.#ty) / this.#scale - book.y) / book.height,
+    };
+  }
+
+  /** Re-derive the zoomed pan for the current container: the anchored page point back at the
+   *  centre, clamped to the pages. The anchor itself is kept, so repeated resizes (or a clamp
+   *  against a small box) do not drift it. */
+  #refitZoom(): void {
+    const anchor = this.#viewAnchor;
+    if (!anchor || !this.#renderer || this.#scale <= 1) return;
+    const m = this.#renderer.measure();
+    const book = m.book;
+    if (!book || book.width <= 0 || book.height <= 0) return;
+    const [tx, ty] = this.#clampPan(
+      m.containerWidth / 2 - this.#scale * (book.x + anchor.u * book.width),
+      m.containerHeight / 2 - this.#scale * (book.y + anchor.v * book.height),
+      this.#scale,
+      m.containerWidth,
+      m.containerHeight,
+    );
+    if (tx === this.#tx && ty === this.#ty) return;
+    this.#tx = tx;
+    this.#ty = ty;
+    this.#renderer.setViewTransform(this.#scale, tx, ty);
+    this.#refreshZoomTiles();
   }
 
   /** The layout to actually use: the responsive narrow fallback forces 'single'. */
